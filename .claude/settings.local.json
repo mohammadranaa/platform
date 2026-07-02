@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(file \"/Users/mohammadrana/Desktop/platform/src/{lib,pages,components,hooks}\")",
+      "mcp__ide__getDiagnostics",
+      "Bash(curl -s \"http://localhost:5173/src/main.jsx\")",
+      "Bash(curl -s \"http://localhost:5173/src/lib/supabase.js\")",
+      "Bash(npx vite *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

@@ -1,0 +1,196 @@
+-- ============================================================
+-- MLC PLATFORM — 05: INBOX & AI
+-- Run this FIFTH in Supabase SQL Editor
+-- Adds: per-user Gmail connections, email threads,
+--       email messages, AI draft logs
+-- ============================================================
+
+-- ── User Gmail Connections ────────────────────────────────────
+-- Each user connects their own Gmail account via OAuth
+-- Tokens are stored encrypted (via Supabase Vault in production)
+-- For now stored directly — add Vault encryption when going live
+
+create table public.user_email_accounts (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references public.profiles(id) on delete cascade,
+
+  -- Gmail account details
+  gmail_address   text not null,
+  display_name    text,
+
+  -- OAuth tokens (treat these as secrets)
+  access_token    text,
+  refresh_token   text not null,
+  token_expiry    timestamptz,
+
+  -- Gmail Push Notification subscription
+  pubsub_topic    text,
+  history_id      text,   -- last processed Gmail history ID
+  watch_expiry    timestamptz,
+
+  is_active       boolean default true,
+  connected_at    timestamptz default now(),
+  unique (user_id, gmail_address)
+);
+
+alter table public.user_email_accounts enable row level security;
+
+create policy "Users manage their own email accounts"
+  on public.user_email_accounts for all
+  using (user_id = auth.uid());
+
+create policy "Admins can view all email accounts"
+  on public.user_email_accounts for select
+  using (exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  ));
+
+-- ── Email Threads ─────────────────────────────────────────────
+-- A thread = a conversation between a user and a client/contact
+-- Linked to a client record where possible
+-- Gmail thread ID stored for syncing
+
+create table public.email_threads (
+  id              uuid primary key default gen_random_uuid(),
+  account_id      uuid references public.user_email_accounts(id) on delete cascade,
+  client_id       uuid references public.clients(id) on delete set null,
+  campaign_contact_id uuid references public.campaign_contacts(id) on delete set null,
+
+  -- Gmail identifiers
+  gmail_thread_id text unique,
+
+  subject         text,
+  participants    text[],   -- all email addresses in the thread
+
+  -- Thread state
+  last_message_at timestamptz,
+  message_count   integer default 0,
+  has_unread      boolean default false,
+  is_starred      boolean default false,
+
+  -- Which direction started it
+  thread_type     text default 'outbound'
+                    check (thread_type in ('outbound','inbound','campaign')),
+
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+
+create index on public.email_threads (account_id, last_message_at desc);
+create index on public.email_threads (client_id);
+create index on public.email_threads (gmail_thread_id);
+
+create trigger email_threads_updated_at
+  before update on public.email_threads
+  for each row execute function update_updated_at();
+
+alter table public.email_threads enable row level security;
+
+create policy "Users see their own threads"
+  on public.email_threads for all
+  using (
+    account_id in (
+      select id from public.user_email_accounts where user_id = auth.uid()
+    )
+  );
+
+create policy "Admins see all threads"
+  on public.email_threads for select
+  using (exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  ));
+
+-- ── Email Messages ─────────────────────────────────────────────
+-- Individual emails within a thread
+-- Synced from Gmail or sent from the platform
+
+create table public.email_messages (
+  id              uuid primary key default gen_random_uuid(),
+  thread_id       uuid not null references public.email_threads(id) on delete cascade,
+
+  -- Gmail identifiers
+  gmail_message_id text unique,
+
+  -- Message details
+  from_address    text not null,
+  from_name       text,
+  to_addresses    text[],
+  cc_addresses    text[],
+  subject         text,
+  body_text       text,   -- plain text version
+  body_html       text,   -- HTML version
+
+  direction       text not null
+                    check (direction in ('inbound','outbound')),
+  is_read         boolean default false,
+
+  -- Was this generated/refined with Claude?
+  ai_assisted     boolean default false,
+
+  sent_at         timestamptz,
+  received_at     timestamptz,
+  created_at      timestamptz default now()
+);
+
+create index on public.email_messages (thread_id, created_at asc);
+create index on public.email_messages (gmail_message_id);
+
+alter table public.email_messages enable row level security;
+
+create policy "Users see messages in their threads"
+  on public.email_messages for all
+  using (
+    thread_id in (
+      select et.id from public.email_threads et
+      join public.user_email_accounts uea on et.account_id = uea.id
+      where uea.user_id = auth.uid()
+    )
+  );
+
+-- ── AI Draft Log ──────────────────────────────────────────────
+-- Every time Claude generates or refines an email, log it
+-- Useful for reviewing what Claude wrote, prompt tuning
+
+create table public.ai_drafts (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid references public.profiles(id) on delete cascade,
+
+  -- Context where this draft was created
+  context_type    text not null
+                    check (context_type in (
+                      'client_email',     -- from client profile
+                      'job_email',        -- from job detail
+                      'campaign_step',    -- from campaign composer
+                      'inbox_compose',    -- from inbox compose window
+                      'sidebar_chat'      -- from the AI sidebar
+                    )),
+  context_id      uuid,   -- client_id, job_id, campaign_id etc.
+
+  -- The prompt sent to Claude
+  prompt          text,
+  -- Claude's response
+  response        text,
+
+  -- Was the draft actually used / sent?
+  was_used        boolean default false,
+
+  created_at      timestamptz default now()
+);
+
+create index on public.ai_drafts (user_id, created_at desc);
+
+alter table public.ai_drafts enable row level security;
+
+create policy "Users see their own AI drafts"
+  on public.ai_drafts for all
+  using (user_id = auth.uid());
+
+create policy "Admins see all AI drafts"
+  on public.ai_drafts for select
+  using (exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  ));
+
+-- ── Realtime ──────────────────────────────────────────────────
+alter publication supabase_realtime add table public.email_threads;
+alter publication supabase_realtime add table public.email_messages;
