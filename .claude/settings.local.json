@@ -33,7 +33,12 @@
       "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/pages/*.jsx)",
       "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/components/*.jsx)",
       "Bash(sed -i '' \"s/background: #0F1117/background: #FFFFFF/g\" ~/Desktop/platform/src/index.css)",
-      "Bash(sed -i '' \"s/background: #111827/background: #FFFFFF/g\" ~/Desktop/platform/src/index.css)"
+      "Bash(sed -i '' \"s/background: #111827/background: #FFFFFF/g\" ~/Desktop/platform/src/index.css)",
+      "Bash(lsof -iTCP -sTCP:LISTEN -P)",
+      "Bash(curl -s http://localhost:5174/)",
+      "Bash(curl -s http://localhost:5174/src/main.jsx)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5174/src/main.jsx)",
+      "Skill(run)"
     ]
   }
 }

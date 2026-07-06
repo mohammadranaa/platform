@@ -1,14 +1,5 @@
-/* ── Reset & base ─────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body, #root {
-  height: 100%;
-}
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
 body {
   background: #FFFFFF;
   color: #1F2937;
@@ -17,36 +8,13 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-
-/* ── Scrollbar ────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
-
-/* ── Links ────────────────────────────────────────────────── */
 a { color: inherit; text-decoration: none; }
-
-/* ── Inputs & selects — remove default browser styles ─────── */
-input, select, textarea, button {
-  font-family: inherit;
-  font-size: inherit;
-}
-
+input, select, textarea, button { font-family: inherit; font-size: inherit; }
 input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-}
-
-/* ── Focus ring ───────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid #4F6EF7;
-  outline-offset: 2px;
-}
-
-/* ── Utility classes ──────────────────────────────────────── */
-.truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+:focus-visible { outline: 2px solid #0093DB; outline-offset: 2px; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

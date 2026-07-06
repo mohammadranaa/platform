@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast.jsx'
+import { useToast, Toast } from '../hooks/useToast'
 import AIEmailComposer from '../components/AIEmailComposer'
 
 const C = {
-  bg: '#FFFFFF', surface: '#F5F5F5', surface2: '#EFEFEF', border: '#E5E7EB',
-  accent: '#0093DB', accentSoft: '#003d5c',
-  green: '#80D100', greenSoft: '#3a5c00',
+  bg: '#0F1117', surface: '#1A1D27', surface2: '#20232F', border: '#252836',
+  accent: '#4F6EF7', accentSoft: '#1E2A5E',
+  green: '#22C55E', greenSoft: '#14532D',
   amber: '#F59E0B', amberSoft: '#451A03',
   red: '#EF4444', redSoft: '#450A0A',
   purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#1F2937', muted: '#6B7280', dim: '#6B7280',
+  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
