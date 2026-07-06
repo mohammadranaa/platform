@@ -19,7 +19,7 @@ import './index.css'
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#0F1117', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', fontSize: 15, fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 15, fontFamily: 'Inter, system-ui, sans-serif' }}>
       Loading platform…
     </div>
   )

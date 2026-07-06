@@ -4,11 +4,11 @@ import { useAuth } from '../lib/AuthContext'
 import AISidebar from './AISidebar'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
+  bg: '#111827', surface: '#1F2937', border: '#374151',
+  accent: '#0093DB', accentSoft: '#003d5c',
   purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
-  green: '#22C55E', amber: '#F59E0B',
+  text: '#FAFAF7', muted: '#9ca3af', dim: '#475569',
+  green: '#80D100', amber: '#F59E0B',
 }
 
 const NAV_ITEMS = [
