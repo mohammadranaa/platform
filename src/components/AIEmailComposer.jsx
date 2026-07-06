@@ -125,7 +125,7 @@ export default function AIEmailComposer({
     setAiLoading(false)
   }
 
-  async function generateSubject(bodyText: string) {
+  async function generateSubject(bodyText) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -345,7 +345,7 @@ export default function AIEmailComposer({
 }
 
 // ── Quick prompts by context ──────────────────────────────────
-function getQuickPrompts(context: any) {
+function getQuickPrompts(context) {
   switch (context?.type) {
     case 'client_email':
       return [
