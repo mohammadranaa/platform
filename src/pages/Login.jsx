@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
-  bg:      '#111827',
-  surface: '#1F2937',
-  border:  '#374151',
+  bg:      '#FFFFFF',
+  surface: '#F5F5F5',
+  border:  '#E5E7EB',
   accent:  '#0093DB',
-  text:    '#FAFAF7',
-  muted:   '#9ca3af',
+  text:    '#1F2937',
+  muted:   '#6B7280',
   red:     '#EF4444',
   redSoft: '#450A0A',
 }

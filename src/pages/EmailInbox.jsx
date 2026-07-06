@@ -5,13 +5,13 @@ import { useToast, Toast } from '../hooks/useToast.jsx'
 import AIEmailComposer from '../components/AIEmailComposer'
 
 const C = {
-  bg: '#111827', surface: '#1F2937', surface2: '#1a2433', border: '#374151',
+  bg: '#FFFFFF', surface: '#F5F5F5', surface2: '#EFEFEF', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#003d5c',
   green: '#80D100', greenSoft: '#3a5c00',
   amber: '#F59E0B', amberSoft: '#451A03',
   red: '#EF4444', redSoft: '#450A0A',
   purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#FAFAF7', muted: '#9ca3af', dim: '#475569',
+  text: '#1F2937', muted: '#6B7280', dim: '#6B7280',
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {

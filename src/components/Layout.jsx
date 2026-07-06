@@ -4,10 +4,10 @@ import { useAuth } from '../lib/AuthContext'
 import AISidebar from './AISidebar'
 
 const C = {
-  bg: '#111827', surface: '#1F2937', border: '#374151',
+  bg: '#FFFFFF', surface: '#F5F5F5', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#003d5c',
   purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#FAFAF7', muted: '#9ca3af', dim: '#475569',
+  text: '#1F2937', muted: '#6B7280', dim: '#6B7280',
   green: '#80D100', amber: '#F59E0B',
 }
 

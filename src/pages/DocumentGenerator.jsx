@@ -4,13 +4,13 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 
 const C = {
-  bg: '#111827', surface: '#1F2937', surface2: '#1a2433', border: '#374151',
+  bg: '#FFFFFF', surface: '#F5F5F5', surface2: '#EFEFEF', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#003d5c',
   green: '#80D100', greenSoft: '#3a5c00',
   amber: '#F59E0B', amberSoft: '#451A03',
   red: '#EF4444', redSoft: '#450A0A',
   purple: '#A855F7',
-  text: '#FAFAF7', muted: '#9ca3af', dim: '#475569',
+  text: '#1F2937', muted: '#6B7280', dim: '#6B7280',
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
@@ -136,10 +136,10 @@ function Document({ type, settings, data, lineItems }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24 }}>
         <thead>
           <tr style={{ background: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-            <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#374151' }}>Description</th>
-            <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#374151', width: 60 }}>QTY</th>
-            <th style={{ textAlign: 'right', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#374151', width: 110 }}>Unit Price</th>
-            <th style={{ textAlign: 'right', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#374151', width: 110 }}>Total Price</th>
+            <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#E5E7EB' }}>Description</th>
+            <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#E5E7EB', width: 60 }}>QTY</th>
+            <th style={{ textAlign: 'right', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#E5E7EB', width: 110 }}>Unit Price</th>
+            <th style={{ textAlign: 'right', padding: '10px 12px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#E5E7EB', width: 110 }}>Total Price</th>
           </tr>
         </thead>
         <tbody>
@@ -153,7 +153,7 @@ function Document({ type, settings, data, lineItems }) {
           ))}
           {/* Empty rows to pad table */}
           {lineItems.filter(l => l.description).length === 0 && (
-            <tr><td colSpan={4} style={{ padding: '20px 12px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>No line items added</td></tr>
+            <tr><td colSpan={4} style={{ padding: '20px 12px', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No line items added</td></tr>
           )}
         </tbody>
       </table>
@@ -220,7 +220,7 @@ function Document({ type, settings, data, lineItems }) {
       </div>
 
       {/* Footer */}
-      <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #e5e7eb', textAlign: 'center', fontSize: 11, color: '#9ca3af' }}>
+      <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #e5e7eb', textAlign: 'center', fontSize: 11, color: '#6B7280' }}>
         {isInvoice ? settings.invoice_footer : settings.quote_footer}
         <br />
         Company Registration Number {settings.company_reg}. Registered Office: {settings.company_name} {settings.company_address}, United Kingdom
