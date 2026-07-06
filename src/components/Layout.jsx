@@ -4,26 +4,22 @@ import { useAuth } from '../lib/AuthContext'
 import AISidebar from './AISidebar'
 
 const C = {
-  bg:         '#0F1117',
-  surface:    '#1A1D27',
-  border:     '#252836',
-  accent:     '#4F6EF7',
-  accentSoft: '#1E2A5E',
-  purple:     '#A855F7',
-  purpleSoft: '#2E1065',
-  text:       '#F1F5F9',
-  muted:      '#94A3B8',
-  dim:        '#475569',
-  green:      '#22C55E',
+  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
+  accent: '#4F6EF7', accentSoft: '#1E2A5E',
+  purple: '#A855F7', purpleSoft: '#2E1065',
+  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  green: '#22C55E', amber: '#F59E0B',
 }
 
 const NAV_ITEMS = [
-  { to: '/',          icon: '◉',  label: 'Dashboard',   exact: true },
-  { to: '/clients',   icon: '◎',  label: 'Clients'                  },
-  { to: '/jobs',      icon: '🔧', label: 'Jobs'                     },
-  { to: '/inbox',     icon: '✉️', label: 'Email Inbox'              },
-  { to: '/campaigns', icon: '⚡', label: 'Cold Email',  adminOnly: true },
-  { to: '/inboxes',   icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
+  { to: '/',           icon: '◉',  label: 'Dashboard',    exact: true },
+  { to: '/clients',    icon: '◎',  label: 'Clients'                   },
+  { to: '/jobs',       icon: '🔧', label: 'Jobs'                      },
+  { to: '/inbox',      icon: '✉️', label: 'Email Inbox'               },
+  { to: '/templates',  icon: '📝', label: 'Templates'                 },
+  { to: '/documents',  icon: '🧾', label: 'Documents'                 },
+  { to: '/campaigns',  icon: '⚡', label: 'Cold Email',   adminOnly: true },
+  { to: '/inboxes',    icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
 ]
 
 export default function Layout() {
@@ -39,13 +35,13 @@ export default function Layout() {
   const roleColor = {
     admin:    C.accent,
     rep:      C.green,
-    engineer: '#F59E0B',
+    engineer: C.amber,
   }[profile?.role] || C.muted
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
 
-      {/* ── Sidebar ─────────────────────────────────────────── */}
+      {/* Sidebar */}
       <aside style={{
         width: 224, background: C.surface,
         borderRight: `1px solid ${C.border}`,
@@ -58,8 +54,8 @@ export default function Layout() {
           <div style={{ color: C.dim, fontSize: 11, marginTop: 3 }}>CRM · Jobs · Cold Email</div>
         </div>
 
-        {/* Nav links */}
-        <nav style={{ flex: 1, padding: '4px 0' }}>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '4px 0', overflowY: 'auto' }}>
           {NAV_ITEMS
             .filter(item => !item.adminOnly || isAdmin)
             .map(item => (
@@ -71,7 +67,7 @@ export default function Layout() {
                   color: isActive ? C.accent : C.muted,
                   background: isActive ? C.accentSoft : 'transparent',
                   borderLeft: `3px solid ${isActive ? C.accent : 'transparent'}`,
-                  textDecoration: 'none', transition: 'all 0.15s', cursor: 'pointer',
+                  textDecoration: 'none', transition: 'all 0.15s',
                 })}>
                 <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>{item.icon}</span>
                 {item.label}
@@ -79,8 +75,7 @@ export default function Layout() {
             ))}
 
           {/* AI Assistant button */}
-          <button
-            onClick={() => setAiOpen(p => !p)}
+          <button onClick={() => setAiOpen(p => !p)}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, width: '100%',
               padding: '10px 20px', fontSize: 14, fontWeight: aiOpen ? 600 : 400,
@@ -88,14 +83,13 @@ export default function Layout() {
               background: aiOpen ? C.purpleSoft : 'transparent',
               borderLeft: `3px solid ${aiOpen ? C.purple : 'transparent'}`,
               border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-            }}
-          >
+            }}>
             <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>✦</span>
             AI Assistant
           </button>
         </nav>
 
-        {/* User section */}
+        {/* User */}
         <div style={{ padding: '16px 20px', borderTop: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2, color: C.text }}>
             {profile?.full_name || 'Loading…'}
@@ -104,20 +98,20 @@ export default function Layout() {
             {profile?.role || '…'}
           </div>
           <button onClick={handleSignOut}
-            style={{ width: '100%', padding: '8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'center' }}>
+            style={{ width: '100%', padding: '8px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
             Sign Out
           </button>
         </div>
       </aside>
 
-      {/* ── Main content ─────────────────────────────────────── */}
+      {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: aiOpen ? 380 : 0, transition: 'margin-right 0.25s ease' }}>
         <main style={{ flex: 1, padding: 28, overflowY: 'auto' }}>
           <Outlet />
         </main>
       </div>
 
-      {/* ── AI Sidebar ───────────────────────────────────────── */}
+      {/* AI Sidebar */}
       <AISidebar isOpen={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   )

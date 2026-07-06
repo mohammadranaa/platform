@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast.jsx'
+import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
   bg: '#0F1117', surface: '#1A1D27', border: '#252836',

@@ -12,6 +12,8 @@ import JobDetail from './pages/JobDetail'
 import Campaigns from './pages/Campaigns'
 import Inboxes from './pages/Inboxes'
 import EmailInbox from './pages/EmailInbox'
+import Templates from './pages/Templates'
+import DocumentGenerator from './pages/DocumentGenerator'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -43,6 +45,8 @@ function App() {
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="inbox" element={<EmailInbox />} />
+            <Route path="templates" element={<Templates />} />
+            <Route path="documents" element={<DocumentGenerator />} />
             <Route path="campaigns" element={<AdminRoute><Campaigns /></AdminRoute>} />
             <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
