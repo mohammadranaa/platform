@@ -12,7 +12,26 @@
       "Bash(npx vite *)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(brew install *)",
+      "Bash(curl -L https://github.com/supabase/cli/releases/latest/download/supabase_darwin_arm64.tar.gz -o /tmp/supabase.tar.gz)",
+      "Bash(tar -xzf /tmp/supabase.tar.gz -C /tmp)",
+      "Bash(sudo mv /tmp/supabase /usr/local/bin/supabase)",
+      "Bash(supabase --version)",
+      "Read(//Users/mohammadrana/.config/supabase/**)",
+      "Read(//Users/mohammadrana/.supabase/**)",
+      "Read(//Users/mohammadrana/.config/**)",
+      "Bash(gh auth *)",
+      "Bash(git mv *)",
+      "Bash(python3 -)",
+      "Bash(npm --version)",
+      "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/pages/*.jsx src/pages/*.js)",
+      "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/components/*.jsx src/components/*.js)",
+      "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/pages/*.jsx)",
+      "Bash(sed -i '' \"s|from '../hooks/useToast'|from '../hooks/useToast.jsx'|g\" src/components/*.jsx)"
     ]
   }
 }

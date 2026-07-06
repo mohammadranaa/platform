@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast'
+import { useToast, Toast } from '../hooks/useToast.jsx'
 import AIEmailComposer from '../components/AIEmailComposer'
 
 const C = {
