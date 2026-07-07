@@ -5,13 +5,13 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const STATUSES = ['New','Contacted','Qualified','Proposal Sent','Active Client','Closed Won','Closed Lost','Unsubscribed']
@@ -19,8 +19,8 @@ const STATUSES = ['New','Contacted','Qualified','Proposal Sent','Active Client',
 const STATUS_COLORS = {
   'New':           { color: C.muted,   bg: C.surface },
   'Contacted':     { color: C.amber,   bg: C.amberSoft },
-  'Qualified':     { color: C.purple,  bg: '#2E1065' },
-  'Proposal Sent': { color: '#38BDF8', bg: '#0C2A3D' },
+  'Qualified':     { color: C.purple,  bg: '#EDE9FE' },
+  'Proposal Sent': { color: '#0284C7', bg: '#E0F2FE' },
   'Active Client': { color: C.green,   bg: C.greenSoft },
   'Closed Won':    { color: C.green,   bg: C.greenSoft },
   'Closed Lost':   { color: C.red,     bg: C.redSoft },
@@ -61,25 +61,19 @@ const TypeChip = ({ type }) => {
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    danger:  { background: C.redSoft, color: C.red, border: `1px solid ${C.red}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        borderRadius: 8,
-        fontWeight: 600,
-        padding: small ? '6px 14px' : '9px 18px',
-        fontSize: small ? 12 : 14,
-        opacity: disabled ? 0.5 : 1,
-        ...v[variant],
-        ...sx,
-      }}
-    >
+    <button onClick={onClick} disabled={disabled}
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -178,7 +172,7 @@ export default function Clients() {
   const clientName = c => c.company_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || '—'
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
 
-  const th = { textAlign: 'left', padding: '10px 16px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}` }
+  const th = { textAlign: 'left', padding: '10px 16px', color: '#6B7280', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }
   const td = { padding: '11px 16px', borderBottom: `1px solid ${C.border}18`, fontSize: 14, verticalAlign: 'middle' }
 
   // Update setForm helper
@@ -198,7 +192,7 @@ export default function Clients() {
       </div>
 
       {/* ── Type tabs ──────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 4, background: C.surface, borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
         {TABS.map(t => (
           <button
             key={t.key}
@@ -206,7 +200,7 @@ export default function Clients() {
             style={{
               padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
               fontSize: 13, fontWeight: tab === t.key ? 600 : 400,
-              background: tab === t.key ? C.bg : 'transparent',
+              background: tab === t.key ? '#fff' : 'transparent',
               color: tab === t.key ? C.text : C.muted,
               transition: 'all .15s',
             }}
@@ -225,16 +219,16 @@ export default function Clients() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search name, company, email, phone…"
-          style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 14px', fontSize: 14, flex: 1, minWidth: 220 }}
+          style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 14px', fontSize: 14, flex: 1, minWidth: 220 }}
         />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
+          style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
           <option value="All">All Statuses</option>
           {STATUSES.map(s => <option key={s}>{s}</option>)}
         </select>
         {isAdmin && (
           <select value={filterRep} onChange={e => setFilterRep(e.target.value)}
-            style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
+            style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
             <option value="All">All Reps</option>
             {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
@@ -242,7 +236,7 @@ export default function Clients() {
       </div>
 
       {/* ── Table ──────────────────────────────────────────── */}
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>Loading clients…</div>
         ) : filtered.length === 0 ? (
@@ -277,7 +271,7 @@ export default function Clients() {
                   <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.source || '—'}</span></td>
                   {isAdmin && <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.profiles?.full_name || '—'}</span></td>}
                   <td style={td}><span style={{ color: C.accent, fontWeight: 600 }}>{c.total_jobs || 0}</span></td>
-                  <td style={td}><span style={{ color: '#22C55E', fontWeight: 600 }}>{fmt(c.total_revenue)}</span></td>
+                  <td style={td}><span style={{ color: '#80D100', fontWeight: 600 }}>{fmt(c.total_revenue)}</span></td>
                   <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</span></td>
                 </tr>
               ))}
@@ -293,7 +287,7 @@ export default function Clients() {
           onClick={() => setShowAdd(false)}
         >
           <div
-            style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 580, maxHeight: '90vh', overflowY: 'auto' }}
+            style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, width: 580, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Add New Client</div>
@@ -335,7 +329,7 @@ export default function Clients() {
                     value={form[f.key]}
                     onChange={e => set(f.key, e.target.value)}
                     placeholder={f.placeholder}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}
+                    style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}
                   />
                 </div>
               ))}
@@ -344,7 +338,7 @@ export default function Clients() {
               <div style={{ gridColumn: 'span 1', display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</label>
                 <select value={form.source} onChange={e => set('source', e.target.value)}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
                   {['manual','website','whatsapp','email','cold-email','phone','referral','servicem8-import'].map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -356,7 +350,7 @@ export default function Clients() {
                 <div style={{ gridColumn: 'span 1', display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assign To</label>
                   <select value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
+                    style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
                     <option value="">— Select rep —</option>
                     {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
@@ -371,7 +365,7 @@ export default function Clients() {
                   onChange={e => set('notes', e.target.value)}
                   rows={3}
                   placeholder="Any initial notes about this client…"
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }}
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }}
                 />
               </div>
             </div>

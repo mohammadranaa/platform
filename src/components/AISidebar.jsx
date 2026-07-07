@@ -2,11 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', surface2: '#20232F', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  green: '#22C55E', amber: '#F59E0B',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  green: '#80D100', amber: '#D97706',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const QUICK_PROMPTS = [
@@ -76,7 +76,7 @@ export default function AISidebar({ isOpen, onClose }) {
       top: 0,
       bottom: 0,
       width: 380,
-      background: C.surface,
+      background: '#1F2937',
       borderLeft: `1px solid ${C.border}`,
       display: 'flex',
       flexDirection: 'column',
@@ -90,7 +90,7 @@ export default function AISidebar({ isOpen, onClose }) {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: C.surface2,
+        background: '#111827',
       }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -144,7 +144,7 @@ export default function AISidebar({ isOpen, onClose }) {
         {loading && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.purpleSoft, border: `1px solid ${C.purple}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: C.purple }}>✦</div>
-            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: '4px 12px 12px 12px', padding: '12px 16px' }}>
+            <div style={{ background: '#374151', border: '1px solid #4B5563', borderRadius: '4px 12px 12px 12px', padding: '12px 16px' }}>
               <div style={{ display: 'flex', gap: 4 }}>
                 {[0,1,2].map(i => (
                   <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: C.purple, opacity: 0.6, animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
@@ -163,7 +163,7 @@ export default function AISidebar({ isOpen, onClose }) {
           {QUICK_PROMPTS.map(p => (
             <button key={p} onClick={() => sendMessage(p)}
               style={{
-                background: C.bg, border: `1px solid ${C.border}`,
+                background: '#374151', border: '1px solid #4B5563',
                 color: C.muted, borderRadius: 8, padding: '5px 11px',
                 fontSize: 11, cursor: 'pointer', textAlign: 'left',
                 transition: 'all .15s',
@@ -175,7 +175,7 @@ export default function AISidebar({ isOpen, onClose }) {
       )}
 
       {/* Input */}
-      <div style={{ padding: '14px 16px', borderTop: `1px solid ${C.border}`, background: C.surface2 }}>
+      <div style={{ padding: '14px 16px', borderTop: `1px solid ${C.border}`, background: '#111827' }}>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             value={input}
@@ -184,7 +184,7 @@ export default function AISidebar({ isOpen, onClose }) {
             placeholder="Ask Claude anything…"
             disabled={loading}
             style={{
-              flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+              flex: 1, background: '#374151', border: '1px solid #4B5563',
               borderRadius: 10, color: C.text, padding: '10px 14px',
               fontSize: 14, fontFamily: 'inherit',
             }}

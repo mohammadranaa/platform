@@ -22,10 +22,10 @@ export function useToast() {
 // Import and render this at the bottom of any page that uses toasts
 
 const COLORS = {
-  success: { bg: '#22C55E', text: '#fff' },
-  error:   { bg: '#EF4444', text: '#fff' },
-  info:    { bg: '#4F6EF7', text: '#fff' },
-  warning: { bg: '#F59E0B', text: '#fff' },
+  success: { bg: '#80D100', text: '#fff' },
+  error:   { bg: '#DC2626', text: '#fff' },
+  info:    { bg: '#0093DB', text: '#fff' },
+  warning: { bg: '#D97706', text: '#fff' },
 }
 
 export function Toast({ toast }) {

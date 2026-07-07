@@ -5,25 +5,30 @@ import { useToast, Toast } from '../hooks/useToast'
 import AIEmailComposer from '../components/AIEmailComposer'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', surface2: '#20232F', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    success: { background: C.greenSoft, color: C.green, border: `1px solid ${C.green}44` },
-    purple:  { background: C.purpleSoft, color: C.purple, border: `1px solid ${C.purple}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600, padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14, opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -199,7 +204,7 @@ export default function EmailInbox() {
     return (
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 24 }}>Email Inbox</h1>
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 60, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: 60, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
           <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Connect your Gmail account</div>
           <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 28 }}>
@@ -228,7 +233,7 @@ export default function EmailInbox() {
             <select
               value={selectedAccount?.id}
               onChange={e => setSelectedAccount(accounts.find(a => a.id === e.target.value))}
-              style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '6px 12px', fontSize: 13 }}
+              style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '6px 12px', fontSize: 13 }}
             >
               {accounts.map(a => <option key={a.id} value={a.id}>{a.gmail_address}</option>)}
             </select>
@@ -237,7 +242,7 @@ export default function EmailInbox() {
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn small variant="ghost" onClick={() => selectedAccount && fetchThreads(selectedAccount.id)}>↻ Refresh</Btn>
           <Btn small variant="purple" onClick={() => setShowCompose(true)}>✦ Compose with AI</Btn>
-          <a href={getGmailOAuthUrl()} style={{ display: 'inline-block', background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600 }}>
+          <a href={getGmailOAuthUrl()} style={{ display: 'inline-block', background: 'transparent', border: '1px solid #E5E7EB', color: C.muted, borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600 }}>
             + Add Account
           </a>
         </div>
@@ -246,9 +251,9 @@ export default function EmailInbox() {
       <div style={{ display: 'flex', flex: 1, gap: 16, minHeight: 0 }}>
 
         {/* ── Thread list ─────────────────────────────────── */}
-        <div style={{ width: 320, flexShrink: 0, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ width: 320, flexShrink: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Filter tabs */}
-          <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.surface2 }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }}>
             {[['all','All'],['unread','Unread'],['campaign','Campaign']].map(([key, label]) => (
               <button key={key} onClick={() => setFilter(key)}
                 style={{ flex: 1, padding: '10px', border: 'none', background: filter === key ? C.surface : 'transparent', color: filter === key ? C.text : C.dim, cursor: 'pointer', fontSize: 13, fontWeight: filter === key ? 600 : 400, borderBottom: filter === key ? `2px solid ${C.accent}` : '2px solid transparent' }}>
@@ -305,15 +310,15 @@ export default function EmailInbox() {
         {/* ── Thread detail ───────────────────────────────── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {!selectedThread ? (
-            <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+            <div style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 40 }}>✉️</div>
               <div style={{ color: C.muted, fontSize: 14 }}>Select a thread to read it</div>
               <Btn small variant="purple" onClick={() => setShowCompose(true)}>✦ Compose new email</Btn>
             </div>
           ) : (
-            <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               {/* Thread header */}
-              <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, background: C.surface2 }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }}>
                 <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{selectedThread.subject || '(no subject)'}</div>
                 <div style={{ color: C.muted, fontSize: 13 }}>
                   {selectedThread.message_count} message{selectedThread.message_count !== 1 ? 's' : ''} ·{' '}
@@ -352,7 +357,7 @@ export default function EmailInbox() {
               </div>
 
               {/* Reply compose */}
-              <div style={{ borderTop: `1px solid ${C.border}`, padding: 16 }}>
+              <div style={{ borderTop: '1px solid #E5E7EB', padding: 16 }}>
                 <AIEmailComposer
                   context={{ type: 'inbox_compose', name: selectedThread.subject }}
                   onSend={handleSendEmail}

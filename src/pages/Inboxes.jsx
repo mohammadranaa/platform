@@ -4,12 +4,12 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const SMTP_PRESETS = [
@@ -19,16 +19,21 @@ const SMTP_PRESETS = [
   { label: 'Custom / Other', host: '',             port: 587 },
 ]
 
-const Btn = ({ children, onClick, variant = 'primary', small, disabled, full, style: sx = {} }) => {
+const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    danger:  { background: C.redSoft, color: C.red, border: `1px solid ${C.red}44` },
-    success: { background: C.greenSoft, color: C.green, border: `1px solid ${C.green}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600, padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14, opacity: disabled ? 0.5 : 1, width: full ? '100%' : 'auto', ...v[variant], ...sx }}>
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -46,7 +51,7 @@ const Field = ({ label, value, onChange, type = 'text', placeholder, hint, passw
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          style={{ width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: `9px ${password ? '40px' : '12px'} 9px 12px`, fontSize: 14 }}
+          style={{ width: '100%', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: `9px ${password ? '40px' : '12px'} 9px 12px`, fontSize: 14 }}
         />
         {password && (
           <button type="button" onClick={() => setShow(p => !p)}
@@ -71,7 +76,7 @@ function WarmupBar({ inbox }) {
         <span style={{ color: C.muted }}>Warm-up progress</span>
         <span style={{ color: C.amber, fontWeight: 600 }}>{current} / {inbox.warmup_max_limit} emails/day</span>
       </div>
-      <div style={{ background: C.bg, borderRadius: 6, height: 6 }}>
+      <div style={{ background: '#fff', borderRadius: 6, height: 6 }}>
         <div style={{ width: pct + '%', background: C.amber, borderRadius: 6, height: '100%', transition: 'width .3s' }} />
       </div>
       <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
@@ -166,7 +171,7 @@ export default function Inboxes() {
       </div>
 
       {/* Info banner */}
-      <div style={{ background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, fontSize: 13, color: C.amber, lineHeight: 1.7 }}>
+      <div style={{ background: '#FEF3C7', border: '1px solid #D9770644', borderRadius: 10, padding: '12px 18px', marginBottom: 20, fontSize: 13, color: C.amber, lineHeight: 1.7 }}>
         <strong>Gmail users:</strong> You must use an <strong>App Password</strong>, not your normal password.
         Go to: Google Account → Security → 2-Step Verification → App Passwords → Select Mail → Copy the 16-character code.
       </div>
@@ -174,7 +179,7 @@ export default function Inboxes() {
       {loading ? (
         <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading inboxes…</div>
       ) : inboxes.length === 0 ? (
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 60, textAlign: 'center' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 60, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📬</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No inboxes connected</div>
           <div style={{ color: C.muted, fontSize: 14, marginBottom: 20 }}>Connect your 5 sending email accounts to start warm-up and enable campaigns.</div>
@@ -188,7 +193,7 @@ export default function Inboxes() {
             const todayLimit = Math.min((inbox.warmup_start_limit || 10) + intervals * (inbox.warmup_step || 5), inbox.warmup_max_limit || 50)
 
             return (
-              <div key={inbox.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
+              <div key={inbox.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 {/* Inbox header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                   <div>
@@ -220,7 +225,7 @@ export default function Inboxes() {
                     { label: 'Current Limit', value: todayLimit + '/day',                  sub: 'today',                 color: C.amber },
                     { label: 'Warm-up',      value: inbox.warmup_enabled ? 'Enabled' : 'Off', sub: inbox.warmup_enabled ? `+${inbox.warmup_step} every ${inbox.warmup_interval_days}d` : 'manual', color: inbox.warmup_enabled ? C.amber : C.dim },
                   ].map(s => (
-                    <div key={s.label} style={{ background: C.bg, borderRadius: 8, padding: '10px 14px' }}>
+                    <div key={s.label} style={{ background: '#F5F7FA', borderRadius: 8, padding: '10px 14px' }}>
                       <div style={{ color: C.muted, fontSize: 11, marginBottom: 4 }}>{s.label}</div>
                       <div style={{ color: s.color, fontWeight: 700, fontSize: 18 }}>{s.value}</div>
                       <div style={{ color: C.dim, fontSize: 11 }}>{s.sub}</div>
@@ -239,7 +244,7 @@ export default function Inboxes() {
       {/* Add Inbox Modal */}
       {showAdd && (
         <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowAdd(false)}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 600, maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 600, maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Connect Inbox</div>
 
             {/* Preset buttons */}
@@ -258,12 +263,12 @@ export default function Inboxes() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>SMTP Host</label>
                 <input value={form.smtp_host} onChange={e => set('smtp_host', e.target.value)} placeholder="smtp.gmail.com"
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>SMTP Port</label>
                 <select value={form.smtp_port} onChange={e => set('smtp_port', e.target.value)}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
                   <option value="587">587 — TLS (recommended)</option>
                   <option value="465">465 — SSL</option>
                   <option value="25">25</option>
@@ -274,7 +279,7 @@ export default function Inboxes() {
             </div>
 
             {/* Warm-up settings */}
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 20, marginTop: 20 }}>
+            <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 20, marginTop: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>Warm-up Settings</div>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, color: C.muted }}>
@@ -291,7 +296,7 @@ export default function Inboxes() {
                 </div>
               )}
               {!form.warmup_enabled && (
-                <div style={{ background: C.bg, borderRadius: 8, padding: '12px 16px', fontSize: 13, color: C.muted }}>
+                <div style={{ background: '#F5F7FA', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: C.muted }}>
                   Warm-up disabled. The inbox will send up to{' '}
                   <strong style={{ color: C.text }}>{form.warmup_max_limit || 50} emails/day</strong> immediately.
                   Only disable this for already-warmed inboxes.

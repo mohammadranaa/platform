@@ -5,19 +5,19 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  teal: '#2DD4BF', tealSoft: '#0D3330',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  teal: '#0D9488', tealSoft: '#CCFBF1',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const JOB_STATUSES = [
   { key: 'Quote',       color: C.purple, bg: C.purpleSoft,  icon: '📋' },
-  { key: 'Scheduled',   color: '#38BDF8', bg: '#0C2A3D',    icon: '📅' },
+  { key: 'Scheduled',   color: '#0284C7', bg: '#E0F2FE',    icon: '📅' },
   { key: 'In Progress', color: C.amber,  bg: C.amberSoft,   icon: '🔧' },
   { key: 'Completed',   color: C.teal,   bg: C.tealSoft,    icon: '✅' },
   { key: 'Invoiced',    color: C.accent, bg: C.accentSoft,  icon: '🧾' },
@@ -29,16 +29,19 @@ const DIARY_ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: '�
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    danger:  { background: C.redSoft, color: C.red, border: `1px solid ${C.red}44` },
-    success: { background: C.greenSoft, color: C.green, border: `1px solid ${C.green}44` },
-    amber:   { background: C.amberSoft, color: C.amber, border: `1px solid ${C.amber}44` },
-    teal:    { background: C.tealSoft, color: C.teal, border: `1px solid ${C.teal}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600, padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14, opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -133,7 +136,7 @@ function InvoicePreview({ job, client, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
           <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Close</button>
           <button onClick={() => { alert('In the live app, this emails the invoice to the client.'); onClose() }}
-            style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#4F6EF7', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+            style={{ padding: '9px 20px', borderRadius: 8, border: 'none', background: '#0093DB', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
             ✉ Send Invoice
           </button>
         </div>
@@ -311,7 +314,7 @@ export default function JobDetail() {
       </div>
 
       {/* Lifecycle stepper */}
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginBottom: 20 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Lifecycle — Click to advance</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
           {JOB_STATUSES.map((step, i) => {
@@ -325,7 +328,7 @@ export default function JobDetail() {
                   disabled={saving}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                    padding: '8px 12px', background: isActive ? step.bg : isDone ? '#1C2A1C' : 'transparent',
+                    padding: '8px 12px', background: isActive ? step.bg : isDone ? '#F0FAE0' : '#fff',
                     border: `1px solid ${isActive ? step.color : isDone ? C.green + '44' : C.border}`,
                     borderRadius: 8, cursor: 'pointer',
                   }}
@@ -368,7 +371,7 @@ export default function JobDetail() {
         {/* LEFT */}
         <div>
           {/* Job details */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Details</div>
             <InfoRow label="Client"      value={<button onClick={() => navigate(`/clients/${job.client_id}`)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', padding: 0, fontSize: 14 }}>{clientName(client)}</button>} />
             <InfoRow label="Engineer"    value={job.profiles?.full_name} />
@@ -379,7 +382,7 @@ export default function JobDetail() {
           </div>
 
           {/* Site / access */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Site & Access</div>
             <InfoRow label="Site Address" value={job.site_address} />
             <InfoRow label="Postcode"     value={job.site_postcode} />
@@ -394,7 +397,7 @@ export default function JobDetail() {
 
           {/* Description */}
           {job.description && (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Description</div>
               <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, margin: 0 }}>{job.description}</p>
             </div>
@@ -404,8 +407,8 @@ export default function JobDetail() {
         {/* RIGHT */}
         <div>
           {/* Line items */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
-            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid #E5E7EB', fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
               Line Items
             </div>
             {lineItems.length === 0 ? (
@@ -416,7 +419,7 @@ export default function JobDetail() {
                   <thead>
                     <tr>
                       {['Description', 'Qty', 'Price', 'Total'].map(h => (
-                        <th key={h} style={{ textAlign: h === 'Description' ? 'left' : 'right', padding: '8px 14px', color: C.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        <th key={h} style={{ textAlign: h === 'Description' ? 'left' : 'right', padding: '8px 14px', color: C.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #E5E7EB' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -434,7 +437,7 @@ export default function JobDetail() {
                     ))}
                   </tbody>
                 </table>
-                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${C.border}` }}>
+                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #E5E7EB' }}>
                   <span style={{ color: C.muted, fontSize: 13 }}>Total (ex. VAT)</span>
                   <span style={{ color: C.accent, fontWeight: 700, fontSize: 20 }}>{fmt(lineTotal)}</span>
                 </div>
@@ -443,14 +446,14 @@ export default function JobDetail() {
           </div>
 
           {/* Job diary */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Diary</div>
 
             {/* Input */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <select value={diaryInput.type} onChange={e => setDiaryInput(p => ({ ...p, type: e.target.value }))}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 10px', fontSize: 13 }}>
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 10px', fontSize: 13 }}>
                   <option value="note">📝 Note</option>
                   <option value="call">📞 Call</option>
                   <option value="email">✉️ Email</option>
@@ -461,7 +464,7 @@ export default function JobDetail() {
                   onChange={e => setDiaryInput(p => ({ ...p, content: e.target.value }))}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addDiaryEntry()}
                   placeholder="Add a diary entry…"
-                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13 }}
+                  style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 12px', fontSize: 13 }}
                 />
               </div>
               <Btn small onClick={addDiaryEntry} disabled={saving || !diaryInput.content.trim()}>

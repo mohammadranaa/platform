@@ -38,7 +38,8 @@
       "Bash(curl -s http://localhost:5174/)",
       "Bash(curl -s http://localhost:5174/src/main.jsx)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5174/src/main.jsx)",
-      "Skill(run)"
+      "Skill(run)",
+      "Bash(grep -rn \"^} => {$\" src/)"
     ]
   }
 }

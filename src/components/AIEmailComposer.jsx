@@ -3,12 +3,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', surface2: '#20232F', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 // ── AIEmailComposer ───────────────────────────────────────────
@@ -164,10 +164,10 @@ export default function AIEmailComposer({
   }
 
   const inputStyle = {
-    background: C.bg,
-    border: `1px solid ${C.border}`,
+    background: '#fff',
+    border: '1px solid #E5E7EB',
     borderRadius: 8,
-    color: C.text,
+    color: '#1F2937',
     padding: '9px 12px',
     fontSize: 14,
     width: '100%',
@@ -176,8 +176,8 @@ export default function AIEmailComposer({
 
   return (
     <div style={{
-      background: C.surface,
-      border: `1px solid ${C.border}`,
+      background: '#fff',
+      border: '1px solid #E5E7EB',
       borderRadius: compact ? 10 : 14,
       overflow: 'hidden',
       display: 'flex',
@@ -186,11 +186,11 @@ export default function AIEmailComposer({
       {/* Header */}
       <div style={{
         padding: '14px 18px',
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: '1px solid #E5E7EB',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: C.surface2,
+        background: '#F5F7FA',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16 }}>✉️</span>
@@ -225,7 +225,7 @@ export default function AIEmailComposer({
 
       {/* AI Panel */}
       {showAI && (
-        <div style={{ padding: '14px 18px', background: C.purpleSoft, borderBottom: `1px solid ${C.purple}33` }}>
+        <div style={{ padding: '14px 18px', background: '#F5F3FF', borderBottom: '1px solid #DDD6FE' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.purple, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             ✦ Claude AI — Email Assistant
           </div>
@@ -259,7 +259,7 @@ export default function AIEmailComposer({
                   ? 'Refine instruction e.g. "make it shorter", "add urgency", "more friendly"…'
                   : 'Describe the email e.g. "follow up on EICR quote sent last week"…'
               }
-              style={{ ...inputStyle, flex: 1, background: C.surface }}
+              style={{ ...inputStyle, flex: 1, background: '#F5F7FA' }}
             />
             <button
               onClick={generateDraft}
@@ -279,7 +279,7 @@ export default function AIEmailComposer({
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             {getQuickPrompts(context).map(p => (
               <button key={p} onClick={() => { setAiPrompt(p); }}
-                style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.muted, borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}>
+                style={{ background: '#F5F7FA', border: '1px solid #E5E7EB', color: C.muted, borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}>
                 {p}
               </button>
             ))}
@@ -289,12 +289,12 @@ export default function AIEmailComposer({
 
       {/* Email fields */}
       <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #E5E7EB', paddingBottom: 10 }}>
           <span style={{ color: C.muted, fontSize: 13, width: 50, flexShrink: 0 }}>To</span>
           <input value={to} onChange={e => setTo(e.target.value)} placeholder="recipient@example.com"
             style={{ ...inputStyle, border: 'none', padding: '4px 0', background: 'transparent' }} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #E5E7EB', paddingBottom: 10 }}>
           <span style={{ color: C.muted, fontSize: 13, width: 50, flexShrink: 0 }}>Subject</span>
           <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject…"
             style={{ ...inputStyle, border: 'none', padding: '4px 0', background: 'transparent' }} />
@@ -311,18 +311,18 @@ export default function AIEmailComposer({
       {/* Footer */}
       <div style={{
         padding: '12px 18px',
-        borderTop: `1px solid ${C.border}`,
+        borderTop: '1px solid #E5E7EB',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: C.surface2,
+        background: '#F5F7FA',
       }}>
         <div style={{ fontSize: 12, color: C.dim }}>
           {body.length > 0 && `${body.split(/\s+/).filter(Boolean).length} words`}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {onClose && (
-            <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${C.border}`, color: C.muted, borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            <button onClick={onClose} style={{ background: 'transparent', border: '1px solid #E5E7EB', color: C.muted, borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               Cancel
             </button>
           )}

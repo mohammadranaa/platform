@@ -4,14 +4,14 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', surface2: '#20232F', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  teal: '#2DD4BF', tealSoft: '#0D3330',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  teal: '#0D9488', tealSoft: '#CCFBF1',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const CATEGORY_META = {
@@ -32,12 +32,13 @@ const TYPE_LABELS = {
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent,      color: '#fff',    border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted,   border: `1px solid ${C.border}` },
-    success: { background: C.greenSoft,   color: C.green,   border: `1px solid ${C.green}44` },
-    danger:  { background: C.redSoft,     color: C.red,     border: `1px solid ${C.red}44` },
-    amber:   { background: C.amberSoft,   color: C.amber,   border: `1px solid ${C.amber}44` },
-    purple:  { background: C.purpleSoft,  color: C.purple,  border: `1px solid ${C.purple}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -75,7 +76,7 @@ function BodyPreview({ body, variables = [] }) {
 
   return (
     <pre style={{
-      background: C.bg, borderRadius: 8, padding: '14px 16px',
+      background: '#F5F7FA', borderRadius: 8, padding: '14px 16px',
       fontSize: 13, lineHeight: 1.8, color: C.muted,
       whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0,
       maxHeight: 300, overflowY: 'auto',
@@ -199,7 +200,7 @@ export default function Templates() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, background: C.surface, borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, background: '#fff', borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
         {TABS.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             style={{
@@ -220,7 +221,7 @@ export default function Templates() {
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20, minHeight: 600 }}>
 
         {/* Left — template list */}
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           {filtered.map((t, i) => {
             const meta = CATEGORY_META[t.category]
             const isSelected = selected?.id === t.id
@@ -255,7 +256,7 @@ export default function Templates() {
 
         {/* Right — template detail */}
         {selected && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             {/* Template header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div>
@@ -268,7 +269,7 @@ export default function Templates() {
                   }}>
                     {CATEGORY_META[selected.category].label}
                   </span>
-                  <span style={{ background: C.bg, color: C.dim, border: `1px solid ${C.border}`, borderRadius: 6, padding: '2px 10px', fontSize: 12 }}>
+                  <span style={{ background: '#F5F7FA', color: C.dim, border: '1px solid #E5E7EB', borderRadius: 6, padding: '2px 10px', fontSize: 12 }}>
                     {TYPE_LABELS[selected.template_type]}
                   </span>
                 </div>
@@ -286,19 +287,19 @@ export default function Templates() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Template Name</label>
                   <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
+                    style={{ background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subject Line</label>
                   <input value={editForm.subject} onChange={e => setEditForm(p => ({ ...p, subject: e.target.value }))}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
+                    style={{ background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Body</label>
                   <VariableChips variables={selected.variables} />
                   <textarea value={editForm.body} onChange={e => setEditForm(p => ({ ...p, body: e.target.value }))}
                     rows={16}
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '12px 14px', fontSize: 13, lineHeight: 1.8, resize: 'vertical', fontFamily: 'inherit' }} />
+                    style={{ background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '12px 14px', fontSize: 13, lineHeight: 1.8, resize: 'vertical', fontFamily: 'inherit' }} />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Btn onClick={saveTemplate} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Btn>
@@ -311,7 +312,7 @@ export default function Templates() {
                 {/* Subject */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Subject Line</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: C.bg, borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F5F7FA', borderRadius: 8, padding: '10px 14px' }}>
                     <span style={{ fontSize: 14, color: C.text }}>{selected.subject}</span>
                     <button onClick={() => copyToClipboard(selected.subject)}
                       style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 12, flexShrink: 0, marginLeft: 10 }}>
@@ -351,7 +352,7 @@ export default function Templates() {
       {showUse && selected && (
         <div style={{ position: 'fixed', inset: 0, background: '#00000099', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
           onClick={() => setShowUse(false)}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 640, maxHeight: '90vh', overflowY: 'auto' }}
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 640, maxHeight: '90vh', overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Use Template — {selected.name}</div>
             <div style={{ color: C.muted, fontSize: 13, marginBottom: 24 }}>Fill in the variables below to generate your email.</div>
@@ -368,7 +369,7 @@ export default function Templates() {
                       value={fillVars[v] || ''}
                       onChange={e => setFillVars(p => ({ ...p, [v]: e.target.value }))}
                       placeholder={`Enter ${v.replace(/_/g, ' ')}`}
-                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13 }}
+                      style={{ background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13 }}
                     />
                   </div>
                 ))}
@@ -378,11 +379,11 @@ export default function Templates() {
             {/* Preview */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Preview</div>
-              <div style={{ background: C.bg, borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
+              <div style={{ background: '#F5F7FA', borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
                 <span style={{ color: C.dim, fontSize: 12 }}>Subject: </span>
                 <span style={{ color: C.text, fontSize: 13 }}>{renderTemplate(selected, fillVars).subject}</span>
               </div>
-              <pre style={{ background: C.bg, borderRadius: 8, padding: '14px 16px', fontSize: 13, lineHeight: 1.8, color: C.muted, whiteSpace: 'pre-wrap', fontFamily: 'inherit', maxHeight: 280, overflowY: 'auto' }}>
+              <pre style={{ background: '#F5F7FA', borderRadius: 8, padding: '14px 16px', fontSize: 13, lineHeight: 1.8, color: C.muted, whiteSpace: 'pre-wrap', fontFamily: 'inherit', maxHeight: 280, overflowY: 'auto' }}>
                 {renderTemplate(selected, fillVars).body}
               </pre>
             </div>

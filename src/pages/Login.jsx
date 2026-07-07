@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
-  bg:      '#0F1117',
-  surface: '#1A1D27',
-  border:  '#252836',
-  accent:  '#4F6EF7',
-  text:    '#F1F5F9',
-  muted:   '#94A3B8',
-  red:     '#EF4444',
-  redSoft: '#450A0A',
+  bg:      '#FFFFFF',
+  surface: '#F5F7FA',
+  border:  '#E5E7EB',
+  accent:  '#0093DB',
+  text:    '#1F2937',
+  muted:   '#6B7280',
+  red:     '#DC2626',
+  redSoft: '#FEE2E2',
 }
 
 export default function Login() {
@@ -43,15 +43,15 @@ export default function Login() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: C.bg,
+      background: '#fff',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       fontFamily: 'Inter, system-ui, sans-serif',
     }}>
       <div style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
+        background: '#fff',
+        border: '1px solid #E5E7EB',
         borderRadius: 16,
         padding: '40px 44px',
         width: 400,
@@ -84,8 +84,8 @@ export default function Login() {
               required
               autoFocus
               style={{
-                background: C.bg,
-                border: `1px solid ${C.border}`,
+                background: '#fff',
+                border: '1px solid #E5E7EB',
                 borderRadius: 8,
                 color: C.text,
                 padding: '10px 14px',
@@ -104,8 +104,8 @@ export default function Login() {
               placeholder="••••••••"
               required
               style={{
-                background: C.bg,
-                border: `1px solid ${C.border}`,
+                background: '#fff',
+                border: '1px solid #E5E7EB',
                 borderRadius: 8,
                 color: C.text,
                 padding: '10px 14px',
@@ -152,7 +152,7 @@ export default function Login() {
         <div style={{
           marginTop: 28,
           padding: 14,
-          background: C.bg,
+          background: '#F5F7FA',
           borderRadius: 10,
           fontSize: 12,
           color: C.muted,

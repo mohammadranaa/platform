@@ -4,19 +4,19 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7', purpleSoft: '#2E1065',
-  teal: '#2DD4BF', tealSoft: '#0D3330',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  teal: '#0D9488', tealSoft: '#CCFBF1',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const JOB_STATUS_COLORS = {
   'Quote':       C.purple,
-  'Scheduled':   '#38BDF8',
+  'Scheduled':   '#0284C7',
   'In Progress': C.amber,
   'Completed':   C.teal,
   'Invoiced':    C.accent,
@@ -29,8 +29,8 @@ function StatCard({ label, value, sub, color = C.accent, onClick }) {
     <div
       onClick={onClick}
       style={{
-        background: C.surface,
-        border: `1px solid ${C.border}`,
+        background: '#fff',
+        border: '1px solid #E5E7EB',
         borderRadius: 12,
         padding: '20px 24px',
         flex: 1,
@@ -52,7 +52,7 @@ function StatCard({ label, value, sub, color = C.accent, onClick }) {
 function SectionTitle({ children }) {
   return (
     <div style={{
-      fontSize: 11, fontWeight: 700, color: C.muted,
+      fontSize: 11, fontWeight: 700, color: '#9CA3AF',
       textTransform: 'uppercase', letterSpacing: '0.08em',
       marginBottom: 12, marginTop: 28,
     }}>
@@ -187,7 +187,7 @@ export default function Dashboard() {
       <SectionTitle>Jobs Overview</SectionTitle>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
         <StatCard label="Active Jobs"        value={stats?.activeJobs ?? '—'}     sub="in progress / scheduled"  color={C.accent} onClick={() => navigate('/jobs')} />
-        <StatCard label="Scheduled Today"    value={stats?.scheduledToday ?? '—'} sub="awaiting engineer"        color={'#38BDF8'} onClick={() => navigate('/jobs')} />
+        <StatCard label="Scheduled Today"    value={stats?.scheduledToday ?? '—'} sub="awaiting engineer"        color={'#0284C7'} onClick={() => navigate('/jobs')} />
         <StatCard label="Awaiting Invoice"   value={stats?.awaitingInvoice ?? '—'} sub="completed, not invoiced" color={C.amber} onClick={() => navigate('/jobs')} />
         <StatCard label="Invoiced"           value={fmt(stats?.invoicedValue)}     sub="outstanding"              color={C.purple} />
         <StatCard label="Revenue Collected"  value={fmt(stats?.revenueCollected)}  sub="paid jobs"                color={C.green} />
@@ -216,7 +216,7 @@ export default function Dashboard() {
                 key={status}
                 onClick={() => navigate(`/jobs?status=${status}`)}
                 style={{
-                  background: C.surface,
+                  background: '#fff',
                   border: `1px solid ${statusColor(status)}44`,
                   borderRadius: 10,
                   padding: '10px 18px',
@@ -241,7 +241,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 28 }}>
 
         {/* ── Recent Jobs ───────────────────────────────────── */}
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>Recent Jobs</div>
             <button onClick={() => navigate('/jobs')} style={{ background: 'none', border: 'none', color: C.accent, fontSize: 13, cursor: 'pointer' }}>View all →</button>
@@ -280,7 +280,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── Recent Activity ───────────────────────────────── */}
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16 }}>Recent Activity</div>
           {recentActivity.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>No activity yet.</div>}
           {recentActivity.map(a => (
@@ -305,7 +305,7 @@ export default function Dashboard() {
 
       {/* ── New clients ───────────────────────────────────────── */}
       <SectionTitle>Newly Added Clients</SectionTitle>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         {recentClients.length === 0 && (
           <div style={{ padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>No clients yet.</div>
         )}
@@ -336,9 +336,9 @@ export default function Dashboard() {
                 {typeLabel[c.customer_type]}
               </span>
               <span style={{
-                background: C.bg,
+                background: '#fff',
                 color: C.muted,
-                border: `1px solid ${C.border}`,
+                border: '1px solid #E5E7EB',
                 borderRadius: 6, padding: '2px 8px', fontSize: 11,
               }}>
                 {c.status}

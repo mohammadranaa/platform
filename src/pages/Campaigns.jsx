@@ -4,13 +4,13 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7', teal: '#2DD4BF', tealSoft: '#0D3330',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', teal: '#0D9488', tealSoft: '#CCFBF1',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const STATUS_META = {
@@ -29,17 +29,21 @@ const CONTACT_STATUS_META = {
   replied:      { color: C.teal,   bg: C.tealSoft   },
 }
 
-const Btn = ({ children, onClick, variant = 'primary', small, disabled, full, style: sx = {} }) => {
+const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    danger:  { background: C.redSoft, color: C.red, border: `1px solid ${C.red}44` },
-    success: { background: C.greenSoft, color: C.green, border: `1px solid ${C.green}44` },
-    amber:   { background: C.amberSoft, color: C.amber, border: `1px solid ${C.amber}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600, padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14, opacity: disabled ? 0.5 : 1, width: full ? '100%' : 'auto', ...v[variant], ...sx }}>
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -60,15 +64,15 @@ const Field = ({ label, value, onChange, type = 'text', placeholder, rows, optio
     {hint && <div style={{ color: C.dim, fontSize: 12 }}>{hint}</div>}
     {options ? (
       <select value={value} onChange={e => onChange(e.target.value)}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
+        style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
         {options.map(o => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
       </select>
     ) : rows ? (
       <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows} placeholder={placeholder}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }} />
+        style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }} />
     ) : (
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
+        style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
     )}
   </div>
 )
@@ -227,7 +231,7 @@ export default function Campaigns() {
     return { total, opens, clicks, replied, bounced, openRate: pct(opens, total), clickRate: pct(clicks, total), replyRate: pct(replied, contacts.length) }
   }, [sends, contacts])
 
-  const th = { textAlign: 'left', padding: '9px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}` }
+  const th = { textAlign: 'left', padding: '9px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }
   const td = { padding: '10px 14px', borderBottom: `1px solid ${C.border}18`, fontSize: 14, verticalAlign: 'middle' }
 
   if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading campaigns…</div>
@@ -259,7 +263,7 @@ export default function Campaigns() {
             { label: 'Reply Rate', value: analytics.replyRate + '%',color: C.green },
             { label: 'Bounces',    value: analytics.bounced,        color: C.red },
           ].map(s => (
-            <div key={s.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 18px', flex: 1, minWidth: 110 }}>
+            <div key={s.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 18px', flex: 1, minWidth: 110 }}>
               <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{s.label}</div>
               <div style={{ color: s.color, fontSize: 22, fontWeight: 700 }}>{s.value}</div>
             </div>
@@ -268,7 +272,7 @@ export default function Campaigns() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           {/* Sequence steps */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Sequence</div>
               <Btn small onClick={() => setShowNewStep(true)}>+ Add Step</Btn>
@@ -281,7 +285,7 @@ export default function Campaigns() {
                   <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.accentSoft, border: `2px solid ${C.accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.accent, fontWeight: 700, fontSize: 13 }}>{step.step_number}</div>
                   {i < steps.length - 1 && <div style={{ width: 2, height: 20, background: C.border, margin: '4px 0' }} />}
                 </div>
-                <div style={{ flex: 1, background: C.bg, borderRadius: 8, padding: '10px 14px' }}>
+                <div style={{ flex: 1, background: '#FFFFFF', borderRadius: 8, padding: '10px 14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{step.subject}</div>
                     <button onClick={() => deleteStep(step.id)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
@@ -296,7 +300,7 @@ export default function Campaigns() {
           </div>
 
           {/* Contacts */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Contacts ({contacts.length})</div>
               <Btn small onClick={() => setShowAddContacts(true)}>+ Add</Btn>
@@ -322,7 +326,7 @@ export default function Campaigns() {
 
         {/* Send log */}
         {sends.length > 0 && (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginTop: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginTop: 20 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Send Log</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -347,7 +351,7 @@ export default function Campaigns() {
         {/* Add Step Modal */}
         {showNewStep && (
           <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowNewStep(false)}>
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 580, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 580, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Add Sequence Step</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -357,7 +361,7 @@ export default function Campaigns() {
                 <Field label="Subject Line" value={newStep.subject} onChange={v => setNewStep(p => ({ ...p, subject: v }))} placeholder="Quick question about {{company}}" />
                 <Field label="Email Body" value={newStep.body_html} onChange={v => setNewStep(p => ({ ...p, body_html: v }))} rows={10}
                   placeholder={'Hi {{first_name}},\n\nI noticed you manage properties in London and wanted to reach out about our compliance certification services — EICR, Gas Safety (CP12), EPC, Fire Risk Assessments and more.\n\nWe work with many estate agents in your area and can turn around certificates quickly.\n\nWould you be open to a quick call?\n\nBest,\n{{rep_name}}'} />
-                <div style={{ background: C.bg, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.muted }}>
+                <div style={{ background: '#FFFFFF', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.muted }}>
                   Variables: <span style={{ color: C.accent }}>{'{{first_name}} {{last_name}} {{company}} {{email}}'}</span>
                 </div>
               </div>
@@ -372,7 +376,7 @@ export default function Campaigns() {
         {/* Add Contacts Modal */}
         {showAddContacts && (
           <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowAddContacts(false)}>
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 540, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 540, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Add Contacts</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: C.muted }}>Single Contact</div>
@@ -384,7 +388,7 @@ export default function Campaigns() {
                 </div>
                 <Btn onClick={addContact} disabled={saving || !newContact.email}>{saving ? 'Adding…' : 'Add Contact'}</Btn>
               </div>
-              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 20 }}>
+              <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 20 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, color: C.muted, marginBottom: 10 }}>Bulk Import (CSV)</div>
                 <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>Format: <code style={{ color: C.accent }}>email, first_name, last_name, company</code> — one per line</div>
                 <Field value={bulkCSV} onChange={setBulkCSV} rows={5} placeholder={'frank@cousinsestates.co.uk, Frank, Browne, Cousins Estate Agents\ndaniel@oease9.co.uk, Daniel, Stillman, Oakwood Estate Agent'} />
@@ -413,14 +417,14 @@ export default function Campaigns() {
       </div>
 
       {campaigns.length === 0 ? (
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 60, textAlign: 'center' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 60, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📧</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No campaigns yet</div>
           <div style={{ color: C.muted, fontSize: 14, marginBottom: 20 }}>Create your first cold email campaign to start reaching estate agents.</div>
           <Btn onClick={() => setShowNewCampaign(true)}>Create Campaign</Btn>
         </div>
       ) : (
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>{['Campaign', 'Target', 'Status', 'Daily Limit', 'Actions'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
@@ -448,7 +452,7 @@ export default function Campaigns() {
       {/* New Campaign Modal */}
       {showNewCampaign && (
         <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowNewCampaign(false)}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 520 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 520 }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>New Campaign</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <Field label="Campaign Name" value={newCampaign.name} onChange={v => setNewCampaign(p => ({ ...p, name: v }))} placeholder="Q3 Estate Agent Outreach — London" />

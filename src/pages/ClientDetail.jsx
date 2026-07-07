@@ -5,14 +5,14 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
 
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', border: '#252836',
-  accent: '#4F6EF7', accentSoft: '#1E2A5E',
-  green: '#22C55E', greenSoft: '#14532D',
-  amber: '#F59E0B', amberSoft: '#451A03',
-  red: '#EF4444', redSoft: '#450A0A',
-  purple: '#A855F7',
-  teal: '#2DD4BF',
-  text: '#F1F5F9', muted: '#94A3B8', dim: '#475569',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+  accent: '#0093DB', accentSoft: '#E6F4FC',
+  green: '#80D100', greenSoft: '#F0FAE0',
+  amber: '#D97706', amberSoft: '#FEF3C7',
+  red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED',
+  teal: '#0D9488',
+  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
 const STATUSES = ['New','Contacted','Qualified','Proposal Sent','Active Client','Closed Won','Closed Lost','Unsubscribed']
@@ -20,8 +20,8 @@ const STATUSES = ['New','Contacted','Qualified','Proposal Sent','Active Client',
 const STATUS_COLORS = {
   'New':           { color: C.muted,   bg: C.surface },
   'Contacted':     { color: C.amber,   bg: C.amberSoft },
-  'Qualified':     { color: C.purple,  bg: '#2E1065' },
-  'Proposal Sent': { color: '#38BDF8', bg: '#0C2A3D' },
+  'Qualified':     { color: C.purple,  bg: '#EDE9FE' },
+  'Proposal Sent': { color: '#0284C7', bg: '#E0F2FE' },
   'Active Client': { color: C.green,   bg: C.greenSoft },
   'Closed Won':    { color: C.green,   bg: C.greenSoft },
   'Closed Lost':   { color: C.red,     bg: C.redSoft },
@@ -35,7 +35,7 @@ const TYPE_META = {
 }
 
 const JOB_STATUS_COLORS = {
-  'Quote': C.purple, 'Scheduled': '#38BDF8', 'In Progress': C.amber,
+  'Quote': C.purple, 'Scheduled': '#0284C7', 'In Progress': C.amber,
   'Completed': C.teal, 'Invoiced': C.accent, 'Paid': C.green, 'Cancelled': C.red,
 }
 
@@ -43,14 +43,19 @@ const ACT_ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: 'transparent', color: C.muted, border: `1px solid ${C.border}` },
-    danger:  { background: C.redSoft, color: C.red, border: `1px solid ${C.red}44` },
-    success: { background: C.greenSoft, color: C.green, border: `1px solid ${C.green}44` },
+    primary: { background: '#0093DB', color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
+    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
+    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
+    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
+    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
+    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
   }
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600, padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14, opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
+      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
+        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
+        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
       {children}
     </button>
   )
@@ -210,7 +215,7 @@ export default function ClientDetail() {
           { label: 'Source',        value: client.source || '—',                color: C.muted },
           { label: 'Added',         value: new Date(client.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), color: C.muted },
         ].map(s => (
-          <div key={s.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 18px', flex: 1 }}>
+          <div key={s.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '14px 18px', flex: 1, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{s.label}</div>
             <div style={{ color: s.color, fontSize: 20, fontWeight: 700 }}>{s.value}</div>
           </div>
@@ -222,7 +227,7 @@ export default function ClientDetail() {
         {/* ── LEFT COLUMN ─────────────────────────────────── */}
         <div>
           {/* Contact info */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Information</div>
             <InfoRow label="Email"        value={client.email} />
             <InfoRow label="Phone"        value={client.phone} />
@@ -235,7 +240,7 @@ export default function ClientDetail() {
 
           {/* Billing info (verified/cold_agent) */}
           {(client.billing_name || client.billing_email || client.billing_address) && (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Billing Contact</div>
               <InfoRow label="Billing Name"    value={client.billing_name} />
               <InfoRow label="Billing Email"   value={client.billing_email} />
@@ -246,7 +251,7 @@ export default function ClientDetail() {
 
           {/* Inbound booking details */}
           {client.customer_type === 'inbound' && (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Booking Details</div>
               <InfoRow label="Property Type"    value={client.property_type} />
               <InfoRow label="Property Sub-type" value={client.property_subtype} />
@@ -260,7 +265,7 @@ export default function ClientDetail() {
           )}
 
           {/* CRM status */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>CRM Status</div>
             {editStatus ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
@@ -287,14 +292,14 @@ export default function ClientDetail() {
 
           {/* Assigned rep */}
           {isAdmin && (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Assigned Rep</div>
               {editAssign ? (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <select
                     defaultValue={client.assigned_to || ''}
                     onChange={e => updateAssignment(e.target.value)}
-                    style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}
+                    style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 12px', fontSize: 14 }}
                   >
                     <option value="">— Unassigned —</option>
                     {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
@@ -312,7 +317,7 @@ export default function ClientDetail() {
 
           {/* Notes */}
           {client.notes && (
-            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Notes</div>
               <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, margin: 0 }}>{client.notes}</p>
             </div>
@@ -322,7 +327,7 @@ export default function ClientDetail() {
         {/* ── RIGHT COLUMN ─────────────────────────────────── */}
         <div>
           {/* Jobs */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Jobs ({jobs.length})</div>
               <Btn small onClick={() => navigate('/jobs/new?client=' + id)}>+ New Job</Btn>
@@ -352,14 +357,14 @@ export default function ClientDetail() {
           </div>
 
           {/* Activity Log */}
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Activity Log</div>
 
             {/* Log input */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <select value={actInput.type} onChange={e => setActInput(p => ({ ...p, type: e.target.value }))}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 10px', fontSize: 13 }}>
+                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 10px', fontSize: 13 }}>
                   <option value="note">📝 Note</option>
                   <option value="call">📞 Call</option>
                   <option value="email">✉️ Email</option>
@@ -371,7 +376,7 @@ export default function ClientDetail() {
                   onChange={e => setActInput(p => ({ ...p, content: e.target.value }))}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && logActivity()}
                   placeholder="Log an activity… (Enter to save)"
-                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13 }}
+                  style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 12px', fontSize: 13 }}
                 />
               </div>
               <Btn small onClick={logActivity} disabled={saving || !actInput.content.trim()}>
