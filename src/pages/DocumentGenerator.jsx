@@ -30,7 +30,7 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
 }
 
 // ── Document renderer ─────────────────────────────────────────
-function Document({ type, settings, data, lineItems }) {
+function Document({ type, company, settings, data, lineItems }) {
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
   const subtotal  = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
   const discount  = Number(data.discount || 0)
@@ -45,14 +45,37 @@ function Document({ type, settings, data, lineItems }) {
   return (
     <div style={{ background: '#fff', color: '#111', fontFamily: 'Arial, sans-serif', fontSize: 13, lineHeight: 1.6, padding: '48px 52px', width: '100%', boxSizing: 'border-box' }}>
       {/* Header */}
+      {(() => {
+        const isRemedials = company === 'remedials'
+        const companyName = isRemedials ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'
+        const companyReg  = isRemedials ? '17289041' : '17265132'
+        const sortCode    = isRemedials ? '20-19-97' : '60-83-71'
+        const accNumber   = isRemedials ? '83026442' : '83356126'
+        const accName     = isRemedials ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'
+        const address     = '134 Merton High Street, London, SW19 1BA'
+        return null // just storing vars, rendered below
+      })()}
+      {/* render actual header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, paddingBottom: 24, borderBottom: '2px solid #0093DB' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 60, height: 60, background: '#0093DB', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: 9, textAlign: 'center', lineHeight: 1.4, padding: 4 }}>
-            MY<br/>LANDLORD<br/>CERT
+          {/* MLC Logo */}
+          <div style={{ width: 80, height: 80, background: '#0093DB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <svg viewBox="0 0 100 100" width="70" height="70">
+              <path d="M50 5 L90 30 L90 80 Q90 95 50 95 Q10 95 10 80 L10 30 Z" fill="#0093DB"/>
+              <path d="M50 5 L90 30 L90 80 Q90 95 50 95 Q10 95 10 80 L10 30 Z" fill="white" opacity="0.15"/>
+              <path d="M30 60 L50 40 L70 60 L65 60 L65 80 L55 80 L55 68 L45 68 L45 80 L35 80 L35 60 Z" fill="white"/>
+              <path d="M58 72 L72 58 L76 62" stroke="#80D100" strokeWidth="4" fill="none" strokeLinecap="round"/>
+            </svg>
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 18, color: '#0093DB' }}>{settings?.company_name}</div>
-            <div style={{ color: '#6B7280', fontSize: 11 }}>{settings?.company_email} · {settings?.company_phone}</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0093DB', marginBottom: 2 }}>
+              {company === 'remedials' ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'}
+            </div>
+            <div style={{ color: '#6B7280', fontSize: 11 }}>134 Merton High Street, London, SW19 1BA</div>
+            <div style={{ color: '#6B7280', fontSize: 11 }}>{settings?.company_phone} · {settings?.company_email}</div>
+            <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 2 }}>
+              Co. Reg: {company === 'remedials' ? '17289041' : '17265132'}
+            </div>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -130,9 +153,10 @@ function Document({ type, settings, data, lineItems }) {
           <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>We accept payment by: {settings?.payment_methods}</div>
           <div style={{ fontSize: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Bank Details</div>
-            <div style={{ color: '#6B7280' }}>Account Name: {settings?.bank_name}</div>
-            <div style={{ color: '#6B7280' }}>Account Number: {settings?.bank_account}</div>
-            <div style={{ color: '#6B7280' }}>Sort Code: {settings?.bank_sort_code}</div>
+            <div style={{ color: '#6B7280' }}>Account Name: {company === 'remedials' ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'}</div>
+            <div style={{ color: '#6B7280' }}>Account Number: {company === 'remedials' ? '83026442' : '83356126'}</div>
+            <div style={{ color: '#6B7280' }}>Sort Code: {company === 'remedials' ? '20-19-97' : '60-83-71'}</div>
+            <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4, fontWeight: 600 }}>Note: Please Put Invoice Number As Reference</div>
           </div>
         </div>
         {isInvoice && (
@@ -145,7 +169,7 @@ function Document({ type, settings, data, lineItems }) {
 
       {/* Footer */}
       <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #E5E7EB', textAlign: 'center', fontSize: 10, color: '#9CA3AF' }}>
-        {isInvoice ? settings?.invoice_footer : settings?.quote_footer} · Company Reg: {settings?.company_reg} · {settings?.company_name}, {settings?.company_address}
+        {isInvoice ? settings?.invoice_footer : settings?.quote_footer} · Company Reg: {company === 'remedials' ? '17289041' : '17265132'} · {settings?.company_name}, {settings?.company_address}
       </div>
     </div>
   )
@@ -156,6 +180,7 @@ export default function DocumentGenerator() {
   const { toast, showToast } = useToast()
 
   const [docType, setDocType]     = useState('invoice')
+  const [company, setCompany]     = useState('standard') // standard | remedials
   const [settings, setSettings]   = useState(null)
   const [clients, setClients]     = useState([])
   const [jobs, setJobs]           = useState([])
@@ -258,14 +283,33 @@ export default function DocumentGenerator() {
         </div>
       </div>
 
-      {/* Type toggle */}
-      <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, marginBottom: 24, width: 'fit-content' }}>
-        {[['invoice','🧾 Invoice'], ['quote','📋 Quote']].map(([key, label]) => (
-          <button key={key} onClick={() => setDocType(key)}
-            style={{ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: docType === key ? 700 : 400, background: docType === key ? C.accent : 'transparent', color: docType === key ? '#fff' : C.muted }}>
-            {label}
+      {/* Toggles row */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Doc type */}
+        <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+          {[['invoice','🧾 Invoice'], ['quote','📋 Quote']].map(([key, label]) => (
+            <button key={key} onClick={() => setDocType(key)}
+              style={{ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: docType === key ? 700 : 400, background: docType === key ? C.accent : 'transparent', color: docType === key ? '#fff' : C.muted }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Company selector */}
+        <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+          <button onClick={() => setCompany('standard')}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: company === 'standard' ? 700 : 400, background: company === 'standard' ? '#0093DB' : 'transparent', color: company === 'standard' ? '#fff' : C.muted }}>
+            🏠 Standard
           </button>
-        ))}
+          <button onClick={() => setCompany('remedials')}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: company === 'remedials' ? 700 : 400, background: company === 'remedials' ? '#D97706' : 'transparent', color: company === 'remedials' ? '#fff' : C.muted }}>
+            🔨 Remedials
+          </button>
+        </div>
+
+        <div style={{ fontSize: 12, color: C.muted, padding: '6px 12px', background: company === 'remedials' ? '#FEF3C7' : C.accentSoft, borderRadius: 8, border: `1px solid ${company === 'remedials' ? '#D97706' : C.accent}44` }}>
+          {company === 'remedials' ? 'My Landlord Certificate Remedials LTD · Sort: 20-19-97 · Acc: 83026442' : 'My Landlord Certificate LTD · Sort: 60-83-71 · Acc: 83356126'}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -415,7 +459,7 @@ export default function DocumentGenerator() {
               </div>
             </div>
             <div id="document-preview-content" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden' }}>
-              <Document type={docType} settings={settings} data={data} lineItems={lineItems} />
+              <Document type={docType} company={company} settings={settings} data={data} lineItems={lineItems} />
             </div>
           </div>
         </div>

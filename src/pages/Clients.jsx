@@ -1,73 +1,41 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast'
+import { useToast, Toast } from '../hooks/useToast.jsx'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#E6F4FC',
-  green: '#80D100', greenSoft: '#F0FAE0',
+  green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
   red: '#DC2626', redSoft: '#FEE2E2',
-  purple: '#7C3AED',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const STATUSES = ['New','Contacted','Qualified','Proposal Sent','Active Client','Closed Won','Closed Lost','Unsubscribed']
+const CLIENT_TYPES = ['Landlord', 'Estate Agent', 'Care Home', 'Other']
+const CLIENT_STATUSES = ['Active', 'Inactive', 'VIP', 'Blacklisted']
+
+const TYPE_COLORS = {
+  'Landlord':     { color: C.accent,    bg: C.accentSoft },
+  'Estate Agent': { color: C.purple,    bg: C.purpleSoft },
+  'Care Home':    { color: C.greenDark, bg: C.greenSoft  },
+  'Other':        { color: C.muted,     bg: C.surface    },
+}
 
 const STATUS_COLORS = {
-  'New':           { color: C.muted,   bg: C.surface },
-  'Contacted':     { color: C.amber,   bg: C.amberSoft },
-  'Qualified':     { color: C.purple,  bg: '#EDE9FE' },
-  'Proposal Sent': { color: '#0284C7', bg: '#E0F2FE' },
-  'Active Client': { color: C.green,   bg: C.greenSoft },
-  'Closed Won':    { color: C.green,   bg: C.greenSoft },
-  'Closed Lost':   { color: C.red,     bg: C.redSoft },
-  'Unsubscribed':  { color: C.dim,     bg: C.surface },
-}
-
-const TYPE_META = {
-  inbound:    { label: 'Inbound',      color: C.green,  desc: 'Website & WhatsApp bookings' },
-  verified:   { label: 'Verified',     color: C.accent, desc: 'Past customers from job history' },
-  cold_agent: { label: 'Cold Agents',  color: C.amber,  desc: 'Estate agents for outreach' },
-}
-
-const TABS = [
-  { key: 'all',        label: 'All Clients' },
-  { key: 'inbound',    label: 'Inbound' },
-  { key: 'verified',   label: 'Verified' },
-  { key: 'cold_agent', label: 'Cold Agents' },
-]
-
-// ── Shared atoms ──────────────────────────────────────────────
-const Badge = ({ status }) => {
-  const m = STATUS_COLORS[status] || { color: C.muted, bg: C.surface }
-  return (
-    <span style={{ background: m.bg, color: m.color, border: `1px solid ${m.color}33`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-      {status}
-    </span>
-  )
-}
-
-const TypeChip = ({ type }) => {
-  const m = TYPE_META[type] || { label: type, color: C.muted }
-  return (
-    <span style={{ background: m.color + '22', color: m.color, border: `1px solid ${m.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-      {m.label}
-    </span>
-  )
+  'Active':      { color: C.greenDark, bg: C.greenSoft },
+  'Inactive':    { color: C.muted,     bg: C.surface   },
+  'VIP':         { color: C.amber,     bg: C.amberSoft  },
+  'Blacklisted': { color: C.red,       bg: C.redSoft    },
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: '#0093DB', color: '#fff', border: 'none' },
-    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
-    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
-    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
-    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
-    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
-    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
+    primary: { background: C.accent,    color: '#fff',      border: 'none' },
+    ghost:   { background: '#fff',      color: C.muted,     border: `1px solid ${C.border}` },
+    danger:  { background: C.redSoft,   color: C.red,       border: `1px solid ${C.red}44` },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -79,298 +47,191 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
+const inputStyle = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
+const labelStyle = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
+
 export default function Clients() {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const { toast, showToast } = useToast()
 
   const [clients, setClients]   = useState([])
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
-
-  // Filters
-  const initialTab = searchParams.get('type') || 'all'
-  const [tab, setTab]             = useState(initialTab)
-  const [search, setSearch]       = useState('')
+  const [search, setSearch]     = useState('')
+  const [filterType, setFilterType]     = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
-  const [filterRep, setFilterRep]       = useState('All')
+  const [showAdd, setShowAdd]   = useState(false)
 
-  // Add client modal
-  const [showAdd, setShowAdd] = useState(false)
-  const blankClient = {
-    customer_type: 'inbound',
-    first_name: '', last_name: '', company_name: '',
-    email: '', phone: '', phone_2: '',
-    street_address: '', city: '', postcode: '',
-    source: 'manual', notes: '',
-    status: 'New', assigned_to: '',
-  }
-  const [form, setForm] = useState(blankClient)
+  const blank = { client_type: 'Landlord', first_name: '', last_name: '', company_name: '', email: '', phone: '', phone_2: '', street_address: '', city: '', postcode: '', billing_name: '', billing_email: '', billing_address: '', status: 'Active', source: 'manual', notes: '', assigned_to: '' }
+  const [form, setForm] = useState(blank)
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   useEffect(() => { fetchAll() }, [profile])
 
   async function fetchAll() {
     setLoading(true)
-    await Promise.all([fetchClients(), fetchProfiles()])
+    const [{ data: c }, { data: p }] = await Promise.all([
+      (() => { let q = supabase.from('clients').select('*, profiles(full_name)').order('created_at', { ascending: false }); if (!isAdmin) q = q.eq('assigned_to', profile?.id); return q })(),
+      supabase.from('profiles').select('id, full_name').eq('is_active', true),
+    ])
+    setClients(c || [])
+    setProfiles(p || [])
     setLoading(false)
   }
 
-  async function fetchClients() {
-    let q = supabase
-      .from('clients')
-      .select('id, customer_type, first_name, last_name, company_name, email, phone, status, source, total_jobs, total_revenue, created_at, assigned_to, profiles(full_name)')
-      .order('created_at', { ascending: false })
-    if (!isAdmin) q = q.eq('assigned_to', profile.id)
-    const { data, error } = await q
-    if (!error) setClients(data || [])
-  }
-
-  async function fetchProfiles() {
-    const { data } = await supabase.from('profiles').select('id, full_name, role').eq('is_active', true)
-    setProfiles(data || [])
-  }
-
   async function addClient() {
-    if (!form.email && !form.phone && !form.company_name) {
-      showToast('Please enter at least an email, phone, or company name', 'error')
-      return
-    }
+    if (!form.email && !form.phone && !form.company_name) { showToast('Enter at least an email, phone, or company name', 'error'); return }
     setSaving(true)
-    const { error } = await supabase.from('clients').insert({
-      ...form,
-      assigned_to: form.assigned_to || profile.id,
-    })
+    const { error } = await supabase.from('clients').insert({ ...form, assigned_to: form.assigned_to || profile.id })
     setSaving(false)
     if (error) { showToast(error.message, 'error'); return }
-    await fetchClients()
+    await fetchAll()
     setShowAdd(false)
-    setForm(blankClient)
+    setForm(blank)
     showToast('Client added ✓')
   }
-
-  // ── Filtered list ─────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    return clients
-      .filter(c => tab === 'all' || c.customer_type === tab)
-      .filter(c => filterStatus === 'All' || c.status === filterStatus)
-      .filter(c => filterRep === 'All' || c.assigned_to === filterRep)
-      .filter(c => {
-        if (!search) return true
-        const q = search.toLowerCase()
-        return (
-          c.first_name?.toLowerCase().includes(q) ||
-          c.last_name?.toLowerCase().includes(q) ||
-          c.company_name?.toLowerCase().includes(q) ||
-          c.email?.toLowerCase().includes(q) ||
-          c.phone?.includes(q)
-        )
-      })
-  }, [clients, tab, filterStatus, filterRep, search])
 
   const clientName = c => c.company_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || '—'
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
 
-  const th = { textAlign: 'left', padding: '10px 16px', color: '#6B7280', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }
-  const td = { padding: '11px 16px', borderBottom: `1px solid ${C.border}18`, fontSize: 14, verticalAlign: 'middle' }
+  const filtered = useMemo(() => clients
+    .filter(c => filterType === 'All' || c.client_type === filterType)
+    .filter(c => filterStatus === 'All' || c.status === filterStatus)
+    .filter(c => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      return clientName(c).toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q)
+    })
+  , [clients, filterType, filterStatus, search])
 
-  // Update setForm helper
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
+  const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 14, verticalAlign: 'middle' }
 
   return (
     <div>
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Clients</h1>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 3 }}>
-            {clients.length} total · {filtered.length} shown
-          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Clients</h1>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{clients.length} total · {filtered.length} shown</div>
         </div>
         <Btn onClick={() => setShowAdd(true)}>+ Add Client</Btn>
       </div>
 
-      {/* ── Type tabs ──────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 4, background: '#F5F7FA', border: '1px solid #E5E7EB', borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              fontSize: 13, fontWeight: tab === t.key ? 600 : 400,
-              background: tab === t.key ? '#fff' : 'transparent',
-              color: tab === t.key ? C.text : C.muted,
-              transition: 'all .15s',
-            }}
-          >
-            {t.label}
-            <span style={{ marginLeft: 6, color: tab === t.key ? C.accent : C.dim, fontSize: 12 }}>
-              {t.key === 'all' ? clients.length : clients.filter(c => c.customer_type === t.key).length}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* ── Filters ────────────────────────────────────────── */}
+      {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search name, company, email, phone…"
-          style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: '#1F2937', padding: '8px 14px', fontSize: 14, flex: 1, minWidth: 220 }}
-        />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
-          <option value="All">All Statuses</option>
-          {STATUSES.map(s => <option key={s}>{s}</option>)}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, company, email…"
+          style={{ ...inputStyle, flex: 1, minWidth: 200, width: 'auto', padding: '8px 14px' }} />
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '8px 12px' }}>
+          <option value="All">All Types</option>
+          {CLIENT_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
-        {isAdmin && (
-          <select value={filterRep} onChange={e => setFilterRep(e.target.value)}
-            style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 14 }}>
-            <option value="All">All Reps</option>
-            {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
-        )}
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inputStyle, width: 'auto', padding: '8px 12px' }}>
+          <option value="All">All Statuses</option>
+          {CLIENT_STATUSES.map(s => <option key={s}>{s}</option>)}
+        </select>
       </div>
 
-      {/* ── Table ──────────────────────────────────────────── */}
-      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      {/* Table */}
+      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>Loading clients…</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>
-            No clients found.{' '}
-            <button onClick={() => setShowAdd(true)} style={{ color: C.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-              Add one →
-            </button>
+            No clients yet. <button onClick={() => setShowAdd(true)} style={{ color: C.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Add one →</button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                {['Client', 'Type', 'Status', 'Source', isAdmin ? 'Rep' : null, 'Jobs', 'Revenue', 'Added'].filter(Boolean).map(h => (
-                  <th key={h} style={th}>{h}</th>
-                ))}
-              </tr>
+              <tr>{['Client', 'Type', 'Status', 'Email', 'Phone', 'Jobs', 'Revenue', 'Rep', 'Added'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
-                <tr
-                  key={c.id}
-                  onClick={() => navigate(`/clients/${c.id}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td style={td}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{clientName(c)}</div>
-                    <div style={{ color: C.dim, fontSize: 12 }}>{c.email || c.phone || '—'}</div>
-                  </td>
-                  <td style={td}><TypeChip type={c.customer_type} /></td>
-                  <td style={td}><Badge status={c.status} /></td>
-                  <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.source || '—'}</span></td>
-                  {isAdmin && <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.profiles?.full_name || '—'}</span></td>}
-                  <td style={td}><span style={{ color: C.accent, fontWeight: 600 }}>{c.total_jobs || 0}</span></td>
-                  <td style={td}><span style={{ color: '#80D100', fontWeight: 600 }}>{fmt(c.total_revenue)}</span></td>
-                  <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</span></td>
-                </tr>
-              ))}
+              {filtered.map(c => {
+                const tm = TYPE_COLORS[c.client_type] || { color: C.muted, bg: C.surface }
+                const sm = STATUS_COLORS[c.status] || { color: C.muted, bg: C.surface }
+                return (
+                  <tr key={c.id} onClick={() => navigate(`/clients/${c.id}`)} style={{ cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.surface}
+                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                    <td style={td}><div style={{ fontWeight: 600, color: C.text }}>{clientName(c)}</div></td>
+                    <td style={td}><span style={{ background: tm.bg, color: tm.color, border: `1px solid ${tm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{c.client_type}</span></td>
+                    <td style={td}><span style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600 }}>{c.status}</span></td>
+                    <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.email || '—'}</span></td>
+                    <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.phone || '—'}</span></td>
+                    <td style={td}><span style={{ color: C.accent, fontWeight: 700 }}>{c.total_jobs || 0}</span></td>
+                    <td style={td}><span style={{ color: C.greenDark, fontWeight: 600 }}>{fmt(c.total_revenue)}</span></td>
+                    <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.profiles?.full_name || '—'}</span></td>
+                    <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{new Date(c.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</span></td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* ── Add Client Modal ────────────────────────────────── */}
+      {/* Add Client Modal */}
       {showAdd && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
-          onClick={() => setShowAdd(false)}
-        >
-          <div
-            style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, width: 580, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Add New Client</div>
+        <div style={{ position: 'fixed', inset: 0, background: '#00000066', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowAdd(false)}>
+          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 580, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 20 }}>Add New Client</div>
 
-            {/* Customer type selector */}
+            {/* Client type */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              {Object.entries(TYPE_META).map(([key, meta]) => (
-                <button
-                  key={key}
-                  onClick={() => set('customer_type', key)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: 8, border: `1px solid ${form.customer_type === key ? meta.color : C.border}`,
-                    background: form.customer_type === key ? meta.color + '22' : 'transparent',
-                    color: form.customer_type === key ? meta.color : C.muted,
-                    cursor: 'pointer', fontSize: 13, fontWeight: form.customer_type === key ? 700 : 400,
-                  }}
-                >
-                  {meta.label}
-                </button>
-              ))}
+              {CLIENT_TYPES.map(t => {
+                const m = TYPE_COLORS[t]
+                return (
+                  <button key={t} onClick={() => set('client_type', t)}
+                    style={{ flex: 1, padding: '9px', borderRadius: 8, border: `1px solid ${form.client_type === t ? m.color : C.border}`, background: form.client_type === t ? m.bg : '#fff', color: form.client_type === t ? m.color : C.muted, cursor: 'pointer', fontSize: 12, fontWeight: form.client_type === t ? 700 : 400 }}>
+                    {t}
+                  </button>
+                )
+              })}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               {[
-                { label: 'First Name', key: 'first_name', placeholder: 'Jordan' },
-                { label: 'Last Name', key: 'last_name', placeholder: 'Blake' },
-                { label: 'Company Name', key: 'company_name', placeholder: 'Capital Homes Ltd', full: true },
-                { label: 'Email', key: 'email', type: 'email', placeholder: 'jordan@example.co.uk' },
-                { label: 'Phone', key: 'phone', placeholder: '07700 900000' },
-                { label: 'Phone 2', key: 'phone_2', placeholder: '020 1234 5678' },
-                { label: 'Street Address', key: 'street_address', placeholder: '12 High Street', full: true },
-                { label: 'City', key: 'city', placeholder: 'London' },
-                { label: 'Postcode', key: 'postcode', placeholder: 'N1 9XX' },
+                { label: 'First Name', key: 'first_name' },
+                { label: 'Last Name', key: 'last_name' },
+                { label: 'Company Name', key: 'company_name', full: true },
+                { label: 'Email', key: 'email', type: 'email' },
+                { label: 'Phone', key: 'phone' },
+                { label: 'Phone 2', key: 'phone_2' },
+                { label: 'Street Address', key: 'street_address', full: true },
+                { label: 'City', key: 'city' },
+                { label: 'Postcode', key: 'postcode' },
+                { label: 'Billing Name', key: 'billing_name' },
+                { label: 'Billing Email', key: 'billing_email', type: 'email' },
+                { label: 'Billing Address', key: 'billing_address', full: true },
               ].map(f => (
-                <div key={f.key} style={{ gridColumn: f.full ? 'span 2' : 'span 1', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</label>
-                  <input
-                    type={f.type || 'text'}
-                    value={form[f.key]}
-                    onChange={e => set(f.key, e.target.value)}
-                    placeholder={f.placeholder}
-                    style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}
-                  />
+                <div key={f.key} style={{ gridColumn: f.full ? 'span 2' : 'span 1' }}>
+                  <label style={labelStyle}>{f.label}</label>
+                  <input type={f.type || 'text'} value={form[f.key] || ''} onChange={e => set(f.key, e.target.value)} style={inputStyle} />
                 </div>
               ))}
-
-              {/* Source */}
-              <div style={{ gridColumn: 'span 1', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Source</label>
-                <select value={form.source} onChange={e => set('source', e.target.value)}
-                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
-                  {['manual','website','whatsapp','email','cold-email','phone','referral','servicem8-import'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Assign rep — admin only */}
               {isAdmin && (
-                <div style={{ gridColumn: 'span 1', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assign To</label>
-                  <select value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)}
-                    style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
+                <div>
+                  <label style={labelStyle}>Assign To</label>
+                  <select value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} style={inputStyle}>
                     <option value="">— Select rep —</option>
                     {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
                 </div>
               )}
-
-              {/* Notes */}
-              <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</label>
-                <textarea
-                  value={form.notes}
-                  onChange={e => set('notes', e.target.value)}
-                  rows={3}
-                  placeholder="Any initial notes about this client…"
-                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }}
-                />
+              <div>
+                <label style={labelStyle}>Source</label>
+                <select value={form.source} onChange={e => set('source', e.target.value)} style={inputStyle}>
+                  {['manual','website','whatsapp','email','phone','referral','import'].map(s => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={labelStyle}>Notes</label>
+                <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
               </div>
             </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <Btn onClick={addClient} disabled={saving}>{saving ? 'Saving…' : 'Add Client'}</Btn>
               <Btn variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
             </div>

@@ -207,15 +207,29 @@ export default function EmailInbox() {
         <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: 60, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
           <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Connect your Gmail account</div>
-          <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 28 }}>
-            Connect your Google Workspace Gmail account to send and receive emails directly inside the MLC platform. Every conversation is automatically linked to the right client.
+          <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
+            Connect your Gmail account to send and receive emails directly inside the MLC platform.
           </div>
+
+          {/* Gmail OAuth Setup Guide */}
+          <div style={{ background: '#FEF3C7', border: '1px solid #D97706', borderRadius: 12, padding: 20, marginBottom: 24, textAlign: 'left', maxWidth: 500 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#D97706', marginBottom: 10 }}>⚠ Before connecting: Set up Google OAuth</div>
+            <div style={{ fontSize: 13, color: '#1F2937', lineHeight: 1.8 }}>
+              <strong>Step 1:</strong> Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: '#0093DB' }}>console.cloud.google.com</a><br/>
+              <strong>Step 2:</strong> Select your MLC Platform project → APIs & Services → Credentials<br/>
+              <strong>Step 3:</strong> Click your OAuth Client ID → Add Authorised redirect URIs:<br/>
+              <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>{window.location.origin}/inbox/oauth-callback</code><br/>
+              <strong>Step 4:</strong> Add <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>VITE_GOOGLE_CLIENT_ID</code> to your .env file<br/>
+              <strong>Step 5:</strong> Redeploy on Vercel with the Google Client ID env variable set
+            </div>
+          </div>
+
           <a href={getGmailOAuthUrl()} style={{ display: 'inline-block', background: '#fff', color: '#333', border: '1px solid #ddd', borderRadius: 10, padding: '12px 24px', fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
             <img src="https://www.google.com/favicon.ico" width="16" style={{ verticalAlign: 'middle', marginRight: 8 }} />
             Connect Gmail Account
           </a>
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 16 }}>
-            You'll be redirected to Google to authorise access.
+          <div style={{ color: C.dim, fontSize: 12, marginTop: 12 }}>
+            Error 401 invalid_client means the Google Client ID is not configured yet.
           </div>
         </div>
         <Toast toast={toast} />

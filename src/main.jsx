@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Leads from './pages/Leads'
 import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
 import Jobs from './pages/Jobs'
@@ -19,7 +20,7 @@ import './index.css'
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', fontSize: 15, fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#F5F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280', fontSize: 15, fontFamily: 'Inter, system-ui, sans-serif' }}>
       Loading platform…
     </div>
   )
@@ -40,6 +41,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
+            <Route path="leads" element={<Leads />} />
+            <Route path="leads/:id" element={<ClientDetail />} />
             <Route path="clients" element={<Clients />} />
             <Route path="clients/:id" element={<ClientDetail />} />
             <Route path="jobs" element={<Jobs />} />

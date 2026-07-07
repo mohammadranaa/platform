@@ -17,13 +17,12 @@ const C = {
 }
 
 const JOB_STATUSES = [
-  { key: 'Quote',       color: '#7C3AED', bg: '#EDE9FE', icon: '📋' },
-  { key: 'Scheduled',   color: '#0284C7', bg: '#E0F2FE', icon: '📅' },
-  { key: 'In Progress', color: '#D97706', bg: '#FEF3C7', icon: '🔧' },
-  { key: 'Completed',   color: '#0D9488', bg: '#CCFBF1', icon: '✅' },
-  { key: 'Invoiced',    color: '#0093DB', bg: '#E6F4FC', icon: '🧾' },
-  { key: 'Paid',        color: '#5a9400', bg: '#F0FAE0', icon: '💰' },
-  { key: 'Cancelled',   color: '#DC2626', bg: '#FEE2E2', icon: '✕'  },
+  { key: 'In Progress',          color: '#D97706', bg: '#FEF3C7', icon: '🔧' },
+  { key: 'Scheduled',            color: '#0284C7', bg: '#E0F2FE', icon: '📅' },
+  { key: 'Paid',                 color: '#0093DB', bg: '#E6F4FC', icon: '💰' },
+  { key: 'Completed',            color: '#0D9488', bg: '#CCFBF1', icon: '✅' },
+  { key: 'Certificate Delivered',color: '#3d7a00', bg: '#F0FAE0', icon: '📜' },
+  { key: 'Cancelled',            color: '#DC2626', bg: '#FEE2E2', icon: '✕'  },
 ]
 const STATUS_MAP = Object.fromEntries(JOB_STATUSES.map(s => [s.key, s]))
 const MLC_SERVICES = ['EICR','GSC (CP12)','EPC','FRA','FSC','PAT Testing','Remedial Works','Consumer Unit','Diagnostics','Asbestos Survey','Other']
