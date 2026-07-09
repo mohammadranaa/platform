@@ -194,7 +194,7 @@ export default function Dashboard() {
   }
 
   async function fetchRenewals() {
-    const { data } = await supabase.from('leads').select('id, contact_first, contact_last, company_name, work_done, renewal_due_date').eq('lead_type', 'verified').not('renewal_due_date', 'is', null).order('renewal_due_date').limit(8)
+    const { data } = await supabase.from('leads').select('id, contact_first, contact_last, company_name, work_done, renewal_due_date').eq('lead_type', 'verified').not('renewal_due_date', 'is', null).order('renewal_due_date').limit(20)
     setRenewalsDue(data || [])
   }
 
