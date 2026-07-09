@@ -194,7 +194,7 @@ export default function Dashboard() {
   }
 
   async function fetchRenewals() {
-    const { data } = await supabase.from('leads').select('id, contact_first, contact_last, company_name, work_done, renewal_due_date, days_until_renewal').eq('lead_type', 'verified').not('renewal_due_date', 'is', null).lte('days_until_renewal', 30).order('days_until_renewal').limit(8)
+    const { data } = await supabase.from('leads').select('id, contact_first, contact_last, company_name, work_done, renewal_due_date').eq('lead_type', 'verified').not('renewal_due_date', 'is', null).order('renewal_due_date').limit(8)
     setRenewalsDue(data || [])
   }
 
@@ -304,7 +304,7 @@ export default function Dashboard() {
               </SectionTitle>
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 {renewalsDue.map((lead, i) => {
-                  const days = lead.days_until_renewal
+                  const days = lead.renewal_due_date ? Math.floor((new Date(lead.renewal_due_date) - new Date()) / 86400000) : null
                   const color = days < 0 ? C.red : days <= 14 ? C.amber : C.greenDark
                   const bg = days < 0 ? C.redSoft : days <= 14 ? C.amberSoft : C.greenSoft
                   return (

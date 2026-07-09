@@ -243,7 +243,7 @@ export default function Leads() {
       .filter(l => filterStatus === 'All' || l.status === filterStatus)
       .filter(l => {
         if (renewalFilter === 'All') return true
-        const days = l.days_until_renewal
+        const days = l.renewal_due_date ? Math.floor((new Date(l.renewal_due_date) - new Date()) / 86400000) : null
         if (days === null || days === undefined) return false
         return days <= parseInt(renewalFilter)
       })
@@ -346,7 +346,7 @@ export default function Leads() {
             </thead>
             <tbody>
               {filtered.map(l => {
-                const days = l.days_until_renewal
+                const days = l.renewal_due_date ? Math.floor((new Date(l.renewal_due_date) - new Date()) / 86400000) : null
                 const renewalColor = days === null ? C.dim : days < 0 ? C.red : days <= 14 ? C.amber : C.greenDark
                 return (
                   <tr key={l.id} onClick={() => navigate(`/leads/${l.id}`)} style={{ cursor: 'pointer' }}
