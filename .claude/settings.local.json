@@ -40,7 +40,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5174/src/main.jsx)",
       "Skill(run)",
       "Bash(grep -rn \"^} => {$\" src/)",
-      "Bash(grep -rln \"^} => {$\" src/)"
+      "Bash(grep -rln \"^} => {$\" src/)",
+      "Read(//Users/mohammadrana/Downloads/**)",
+      "Bash(supabase db *)"
     ]
   }
 }
