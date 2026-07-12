@@ -42,7 +42,8 @@
       "Bash(grep -rn \"^} => {$\" src/)",
       "Bash(grep -rln \"^} => {$\" src/)",
       "Read(//Users/mohammadrana/Downloads/**)",
-      "Bash(supabase db *)"
+      "Bash(supabase db *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

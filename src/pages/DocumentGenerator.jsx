@@ -1,23 +1,36 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
+import { MLC_LOGO } from '../lib/logo.js'
 
 const C = {
-  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#E6F4FC',
-  green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#5a9400',
+  green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
-  red: '#DC2626', redSoft: '#FEE2E2',
-  text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
+  red: '#DC2626', text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
+}
+
+const COMPANIES = {
+  standard: {
+    name: 'My Landlord Certificate LTD', reg: '17265132',
+    sort: '60-83-71', account: '83356126',
+    address: '134 Merton High Street, London, SW19 1BA',
+    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
+  },
+  remedials: {
+    name: 'My Landlord Certificate Remedials LTD', reg: '17289041',
+    sort: '20-19-97', account: '83026442',
+    address: '134 Merton High Street, London, SW19 1BA',
+    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
+  },
 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent,    color: '#fff', border: 'none' },
-    ghost:   { background: '#fff',      color: C.muted, border: `1px solid ${C.border}` },
+    primary: { background: C.accent, color: '#fff', border: 'none' },
+    ghost:   { background: '#fff', color: C.muted, border: `1px solid ${C.border}` },
     amber:   { background: C.amberSoft, color: C.amber, border: `1px solid ${C.amber}66` },
-    green:   { background: C.greenSoft, color: C.greenDark, border: `1px solid ${C.green}66` },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -29,8 +42,8 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
-// ── Document renderer ─────────────────────────────────────────
-function Document({ type, company, settings, data, lineItems }) {
+function Document({ type, company, data, lineItems }) {
+  const co = COMPANIES[company] || COMPANIES.standard
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
   const subtotal  = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
   const discount  = Number(data.discount || 0)
@@ -38,51 +51,32 @@ function Document({ type, company, settings, data, lineItems }) {
   const paid      = Number(data.paid || 0)
   const balance   = total - paid
   const today     = new Date()
-  const dueDate   = new Date(today.getTime() + (settings?.payment_terms_days || 3) * 86400000)
+  const dueDate   = new Date(today.getTime() + 3 * 86400000)
   const fmtDate   = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
   const isInvoice = type === 'invoice'
 
   return (
     <div style={{ background: '#fff', color: '#111', fontFamily: 'Arial, sans-serif', fontSize: 13, lineHeight: 1.6, padding: '48px 52px', width: '100%', boxSizing: 'border-box' }}>
-      {/* Header */}
-      {(() => {
-        const isRemedials = company === 'remedials'
-        const companyName = isRemedials ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'
-        const companyReg  = isRemedials ? '17289041' : '17265132'
-        const sortCode    = isRemedials ? '20-19-97' : '60-83-71'
-        const accNumber   = isRemedials ? '83026442' : '83356126'
-        const accName     = isRemedials ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'
-        const address     = '134 Merton High Street, London, SW19 1BA'
-        return null // just storing vars, rendered below
-      })()}
-      {/* render actual header */}
+
+      {/* Header with real logo */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32, paddingBottom: 24, borderBottom: '2px solid #0093DB' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {/* MLC Logo */}
-          <div style={{ width: 80, height: 80, background: '#0093DB', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <svg viewBox="0 0 100 100" width="70" height="70">
-              <path d="M50 5 L90 30 L90 80 Q90 95 50 95 Q10 95 10 80 L10 30 Z" fill="#0093DB"/>
-              <path d="M50 5 L90 30 L90 80 Q90 95 50 95 Q10 95 10 80 L10 30 Z" fill="white" opacity="0.15"/>
-              <path d="M30 60 L50 40 L70 60 L65 60 L65 80 L55 80 L55 68 L45 68 L45 80 L35 80 L35 60 Z" fill="white"/>
-              <path d="M58 72 L72 58 L76 62" stroke="#80D100" strokeWidth="4" fill="none" strokeLinecap="round"/>
-            </svg>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <img src={MLC_LOGO} alt="My Landlord Certificate" style={{ width: 90, height: 90, objectFit: 'contain' }} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#0093DB', marginBottom: 2 }}>
-              {company === 'remedials' ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'}
-            </div>
-            <div style={{ color: '#6B7280', fontSize: 11 }}>134 Merton High Street, London, SW19 1BA</div>
-            <div style={{ color: '#6B7280', fontSize: 11 }}>{settings?.company_phone} · {settings?.company_email}</div>
-            <div style={{ color: '#9CA3AF', fontSize: 10, marginTop: 2 }}>
-              Co. Reg: {company === 'remedials' ? '17289041' : '17265132'}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0093DB', marginBottom: 3 }}>{co.name}</div>
+            <div style={{ fontSize: 11, color: '#6B7280' }}>{co.address}</div>
+            <div style={{ fontSize: 11, color: '#6B7280' }}>{co.phone}</div>
+            <div style={{ fontSize: 11, color: '#6B7280' }}>{co.email}</div>
+            <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>Co. Reg: {co.reg}</div>
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: '#1F2937', marginBottom: 6 }}>{isInvoice ? 'TAX INVOICE' : 'QUOTE'}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, color: '#1F2937', marginBottom: 8 }}>{isInvoice ? 'TAX INVOICE' : 'QUOTE'}</div>
           <div style={{ fontSize: 12, color: '#6B7280' }}>{isInvoice ? 'Invoice' : 'Quote'} #: <strong style={{ color: '#1F2937' }}>{data.doc_number || '—'}</strong></div>
           <div style={{ fontSize: 12, color: '#6B7280' }}>Date: <strong style={{ color: '#1F2937' }}>{fmtDate(today)}</strong></div>
-          <div style={{ fontSize: 12, color: '#6B7280' }}>{isInvoice ? 'Due' : 'Valid Until'}: <strong style={{ color: isInvoice ? '#DC2626' : '#1F2937' }}>{fmtDate(isInvoice ? dueDate : new Date(today.getTime() + 14 * 86400000))}</strong></div>
+          <div style={{ fontSize: 12, color: isInvoice ? '#DC2626' : '#6B7280', fontWeight: isInvoice ? 600 : 400 }}>
+            {isInvoice ? 'Due' : 'Valid Until'}: <strong>{fmtDate(isInvoice ? dueDate : new Date(today.getTime() + 14 * 86400000))}</strong>
+          </div>
         </div>
       </div>
 
@@ -90,23 +84,23 @@ function Document({ type, company, settings, data, lineItems }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 28 }}>
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#0093DB', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Billed To</div>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{data.client_name || '—'}</div>
-          {data.client_address && <div style={{ color: '#6B7280', fontSize: 12 }}>{data.client_address}</div>}
-          {data.client_email && <div style={{ color: '#6B7280', fontSize: 12 }}>{data.client_email}</div>}
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{data.client_name || '—'}</div>
+          {data.client_address && <div style={{ fontSize: 12, color: '#6B7280' }}>{data.client_address}</div>}
+          {data.client_email   && <div style={{ fontSize: 12, color: '#6B7280' }}>{data.client_email}</div>}
         </div>
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, color: '#0093DB', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Job Details</div>
-          {data.site_address && <div style={{ fontSize: 12 }}><strong>Site:</strong> {data.site_address}</div>}
+          {data.site_address   && <div style={{ fontSize: 12 }}><strong>Site:</strong> {data.site_address}</div>}
           {data.work_completed && <div style={{ fontSize: 12 }}><strong>Services:</strong> {data.work_completed}</div>}
         </div>
       </div>
 
-      {/* Line items table */}
+      {/* Line items */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24 }}>
         <thead>
           <tr style={{ background: '#0093DB' }}>
             {['Description', 'QTY', 'Unit Price', 'Total Price'].map((h, i) => (
-              <th key={h} style={{ padding: '10px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              <th key={h} style={{ padding: '10px 14px', textAlign: i === 0 ? 'left' : 'right', fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase' }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -120,7 +114,7 @@ function Document({ type, company, settings, data, lineItems }) {
             </tr>
           ))}
           {lineItems.filter(l => l.description).length === 0 && (
-            <tr><td colSpan={4} style={{ padding: '20px 14px', textAlign: 'center', color: '#9CA3AF' }}>No line items</td></tr>
+            <tr><td colSpan={4} style={{ padding: '20px 14px', textAlign: 'center', color: '#9CA3AF' }}>No line items added</td></tr>
           )}
         </tbody>
       </table>
@@ -129,59 +123,56 @@ function Document({ type, company, settings, data, lineItems }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 32 }}>
         <div style={{ width: 280 }}>
           {[
-            ['SUBTOTAL', fmt(subtotal), false],
-            [discount > 0 ? 'DISCOUNT' : 'NONE', discount > 0 ? `-${fmt(discount)}` : '£0.00', false],
-            ['TOTAL', fmt(total), false],
-            ...(isInvoice ? [['PAID', fmt(paid), false]] : []),
-          ].map(([label, value, bold]) => (
+            ['SUBTOTAL', fmt(subtotal)],
+            [discount > 0 ? 'DISCOUNT' : 'NONE', discount > 0 ? `-${fmt(discount)}` : '£0.00'],
+            ['TOTAL', fmt(total)],
+            ...(isInvoice ? [['PAID', fmt(paid)]] : []),
+          ].map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', borderBottom: '1px solid #E5E7EB', fontSize: 13 }}>
-              <span style={{ color: '#6B7280' }}>{label}:</span>
-              <span style={{ fontWeight: bold ? 700 : 400 }}>{value}</span>
+              <span style={{ color: '#6B7280' }}>{label}:</span><span>{value}</span>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: '#0093DB', borderRadius: '0 0 6px 6px', fontSize: 15, fontWeight: 900, color: '#fff' }}>
-            <span>BALANCE DUE:</span>
-            <span>{fmt(isInvoice ? balance : total)}</span>
+            <span>BALANCE DUE:</span><span>{fmt(isInvoice ? balance : total)}</span>
           </div>
         </div>
       </div>
 
-      {/* How to pay */}
+      {/* How to Pay */}
       <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 20, display: 'flex', justifyContent: 'space-between', gap: 32 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: '#0093DB' }}>How to Pay</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>We accept payment by: {settings?.payment_methods}</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>We accept payment by: Bank Transfer or Pay Online</div>
           <div style={{ fontSize: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 2 }}>Bank Details</div>
-            <div style={{ color: '#6B7280' }}>Account Name: {company === 'remedials' ? 'My Landlord Certificate Remedials LTD' : 'My Landlord Certificate LTD'}</div>
-            <div style={{ color: '#6B7280' }}>Account Number: {company === 'remedials' ? '83026442' : '83356126'}</div>
-            <div style={{ color: '#6B7280' }}>Sort Code: {company === 'remedials' ? '20-19-97' : '60-83-71'}</div>
-            <div style={{ color: '#9CA3AF', fontSize: 11, marginTop: 4, fontWeight: 600 }}>Note: Please Put Invoice Number As Reference</div>
+            <div style={{ fontWeight: 600, marginBottom: 3 }}>Bank Details</div>
+            <div style={{ color: '#6B7280' }}>Account Name: {co.name}</div>
+            <div style={{ color: '#6B7280' }}>Sort Code: {co.sort}</div>
+            <div style={{ color: '#6B7280' }}>Account Number: {co.account}</div>
+            <div style={{ color: '#DC2626', fontWeight: 600, marginTop: 6 }}>Note: Please Put Invoice Number As Reference</div>
           </div>
         </div>
         {isInvoice && (
           <div style={{ textAlign: 'right', fontSize: 12, color: '#6B7280' }}>
-            <div style={{ fontWeight: 600, color: '#1F2937' }}>Invoice #{data.doc_number}</div>
+            <div style={{ fontWeight: 600, color: '#1F2937', marginBottom: 2 }}>Invoice #{data.doc_number}</div>
             <div>{fmt(balance)} due by {fmtDate(dueDate)}</div>
+            <div style={{ marginTop: 6, color: '#9CA3AF' }}>Payment Upfront Unless Credit Terms Agreed</div>
           </div>
         )}
       </div>
 
       {/* Footer */}
       <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #E5E7EB', textAlign: 'center', fontSize: 10, color: '#9CA3AF' }}>
-        {isInvoice ? settings?.invoice_footer : settings?.quote_footer} · Company Reg: {company === 'remedials' ? '17289041' : '17265132'} · {settings?.company_name}, {settings?.company_address}
+        Company Registration Number {co.reg} · Registered Office: {co.name}, {co.address}, United Kingdom
       </div>
     </div>
   )
 }
 
 export default function DocumentGenerator() {
-  const { profile } = useAuth()
   const { toast, showToast } = useToast()
 
   const [docType, setDocType]     = useState('invoice')
-  const [company, setCompany]     = useState('standard') // standard | remedials
-  const [settings, setSettings]   = useState(null)
+  const [company, setCompany]     = useState('standard')
   const [clients, setClients]     = useState([])
   const [jobs, setJobs]           = useState([])
   const [loading, setLoading]     = useState(true)
@@ -203,12 +194,10 @@ export default function DocumentGenerator() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: s }, { data: c }, { data: j }] = await Promise.all([
-      supabase.from('document_settings').select('*').single(),
+    const [{ data: c }, { data: j }] = await Promise.all([
       supabase.from('clients').select('id, first_name, last_name, company_name, email, street_address, city, postcode, billing_name, billing_email, billing_address').order('company_name'),
       supabase.from('jobs').select('id, job_number, title, service_types, site_address, job_line_items(description, quantity, unit_price)').order('created_at', { ascending: false }).limit(100),
     ])
-    setSettings(s)
     setClients(c || [])
     setJobs(j || [])
     setLoading(false)
@@ -237,41 +226,26 @@ export default function DocumentGenerator() {
   }
 
   function handlePrint() {
-    const printWindow = window.open('', '_blank')
-    const docHTML = document.getElementById('document-preview-content')?.innerHTML
-    if (!docHTML) { showToast('Click Preview first, then print', 'error'); return }
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${docType === 'invoice' ? 'Invoice' : 'Quote'} - ${data.doc_number || 'MLC'}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; }
-            @page { margin: 0; size: A4; }
-          </style>
-        </head>
-        <body>${docHTML}</body>
-      </html>
-    `)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => { printWindow.print() }, 500)
+    const el = document.getElementById('doc-preview-content')
+    if (!el) { showToast('Click Preview first, then print', 'error'); return }
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>${docType === 'invoice' ? 'Invoice' : 'Quote'} ${data.doc_number || ''}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}@page{margin:0;size:A4}</style></head><body>${el.innerHTML}</body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 600)
   }
 
   const set = (k, v) => setData(p => ({ ...p, [k]: v }))
   const subtotal = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
   const clientName = c => c.company_name || `${c.first_name || ''} ${c.last_name || ''}`.trim()
-
   const inputStyle = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
-  const labelStyle = { color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }
+  const labelStyle = { color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
   if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading…</div>
 
   return (
-    <div style={{ background: C.bg }}>
-      {/* Header */}
+    <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Documents</h1>
@@ -283,10 +257,9 @@ export default function DocumentGenerator() {
         </div>
       </div>
 
-      {/* Toggles row */}
+      {/* Toggles */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Doc type */}
-        <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+        <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
           {[['invoice','🧾 Invoice'], ['quote','📋 Quote']].map(([key, label]) => (
             <button key={key} onClick={() => setDocType(key)}
               style={{ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: docType === key ? 700 : 400, background: docType === key ? C.accent : 'transparent', color: docType === key ? '#fff' : C.muted }}>
@@ -294,64 +267,54 @@ export default function DocumentGenerator() {
             </button>
           ))}
         </div>
-
-        {/* Company selector */}
-        <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
-          <button onClick={() => setCompany('standard')}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: company === 'standard' ? 700 : 400, background: company === 'standard' ? '#0093DB' : 'transparent', color: company === 'standard' ? '#fff' : C.muted }}>
-            🏠 Standard
-          </button>
-          <button onClick={() => setCompany('remedials')}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: company === 'remedials' ? 700 : 400, background: company === 'remedials' ? '#D97706' : 'transparent', color: company === 'remedials' ? '#fff' : C.muted }}>
-            🔨 Remedials
-          </button>
+        <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+          {[['standard','🏠 Standard'], ['remedials','🔨 Remedials']].map(([key, label]) => (
+            <button key={key} onClick={() => setCompany(key)}
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: company === key ? 700 : 400, background: company === key ? (key === 'remedials' ? C.amber : C.accent) : 'transparent', color: company === key ? '#fff' : C.muted }}>
+              {label}
+            </button>
+          ))}
         </div>
-
-        <div style={{ fontSize: 12, color: C.muted, padding: '6px 12px', background: company === 'remedials' ? '#FEF3C7' : C.accentSoft, borderRadius: 8, border: `1px solid ${company === 'remedials' ? '#D97706' : C.accent}44` }}>
-          {company === 'remedials' ? 'My Landlord Certificate Remedials LTD · Sort: 20-19-97 · Acc: 83026442' : 'My Landlord Certificate LTD · Sort: 60-83-71 · Acc: 83356126'}
+        <div style={{ fontSize: 12, color: C.muted, padding: '6px 12px', background: company === 'remedials' ? C.amberSoft : C.accentSoft, borderRadius: 8 }}>
+          {COMPANIES[company].name} · Sort: {COMPANIES[company].sort} · Acc: {COMPANIES[company].account}
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-
-        {/* Left — form */}
+        {/* Left */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Auto-fill */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Auto-fill from Platform</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={labelStyle}>Load Client</label>
+              <div><label style={labelStyle}>Load Client</label>
                 <select value={data.client_id} onChange={e => selectClient(e.target.value)} style={inputStyle}>
-                  <option value="">— Select client to auto-fill —</option>
+                  <option value="">— Select client —</option>
                   {clients.map(c => <option key={c.id} value={c.id}>{clientName(c)}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={labelStyle}>Load Job</label>
+              <div><label style={labelStyle}>Load Job</label>
                 <select value={data.job_id} onChange={e => selectJob(e.target.value)} style={inputStyle}>
-                  <option value="">— Select job to auto-fill —</option>
+                  <option value="">— Select job —</option>
                   {jobs.map(j => <option key={j.id} value={j.id}>{j.job_number} — {j.title}</option>)}
                 </select>
               </div>
             </div>
           </div>
 
-          {/* Document details */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
               {docType === 'invoice' ? 'Invoice' : 'Quote'} Details
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { label: docType === 'invoice' ? 'Invoice Number' : 'Quote Number', key: 'doc_number', placeholder: docType === 'invoice' ? 'INV-J-01001' : 'QUO-J-01001' },
-                { label: 'Client Name', key: 'client_name', placeholder: 'Dr Shailesh Vadodaria' },
-                { label: 'Client Address', key: 'client_address', placeholder: 'Greenford UB6 7EF' },
-                { label: 'Client Email', key: 'client_email', placeholder: 'client@email.com', type: 'email' },
-                { label: 'Site Address', key: 'site_address', placeholder: 'Greenford, UB6 7EF' },
-                { label: 'Work Completed / Services', key: 'work_completed', placeholder: 'EICR, EPC, PAT Testing' },
+                { label: docType === 'invoice' ? 'Invoice Number' : 'Quote Number', key: 'doc_number', placeholder: 'INV-J-01001' },
+                { label: 'Client Name',    key: 'client_name',    placeholder: 'Client or Company Name' },
+                { label: 'Client Address', key: 'client_address', placeholder: 'Address' },
+                { label: 'Client Email',   key: 'client_email',   placeholder: 'email@example.com', type: 'email' },
+                { label: 'Site Address',   key: 'site_address',   placeholder: 'Property address' },
+                { label: 'Services',       key: 'work_completed', placeholder: 'EICR, EPC, PAT Testing' },
               ].map(f => (
-                <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <div key={f.key}>
                   <label style={labelStyle}>{f.label}</label>
                   <input type={f.type || 'text'} value={data[f.key]} onChange={e => set(f.key, e.target.value)} placeholder={f.placeholder} style={inputStyle} />
                 </div>
@@ -359,25 +322,16 @@ export default function DocumentGenerator() {
             </div>
           </div>
 
-          {/* Adjustments */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Adjustments</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={labelStyle}>Discount (£)</label>
-                <input type="number" value={data.discount} onChange={e => set('discount', e.target.value)} placeholder="0.00" style={inputStyle} />
-              </div>
-              {docType === 'invoice' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  <label style={labelStyle}>Amount Paid (£)</label>
-                  <input type="number" value={data.paid} onChange={e => set('paid', e.target.value)} placeholder="0.00" style={inputStyle} />
-                </div>
-              )}
+              <div><label style={labelStyle}>Discount (£)</label><input type="number" value={data.discount} onChange={e => set('discount', e.target.value)} placeholder="0.00" style={inputStyle} /></div>
+              {docType === 'invoice' && <div><label style={labelStyle}>Amount Paid (£)</label><input type="number" value={data.paid} onChange={e => set('paid', e.target.value)} placeholder="0.00" style={inputStyle} /></div>}
             </div>
           </div>
         </div>
 
-        {/* Right — line items */}
+        {/* Right - line items */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -386,14 +340,12 @@ export default function DocumentGenerator() {
                 style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>+ Add Line</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 55px 90px 28px', gap: 6, marginBottom: 8 }}>
-              {['Description', 'Qty', 'Unit Price', ''].map(h => (
-                <div key={h} style={{ fontSize: 11, color: C.dim, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</div>
-              ))}
+              {['Description','Qty','Price',''].map(h => <div key={h} style={{ fontSize: 11, color: C.dim, fontWeight: 700, textTransform: 'uppercase' }}>{h}</div>)}
             </div>
             {lineItems.map((item, i) => (
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 55px 90px 28px', gap: 6, marginBottom: 8, alignItems: 'center' }}>
                 <input value={item.description} onChange={e => setLineItems(p => p.map((l, idx) => idx === i ? { ...l, description: e.target.value } : l))}
-                  placeholder={i === 0 ? 'e.g. EPC 5 Bedrooms' : i === 1 ? 'e.g. EICR 5 Bedrooms' : 'e.g. 3 appliances'}
+                  placeholder={i === 0 ? 'EPC 5 Bedrooms' : i === 1 ? 'EICR 5 Bedrooms' : 'Description'}
                   style={{ ...inputStyle, padding: '7px 10px', fontSize: 13 }} />
                 <input type="number" value={item.qty} onChange={e => setLineItems(p => p.map((l, idx) => idx === i ? { ...l, qty: e.target.value } : l))} min="1"
                   style={{ ...inputStyle, padding: '7px 8px', fontSize: 13, textAlign: 'center' }} />
@@ -403,8 +355,6 @@ export default function DocumentGenerator() {
                   style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 16 }}>✕</button>
               </div>
             ))}
-
-            {/* Running total */}
             <div style={{ marginTop: 16, borderTop: `2px solid ${C.border}`, paddingTop: 14 }}>
               {[
                 ['Subtotal', fmt(subtotal)],
@@ -413,8 +363,7 @@ export default function DocumentGenerator() {
                 ...(docType === 'invoice' ? [['Paid', data.paid ? fmt(data.paid) : '£0.00']] : []),
               ].map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13 }}>
-                  <span style={{ color: C.muted }}>{label}</span>
-                  <span style={{ color: C.text }}>{value}</span>
+                  <span style={{ color: C.muted }}>{label}</span><span style={{ color: C.text }}>{value}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: C.accent, borderRadius: 8, marginTop: 8, fontSize: 16, fontWeight: 900, color: '#fff' }}>
@@ -424,14 +373,13 @@ export default function DocumentGenerator() {
             </div>
           </div>
 
-          {/* Actions */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Actions</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Btn onClick={() => setShowPreview(true)}>👁 Preview Document</Btn>
               <Btn variant="amber" onClick={handlePrint}>🖨 Print / Save as PDF</Btn>
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, padding: '8px 12px', background: C.surface, borderRadius: 8 }}>
-                To save as PDF: click Print, then in the print dialog select <strong>"Save as PDF"</strong> as the destination.
+              <div style={{ fontSize: 12, color: C.muted, padding: '8px 12px', background: C.surface, borderRadius: 8 }}>
+                To save as PDF: click Print → select <strong>"Save as PDF"</strong> as destination.
               </div>
             </div>
           </div>
@@ -439,7 +387,7 @@ export default function DocumentGenerator() {
       </div>
 
       {/* Preview Modal */}
-      {showPreview && settings && (
+      {showPreview && (
         <div style={{ position: 'fixed', inset: 0, background: '#000000BB', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, overflowY: 'auto', padding: '32px 20px' }}
           onClick={() => setShowPreview(false)}>
           <div style={{ width: '100%', maxWidth: 760 }} onClick={e => e.stopPropagation()}>
@@ -448,18 +396,12 @@ export default function DocumentGenerator() {
                 {docType === 'invoice' ? 'Invoice' : 'Quote'} Preview
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={handlePrint}
-                  style={{ background: C.amber, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontWeight: 600, cursor: 'pointer' }}>
-                  🖨 Print / Save PDF
-                </button>
-                <button onClick={() => setShowPreview(false)}
-                  style={{ background: 'transparent', border: '1px solid #ffffff66', color: '#fff', borderRadius: 8, padding: '8px 18px', fontWeight: 600, cursor: 'pointer' }}>
-                  Close
-                </button>
+                <button onClick={handlePrint} style={{ background: C.amber, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontWeight: 600, cursor: 'pointer' }}>🖨 Print / Save PDF</button>
+                <button onClick={() => setShowPreview(false)} style={{ background: 'transparent', border: '1px solid #ffffff66', color: '#fff', borderRadius: 8, padding: '8px 18px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
               </div>
             </div>
-            <div id="document-preview-content" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden' }}>
-              <Document type={docType} company={company} settings={settings} data={data} lineItems={lineItems} />
+            <div id="doc-preview-content" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.4)', borderRadius: 4, overflow: 'hidden' }}>
+              <Document type={docType} company={company} data={data} lineItems={lineItems} />
             </div>
           </div>
         </div>
