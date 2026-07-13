@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { MLC_LOGO } from '../lib/logo.js'
 
@@ -28,9 +30,10 @@ const COMPANIES = {
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: C.accent, color: '#fff', border: 'none' },
-    ghost:   { background: '#fff', color: C.muted, border: `1px solid ${C.border}` },
-    amber:   { background: C.amberSoft, color: C.amber, border: `1px solid ${C.amber}66` },
+    primary: { background: C.accent,     color: '#fff',      border: 'none' },
+    ghost:   { background: '#fff',       color: C.muted,     border: `1px solid ${C.border}` },
+    amber:   { background: C.amberSoft,  color: C.amber,     border: `1px solid ${C.amber}66` },
+    success: { background: C.greenSoft,  color: C.greenDark, border: `1px solid ${C.green}66` },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -169,6 +172,8 @@ function Document({ type, company, data, lineItems }) {
 }
 
 export default function DocumentGenerator() {
+  const { profile } = useAuth()
+  const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
   const [docType, setDocType]     = useState('invoice')
@@ -176,6 +181,7 @@ export default function DocumentGenerator() {
   const [clients, setClients]     = useState([])
   const [jobs, setJobs]           = useState([])
   const [loading, setLoading]     = useState(true)
+  const [saving, setSaving]       = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
   const [data, setData] = useState({
@@ -235,6 +241,42 @@ export default function DocumentGenerator() {
     setTimeout(() => w.print(), 600)
   }
 
+  async function saveInvoice() {
+    if (!data.doc_number) { showToast('Please enter an invoice number first', 'error'); return }
+    setSaving(true)
+    const subtotalVal = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
+    const discountVal = Number(data.discount || 0)
+    const totalVal    = subtotalVal - discountVal
+    const paidVal     = Number(data.paid || 0)
+    const balanceVal  = totalVal - paidVal
+
+    const { error } = await supabase.from('invoices').insert({
+      invoice_number:  data.doc_number,
+      doc_type:        docType,
+      company,
+      client_id:       data.client_id || null,
+      client_name:     data.client_name,
+      client_address:  data.client_address,
+      client_email:    data.client_email,
+      job_id:          data.job_id || null,
+      site_address:    data.site_address,
+      work_completed:  data.work_completed,
+      line_items:      lineItems.filter(l => l.description),
+      subtotal:        subtotalVal,
+      discount:        discountVal,
+      total:           totalVal,
+      amount_paid:     paidVal,
+      balance_due:     balanceVal,
+      status:          balanceVal <= 0 ? 'paid' : 'draft',
+      created_by:      profile.id,
+      created_by_name: profile.full_name,
+    })
+
+    setSaving(false)
+    if (error) { showToast(error.message, 'error'); return }
+    showToast(`${docType === 'invoice' ? 'Invoice' : 'Quote'} ${data.doc_number} saved ✓`)
+  }
+
   const set = (k, v) => setData(p => ({ ...p, [k]: v }))
   const subtotal = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
@@ -252,6 +294,11 @@ export default function DocumentGenerator() {
           <div style={{ color: C.muted, fontSize: 13, marginTop: 3 }}>Generate invoices and quotes in MLC format</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => navigate('/invoices')}
+            style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, padding: '9px 16px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
+            📄 All Invoices
+          </button>
+          <Btn variant="success" onClick={saveInvoice} disabled={saving}>{saving ? 'Saving…' : '💾 Save'}</Btn>
           <Btn variant="ghost" onClick={() => setShowPreview(true)}>👁 Preview</Btn>
           <Btn variant="amber" onClick={handlePrint}>🖨 Print / PDF</Btn>
         </div>
