@@ -8,22 +8,21 @@ const S = {
   sidebarBorder:  '#374151',
   sidebarText:    '#F9FAFB',
   sidebarMuted:   '#9CA3AF',
-  sidebarActive:  '#0093DB',
   sidebarActiveBg:'#0093DB22',
-  sidebarAI:      '#80D100',
   sidebarAIBg:    '#80D10022',
 }
 
 const NAV_ITEMS = [
-  { to: '/',          icon: '◉',  label: 'Dashboard',    exact: true },
-  { to: '/leads',     icon: '🎯', label: 'Leads'                     },
-  { to: '/clients',   icon: '◎',  label: 'Clients'                   },
-  { to: '/jobs',      icon: '🔧', label: 'Jobs'                      },
-  { to: '/inbox',     icon: '✉️', label: 'Email Inbox'               },
-  { to: '/templates', icon: '📝', label: 'Templates'                 },
-  { to: '/documents', icon: '🧾', label: 'Documents'                 },
-  { to: '/campaigns', icon: '⚡', label: 'Cold Email',   adminOnly: true },
-  { to: '/inboxes',   icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
+  { to: '/',           icon: '◉',  label: 'Dashboard',    exact: true },
+  { to: '/leads',      icon: '🎯', label: 'Leads'                     },
+  { to: '/clients',    icon: '◎',  label: 'Clients'                   },
+  { to: '/jobs',       icon: '🔧', label: 'Jobs'                      },
+  { to: '/properties', icon: '🏠', label: 'Properties'                },
+  { to: '/inbox',      icon: '✉️', label: 'Email Inbox'               },
+  { to: '/templates',  icon: '📝', label: 'Templates'                 },
+  { to: '/documents',  icon: '🧾', label: 'Documents'                 },
+  { to: '/campaigns',  icon: '⚡', label: 'Cold Email',  adminOnly: true },
+  { to: '/inboxes',    icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
 ]
 
 export default function Layout() {
@@ -40,6 +39,8 @@ export default function Layout() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F5F7FA' }}>
+
+      {/* Sidebar */}
       <aside style={{ width: 220, background: S.sidebarBg, display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}>
         {/* Logo */}
         <div style={{ padding: '18px 20px 16px', borderBottom: `1px solid ${S.sidebarBorder}`, marginBottom: 6 }}>
@@ -67,6 +68,7 @@ export default function Layout() {
             </NavLink>
           ))}
 
+          {/* AI Assistant */}
           <button onClick={() => setAiOpen(p => !p)}
             style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 18px', fontSize: 13, fontWeight: aiOpen ? 600 : 400, color: aiOpen ? '#80D100' : S.sidebarMuted, background: aiOpen ? S.sidebarAIBg : 'transparent', borderLeft: `3px solid ${aiOpen ? '#80D100' : 'transparent'}`, border: 'none', cursor: 'pointer', transition: 'all 0.12s' }}>
             <span style={{ fontSize: 14, width: 18, textAlign: 'center' }}>✦</span>
@@ -84,6 +86,7 @@ export default function Layout() {
         </div>
       </aside>
 
+      {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: aiOpen ? 380 : 0, transition: 'margin-right 0.25s ease' }}>
         <main style={{ flex: 1, padding: 28, overflowY: 'auto', background: '#FFFFFF' }}>
           <Outlet />

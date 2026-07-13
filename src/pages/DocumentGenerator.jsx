@@ -20,7 +20,7 @@ const COMPANIES = {
   },
   remedials: {
     name: 'My Landlord Certificate Remedials LTD', reg: '17289041',
-    sort: '20-19-97', account: '83026442',
+    sort: '04-06-05', account: '32356220',
     address: '134 Merton High Street, London, SW19 1BA',
     email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
   },

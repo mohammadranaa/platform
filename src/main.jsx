@@ -15,6 +15,7 @@ import Inboxes from './pages/Inboxes'
 import EmailInbox from './pages/EmailInbox'
 import Templates from './pages/Templates'
 import DocumentGenerator from './pages/DocumentGenerator'
+import Properties from './pages/Properties'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -50,6 +51,7 @@ function App() {
             <Route path="inbox" element={<EmailInbox />} />
             <Route path="templates" element={<Templates />} />
             <Route path="documents" element={<DocumentGenerator />} />
+            <Route path="properties" element={<Properties />} />
             <Route path="campaigns" element={<AdminRoute><Campaigns /></AdminRoute>} />
             <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
