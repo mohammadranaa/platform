@@ -1,33 +1,24 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast'
+import { useToast, Toast } from '../hooks/useToast.jsx'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#E6F4FC',
-  green: '#80D100', greenSoft: '#F0FAE0',
+  green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
   red: '#DC2626', redSoft: '#FEE2E2',
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const SMTP_PRESETS = [
-  { label: 'Gmail', host: 'smtp.gmail.com',        port: 587 },
-  { label: 'Outlook / Microsoft 365', host: 'smtp.office365.com', port: 587 },
-  { label: 'Yahoo', host: 'smtp.mail.yahoo.com',   port: 587 },
-  { label: 'Custom / Other', host: '',             port: 587 },
-]
-
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
-    primary: { background: '#0093DB', color: '#fff', border: 'none' },
-    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
-    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
-    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
-    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
-    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
-    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
+    primary: { background: C.accent,    color: '#fff',      border: 'none' },
+    ghost:   { background: '#fff',      color: C.muted,     border: `1px solid ${C.border}` },
+    danger:  { background: C.redSoft,   color: C.red,       border: `1px solid ${C.red}44` },
+    success: { background: C.greenSoft, color: C.greenDark, border: `1px solid ${C.green}66` },
+    amber:   { background: C.amberSoft, color: C.amber,     border: `1px solid ${C.amber}66` },
   }
   return (
     <button onClick={onClick} disabled={disabled}
@@ -39,51 +30,15 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
-const Field = ({ label, value, onChange, type = 'text', placeholder, hint, password }) => {
-  const [show, setShow] = useState(false)
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {label && <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</label>}
-      {hint && <div style={{ color: C.dim, fontSize: 12 }}>{hint}</div>}
-      <div style={{ position: 'relative' }}>
-        <input
-          type={password && !show ? 'password' : type}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ width: '100%', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: `9px ${password ? '40px' : '12px'} 9px 12px`, fontSize: 14 }}
-        />
-        {password && (
-          <button type="button" onClick={() => setShow(p => !p)}
-            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>
-            {show ? '🙈' : '👁'}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
+const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
+const lbl = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
-// Warm-up progress bar
-function WarmupBar({ inbox }) {
-  const daysSince = Math.floor((Date.now() - new Date(inbox.warmup_started_at).getTime()) / 86400000)
-  const intervals = Math.floor(daysSince / (inbox.warmup_interval_days || 3))
-  const current   = Math.min((inbox.warmup_start_limit || 10) + intervals * (inbox.warmup_step || 5), inbox.warmup_max_limit || 50)
-  const pct       = Math.round(current / (inbox.warmup_max_limit || 50) * 100)
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-        <span style={{ color: C.muted }}>Warm-up progress</span>
-        <span style={{ color: C.amber, fontWeight: 600 }}>{current} / {inbox.warmup_max_limit} emails/day</span>
-      </div>
-      <div style={{ background: '#fff', borderRadius: 6, height: 6 }}>
-        <div style={{ width: pct + '%', background: C.amber, borderRadius: 6, height: '100%', transition: 'width .3s' }} />
-      </div>
-      <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
-        {pct < 100 ? `Increases by ${inbox.warmup_step} every ${inbox.warmup_interval_days} days` : 'At maximum limit'}
-      </div>
-    </div>
-  )
+const blank = {
+  label: '', email: '', smtp_host: 'smtp.gmail.com', smtp_port: 587,
+  smtp_user: '', smtp_pass: '',
+  warmup_enabled: true, warmup_start_limit: 10,
+  warmup_step: 5, warmup_interval_days: 3, warmup_max_limit: 50,
+  is_active: true,
 }
 
 export default function Inboxes() {
@@ -93,220 +48,322 @@ export default function Inboxes() {
   const [inboxes, setInboxes]   = useState([])
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [testing, setTesting]   = useState(null) // inbox id being tested
   const [showAdd, setShowAdd]   = useState(false)
-
-  const blank = {
-    label: '', email: '', smtp_host: 'smtp.gmail.com', smtp_port: '587',
-    smtp_user: '', smtp_pass: '',
-    warmup_enabled: true, warmup_start_limit: '10', warmup_step: '5',
-    warmup_interval_days: '3', warmup_max_limit: '50',
-  }
-  const [form, setForm] = useState(blank)
-  const [preset, setPreset] = useState(0)
+  const [editInbox, setEditInbox] = useState(null) // inbox being edited
+  const [form, setForm]         = useState(blank)
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   useEffect(() => { fetchInboxes() }, [])
 
   async function fetchInboxes() {
     setLoading(true)
-    const { data } = await supabase.from('inboxes').select('*').order('created_at', { ascending: false })
+    const { data } = await supabase.from('inboxes').select('*').order('created_at')
     setInboxes(data || [])
     setLoading(false)
   }
 
-  async function createInbox() {
+  async function saveInbox() {
     if (!form.email || !form.smtp_host || !form.smtp_user || !form.smtp_pass) {
-      showToast('Email, SMTP host, username and password are required', 'error')
-      return
+      showToast('Please fill in all required fields', 'error'); return
     }
     setSaving(true)
-    const { error } = await supabase.from('inboxes').insert({
-      ...form,
-      smtp_port: Number(form.smtp_port),
-      warmup_start_limit: Number(form.warmup_start_limit),
-      warmup_step: Number(form.warmup_step),
-      warmup_interval_days: Number(form.warmup_interval_days),
-      warmup_max_limit: Number(form.warmup_max_limit),
-      owner_id: profile.id,
-      label: form.label || form.email,
-    })
-    setSaving(false)
-    if (error) { showToast(error.message, 'error'); return }
+
+    if (editInbox) {
+      // Update existing
+      const { error } = await supabase.from('inboxes').update({
+        label:                form.label,
+        smtp_host:            form.smtp_host,
+        smtp_port:            Number(form.smtp_port),
+        smtp_user:            form.smtp_user,
+        smtp_pass:            form.smtp_pass,
+        warmup_enabled:       form.warmup_enabled,
+        warmup_start_limit:   Number(form.warmup_start_limit),
+        warmup_step:          Number(form.warmup_step),
+        warmup_interval_days: Number(form.warmup_interval_days),
+        warmup_max_limit:     Number(form.warmup_max_limit),
+      }).eq('id', editInbox.id)
+      setSaving(false)
+      if (error) { showToast(error.message, 'error'); return }
+      showToast('Inbox updated ✓')
+    } else {
+      // Create new
+      const { error } = await supabase.from('inboxes').insert({
+        ...form,
+        owner_id:   profile.id,
+        smtp_port:  Number(form.smtp_port),
+        warmup_start_limit:   Number(form.warmup_start_limit),
+        warmup_step:          Number(form.warmup_step),
+        warmup_interval_days: Number(form.warmup_interval_days),
+        warmup_max_limit:     Number(form.warmup_max_limit),
+        sent_today: 0,
+        last_reset_at: new Date().toISOString().slice(0, 10),
+      })
+      setSaving(false)
+      if (error) { showToast(error.message, 'error'); return }
+      showToast('Inbox added ✓')
+    }
+
     await fetchInboxes()
     setShowAdd(false)
+    setEditInbox(null)
     setForm(blank)
-    showToast('Inbox connected ✓')
   }
 
-  async function toggleInbox(id, is_active) {
-    await supabase.from('inboxes').update({ is_active: !is_active }).eq('id', id)
-    setInboxes(p => p.map(i => i.id === id ? { ...i, is_active: !is_active } : i))
-    showToast(is_active ? 'Inbox paused' : 'Inbox activated')
+  async function togglePause(inbox) {
+    const newVal = !inbox.is_active
+    await supabase.from('inboxes').update({ is_active: newVal }).eq('id', inbox.id)
+    setInboxes(p => p.map(i => i.id === inbox.id ? { ...i, is_active: newVal } : i))
+    showToast(newVal ? 'Inbox resumed' : 'Inbox paused')
   }
 
-  async function deleteInbox(id) {
-    if (!window.confirm('Remove this inbox?')) return
-    await supabase.from('inboxes').delete().eq('id', id)
-    setInboxes(p => p.filter(i => i.id !== id))
+  async function removeInbox(inbox) {
+    if (!window.confirm(`Remove "${inbox.label || inbox.email}"? This cannot be undone.`)) return
+    await supabase.from('inboxes').delete().eq('id', inbox.id)
+    setInboxes(p => p.filter(i => i.id !== inbox.id))
     showToast('Inbox removed')
   }
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  // ── Test SMTP connection ──────────────────────────────────────
+  // We can't test SMTP from the browser directly (no SMTP library in browser)
+  // Instead verify credentials look correct and show guidance
+  async function testConnection(inbox) {
+    setTesting(inbox.id)
+    // Simulate a check — verify format of credentials
+    await new Promise(r => setTimeout(r, 1500))
+    setTesting(null)
 
-  const applyPreset = (i) => {
-    const p = SMTP_PRESETS[i]
-    setPreset(i)
-    setForm(prev => ({ ...prev, smtp_host: p.host, smtp_port: String(p.port) }))
+    const issues = []
+    if (!inbox.smtp_pass || inbox.smtp_pass.length < 10) {
+      issues.push('Password looks too short — Gmail app passwords are 16 characters')
+    }
+    if (inbox.smtp_host === 'smtp.gmail.com' && inbox.smtp_port !== 587) {
+      issues.push('Gmail should use port 587')
+    }
+    if (!inbox.smtp_user.includes('@')) {
+      issues.push('SMTP username should be a full email address')
+    }
+    if (inbox.smtp_pass === inbox.smtp_user) {
+      issues.push('Password cannot be the same as the email address')
+    }
+
+    if (issues.length > 0) {
+      showToast(`⚠ Check: ${issues[0]}`, 'error')
+    } else {
+      showToast(`✓ Credentials look correct for ${inbox.email}. First email send will confirm connection.`)
+    }
   }
+
+  function openEdit(inbox) {
+    setForm({
+      label:                inbox.label || '',
+      email:                inbox.email || '',
+      smtp_host:            inbox.smtp_host || 'smtp.gmail.com',
+      smtp_port:            inbox.smtp_port || 587,
+      smtp_user:            inbox.smtp_user || '',
+      smtp_pass:            inbox.smtp_pass || '',
+      warmup_enabled:       inbox.warmup_enabled ?? true,
+      warmup_start_limit:   inbox.warmup_start_limit ?? 10,
+      warmup_step:          inbox.warmup_step ?? 5,
+      warmup_interval_days: inbox.warmup_interval_days ?? 3,
+      warmup_max_limit:     inbox.warmup_max_limit ?? 50,
+      is_active:            inbox.is_active ?? true,
+    })
+    setEditInbox(inbox)
+    setShowAdd(true)
+  }
+
+  const warmupPct = inbox => Math.round(((inbox.warmup_start_limit || 10) / (inbox.warmup_max_limit || 50)) * 100)
 
   return (
     <div>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Sending Inboxes</h1>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
-            {inboxes.filter(i => i.is_active).length} active · {inboxes.length} total
-          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>SMTP Inboxes</h1>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{inboxes.length} inboxes · cold email senders</div>
         </div>
-        <Btn onClick={() => setShowAdd(true)}>+ Connect Inbox</Btn>
+        <Btn onClick={() => { setForm(blank); setEditInbox(null); setShowAdd(true) }}>+ Add Inbox</Btn>
       </div>
 
-      {/* Info banner */}
-      <div style={{ background: '#FEF3C7', border: '1px solid #D9770644', borderRadius: 10, padding: '12px 18px', marginBottom: 20, fontSize: 13, color: C.amber, lineHeight: 1.7 }}>
-        <strong>Gmail users:</strong> You must use an <strong>App Password</strong>, not your normal password.
+      {/* Gmail reminder banner */}
+      <div style={{ background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.text }}>
+        <strong style={{ color: C.amber }}>Gmail users:</strong> You must use an <strong>App Password</strong>, not your normal password.
         Go to: Google Account → Security → 2-Step Verification → App Passwords → Select Mail → Copy the 16-character code.
       </div>
 
       {loading ? (
-        <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading inboxes…</div>
+        <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>Loading inboxes…</div>
       ) : inboxes.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 60, textAlign: 'center' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📬</div>
-          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No inboxes connected</div>
-          <div style={{ color: C.muted, fontSize: 14, marginBottom: 20 }}>Connect your 5 sending email accounts to start warm-up and enable campaigns.</div>
-          <Btn onClick={() => setShowAdd(true)}>Connect First Inbox</Btn>
+        <div style={{ textAlign: 'center', padding: 48, color: C.muted }}>
+          No inboxes yet. <button onClick={() => setShowAdd(true)} style={{ color: C.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Add one →</button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {inboxes.map(inbox => {
-            const daysSince = Math.floor((Date.now() - new Date(inbox.warmup_started_at).getTime()) / 86400000)
-            const intervals = Math.floor(daysSince / (inbox.warmup_interval_days || 3))
-            const todayLimit = Math.min((inbox.warmup_start_limit || 10) + intervals * (inbox.warmup_step || 5), inbox.warmup_max_limit || 50)
-
+            const pct = warmupPct(inbox)
+            const isTesting = testing === inbox.id
             return (
-              <div key={inbox.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                {/* Inbox header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div key={inbox.id} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                {/* Top row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{inbox.label}</div>
-                    <div style={{ color: C.muted, fontSize: 13, marginTop: 3 }}>{inbox.email}</div>
-                    <div style={{ color: C.dim, fontSize: 12, marginTop: 2 }}>{inbox.smtp_host}:{inbox.smtp_port}</div>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: C.text }}>{inbox.label || inbox.email}</div>
+                    <div style={{ color: C.muted, fontSize: 13 }}>{inbox.email}</div>
+                    <div style={{ color: C.dim, fontSize: 12 }}>{inbox.smtp_host}:{inbox.smtp_port}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{
-                      background: inbox.is_active ? C.greenSoft : C.redSoft,
-                      color: inbox.is_active ? C.green : C.red,
-                      border: `1px solid ${inbox.is_active ? C.green : C.red}44`,
-                      borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 600,
-                    }}>
-                      {inbox.is_active ? '● Active' : '● Paused'}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <span style={{ background: inbox.is_active ? C.greenSoft : C.surface, color: inbox.is_active ? C.greenDark : C.muted, border: `1px solid ${inbox.is_active ? C.green : C.border}44`, borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>
+                      {inbox.is_active ? '● Active' : '○ Paused'}
                     </span>
-                    <Btn small variant="ghost" onClick={() => toggleInbox(inbox.id, inbox.is_active)}>
-                      {inbox.is_active ? 'Pause' : 'Activate'}
+                    <Btn small variant="ghost" onClick={() => testConnection(inbox)} disabled={isTesting}>
+                      {isTesting ? 'Checking…' : '🔍 Test'}
                     </Btn>
-                    <Btn small variant="danger" onClick={() => deleteInbox(inbox.id)}>Remove</Btn>
+                    <Btn small variant="ghost" onClick={() => openEdit(inbox)}>✏ Edit</Btn>
+                    <Btn small variant="ghost" onClick={() => togglePause(inbox)}>
+                      {inbox.is_active ? 'Pause' : 'Resume'}
+                    </Btn>
+                    <Btn small variant="danger" onClick={() => removeInbox(inbox)}>Remove</Btn>
                   </div>
                 </div>
 
-                {/* Stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+                {/* Stats grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
                   {[
-                    { label: 'Sent Today',   value: inbox.sent_today,                     sub: `/ ${todayLimit} limit`, color: C.text },
-                    { label: 'Daily Max',    value: inbox.warmup_max_limit + '/day',       sub: 'final target',          color: C.accent },
-                    { label: 'Current Limit', value: todayLimit + '/day',                  sub: 'today',                 color: C.amber },
-                    { label: 'Warm-up',      value: inbox.warmup_enabled ? 'Enabled' : 'Off', sub: inbox.warmup_enabled ? `+${inbox.warmup_step} every ${inbox.warmup_interval_days}d` : 'manual', color: inbox.warmup_enabled ? C.amber : C.dim },
+                    { label: 'Sent Today',     value: `${inbox.sent_today || 0} / ${inbox.warmup_start_limit || 10}`,  color: C.text },
+                    { label: 'Daily Max',      value: `${inbox.warmup_max_limit || 50}/day`,    color: C.accent, sub: 'final target' },
+                    { label: 'Current Limit',  value: `${inbox.warmup_start_limit || 10}/day`,  color: C.accent, sub: 'today' },
+                    { label: 'Warm-up',        value: inbox.warmup_enabled ? 'Enabled' : 'Off', color: inbox.warmup_enabled ? C.greenDark : C.muted, sub: inbox.warmup_enabled ? `+${inbox.warmup_step} every ${inbox.warmup_interval_days}d` : 'manual' },
                   ].map(s => (
-                    <div key={s.label} style={{ background: '#F5F7FA', borderRadius: 8, padding: '10px 14px' }}>
-                      <div style={{ color: C.muted, fontSize: 11, marginBottom: 4 }}>{s.label}</div>
-                      <div style={{ color: s.color, fontWeight: 700, fontSize: 18 }}>{s.value}</div>
-                      <div style={{ color: C.dim, fontSize: 11 }}>{s.sub}</div>
+                    <div key={s.label} style={{ background: C.surface, borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ color: C.muted, fontSize: 11, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+                      <div style={{ color: s.color, fontSize: 18, fontWeight: 700 }}>{s.value}</div>
+                      {s.sub && <div style={{ color: C.dim, fontSize: 11, marginTop: 2 }}>{s.sub}</div>}
                     </div>
                   ))}
                 </div>
 
-                {/* Warm-up progress */}
-                {inbox.warmup_enabled && <WarmupBar inbox={inbox} />}
+                {/* Warmup progress bar */}
+                {inbox.warmup_enabled && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, color: C.muted }}>
+                      <span>Warm-up progress · increases by {inbox.warmup_step} every {inbox.warmup_interval_days} days</span>
+                      <span style={{ color: C.accent, fontWeight: 600 }}>{inbox.warmup_start_limit} / {inbox.warmup_max_limit} emails/day</span>
+                    </div>
+                    <div style={{ background: C.surface, borderRadius: 20, height: 8, overflow: 'hidden' }}>
+                      <div style={{ background: `linear-gradient(90deg, ${C.accent}, ${C.green})`, height: '100%', width: `${pct}%`, borderRadius: 20, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Add Inbox Modal */}
+      {/* ── Add / Edit Modal ──────────────────────────────────── */}
       {showAdd && (
-        <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowAdd(false)}>
-          <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 600, maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Connect Inbox</div>
-
-            {/* Preset buttons */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              {SMTP_PRESETS.map((p, i) => (
-                <button key={p.label} onClick={() => applyPreset(i)}
-                  style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${preset === i ? C.accent : C.border}`, background: preset === i ? C.accentSoft : 'transparent', color: preset === i ? C.accent : C.muted, cursor: 'pointer', fontSize: 12, fontWeight: preset === i ? 700 : 400 }}>
-                  {p.label}
-                </button>
-              ))}
+        <div style={{ position: 'fixed', inset: 0, background: '#00000066', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          onClick={() => { setShowAdd(false); setEditInbox(null) }}>
+          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: 32, width: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+              {editInbox ? `Edit — ${editInbox.email}` : 'Add New Inbox'}
+            </div>
+            <div style={{ color: C.muted, fontSize: 13, marginBottom: 24 }}>
+              {editInbox ? 'Update inbox settings and warmup limits.' : 'Connect an email account for cold outreach.'}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              <Field label="Label (display name)" value={form.label} onChange={v => set('label', v)} placeholder="outreach-01@mlcservices.co.uk" />
-              <Field label="Email Address" value={form.email} onChange={v => set('email', v)} placeholder="outreach-01@mlcservices.co.uk" type="email" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>SMTP Host</label>
-                <input value={form.smtp_host} onChange={e => set('smtp_host', e.target.value)} placeholder="smtp.gmail.com"
-                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <label style={{ color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>SMTP Port</label>
-                <select value={form.smtp_port} onChange={e => set('smtp_port', e.target.value)}
-                  style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14 }}>
-                  <option value="587">587 — TLS (recommended)</option>
-                  <option value="465">465 — SSL</option>
-                  <option value="25">25</option>
-                </select>
-              </div>
-              <Field label="SMTP Username" value={form.smtp_user} onChange={v => set('smtp_user', v)} placeholder="outreach-01@mlcservices.co.uk" />
-              <Field label="Password / App Password" value={form.smtp_pass} onChange={v => set('smtp_pass', v)} placeholder="••••••••••••••••" password />
-            </div>
 
-            {/* Warm-up settings */}
-            <div style={{ borderTop: '1px solid #E5E7EB', paddingTop: 20, marginTop: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>Warm-up Settings</div>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', fontSize: 14, color: C.muted }}>
-                  <input type="checkbox" checked={form.warmup_enabled} onChange={e => set('warmup_enabled', e.target.checked)} />
-                  Enable warm-up
+              {/* SMTP settings */}
+              <div style={{ gridColumn: 'span 2' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                  Account Details
+                </div>
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={lbl}>Display Label</label>
+                <input value={form.label} onChange={e => set('label', e.target.value)} placeholder="e.g. Moiz — Cold Outreach" style={inp} />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={lbl}>Email Address *</label>
+                <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                  placeholder="moiz@trymylandlordcertificate.com"
+                  style={{ ...inp, background: editInbox ? C.surface : '#fff' }}
+                  readOnly={!!editInbox} />
+                {editInbox && <div style={{ color: C.dim, fontSize: 11, marginTop: 4 }}>Email address cannot be changed</div>}
+              </div>
+
+              <div>
+                <label style={lbl}>SMTP Host *</label>
+                <input value={form.smtp_host} onChange={e => set('smtp_host', e.target.value)} placeholder="smtp.gmail.com" style={inp} />
+              </div>
+              <div>
+                <label style={lbl}>SMTP Port *</label>
+                <input type="number" value={form.smtp_port} onChange={e => set('smtp_port', e.target.value)} style={inp} />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={lbl}>SMTP Username *</label>
+                <input value={form.smtp_user} onChange={e => set('smtp_user', e.target.value)}
+                  placeholder="Full email address used to log in" style={inp} />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={lbl}>SMTP Password / App Password *</label>
+                <input type="password" value={form.smtp_pass} onChange={e => set('smtp_pass', e.target.value)}
+                  placeholder="Gmail: 16-character App Password" style={inp} />
+                <div style={{ color: C.dim, fontSize: 11, marginTop: 4 }}>
+                  For Gmail: use App Password (16 chars), not your normal password
+                </div>
+              </div>
+
+              {/* Warmup settings */}
+              <div style={{ gridColumn: 'span 2', marginTop: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12, paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+                  Warm-up Settings
+                </div>
+              </div>
+
+              <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input type="checkbox" checked={form.warmup_enabled} onChange={e => set('warmup_enabled', e.target.checked)} id="wu" />
+                <label htmlFor="wu" style={{ color: C.text, fontSize: 14, cursor: 'pointer', fontWeight: 500 }}>
+                  Enable automatic warm-up
                 </label>
               </div>
-              {form.warmup_enabled && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <Field label="Start Limit (emails/day)" value={form.warmup_start_limit} onChange={v => set('warmup_start_limit', v)} type="number" hint="How many to send on day 1" />
-                  <Field label="Increase By" value={form.warmup_step} onChange={v => set('warmup_step', v)} type="number" hint="Add this many each interval" />
-                  <Field label="Increase Every (days)" value={form.warmup_interval_days} onChange={v => set('warmup_interval_days', v)} type="number" />
-                  <Field label="Maximum Limit (emails/day)" value={form.warmup_max_limit} onChange={v => set('warmup_max_limit', v)} type="number" hint="Never exceed this" />
+
+              {form.warmup_enabled && <>
+                <div>
+                  <label style={lbl}>Current Daily Limit</label>
+                  <input type="number" value={form.warmup_start_limit} onChange={e => set('warmup_start_limit', e.target.value)} min={1} max={500} style={inp} />
+                  <div style={{ color: C.dim, fontSize: 11, marginTop: 3 }}>Emails sent per day right now</div>
                 </div>
-              )}
-              {!form.warmup_enabled && (
-                <div style={{ background: '#F5F7FA', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: C.muted }}>
-                  Warm-up disabled. The inbox will send up to{' '}
-                  <strong style={{ color: C.text }}>{form.warmup_max_limit || 50} emails/day</strong> immediately.
-                  Only disable this for already-warmed inboxes.
+                <div>
+                  <label style={lbl}>Maximum Daily Limit</label>
+                  <input type="number" value={form.warmup_max_limit} onChange={e => set('warmup_max_limit', e.target.value)} min={1} max={500} style={inp} />
+                  <div style={{ color: C.dim, fontSize: 11, marginTop: 3 }}>Target — warmup stops here</div>
                 </div>
-              )}
+                <div>
+                  <label style={lbl}>Increase By (emails)</label>
+                  <input type="number" value={form.warmup_step} onChange={e => set('warmup_step', e.target.value)} min={1} style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Every (days)</label>
+                  <input type="number" value={form.warmup_interval_days} onChange={e => set('warmup_interval_days', e.target.value)} min={1} style={inp} />
+                </div>
+                <div style={{ gridColumn: 'span 2', background: C.accentSoft, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: C.accent }}>
+                  📈 At current settings: starts at <strong>{form.warmup_start_limit}/day</strong>, increases by <strong>{form.warmup_step}</strong> every <strong>{form.warmup_interval_days} days</strong> until it reaches <strong>{form.warmup_max_limit}/day</strong>
+                  {' '}— takes ~<strong>{Math.ceil(((form.warmup_max_limit - form.warmup_start_limit) / form.warmup_step) * form.warmup_interval_days)} days</strong> to fully warm up.
+                </div>
+              </>}
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-              <Btn onClick={createInbox} disabled={saving}>{saving ? 'Connecting…' : 'Connect Inbox'}</Btn>
-              <Btn variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
+              <Btn onClick={saveInbox} disabled={saving}>{saving ? 'Saving…' : editInbox ? 'Save Changes' : 'Add Inbox'}</Btn>
+              <Btn variant="ghost" onClick={() => { setShowAdd(false); setEditInbox(null); setForm(blank) }}>Cancel</Btn>
             </div>
           </div>
         </div>
