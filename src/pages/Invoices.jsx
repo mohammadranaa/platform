@@ -229,12 +229,16 @@ export default function Invoices() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Invoices & Quotes</h1>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{invoices.length} total · {filtered.length} shown</div>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{invoices.length} saved</div>
         </div>
-        <Btn onClick={() => navigate('/documents')}>+ New Invoice / Quote</Btn>
+        <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 3 }}>
+          <button onClick={() => {}} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: C.accent, color: '#fff' }}>
+            + New Invoice
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

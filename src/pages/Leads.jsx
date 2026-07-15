@@ -103,6 +103,7 @@ export default function Leads() {
   const fileRef = useRef()
 
   const [leads, setLeads]         = useState([])
+  const [profiles, setProfiles]   = useState([])
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [tab, setTab]             = useState(searchParams.get('type') || 'all')
@@ -124,11 +125,12 @@ export default function Leads() {
 
   async function fetchLeads() {
     setLoading(true)
-    let q = supabase.from('leads').select('*').order('created_at', { ascending: false })
-    if (tab !== 'all') q = q.eq('lead_type', tab)
-    if (!isAdmin) q = q.eq('assigned_to', profile?.id)
-    const { data } = await q
-    setLeads(data || [])
+    const [leadsRes, profilesRes] = await Promise.all([
+      (() => { let q = supabase.from('leads').select('*').order('created_at', { ascending: false }); if (tab !== 'all') q = q.eq('lead_type', tab); if (!isAdmin) q = q.eq('assigned_to', profile?.id); return q })(),
+      supabase.from('profiles').select('id, full_name').eq('is_active', true),
+    ])
+    setLeads(leadsRes.data || [])
+    setProfiles(profilesRes.data || [])
     setLoading(false)
   }
 
@@ -400,14 +402,15 @@ export default function Leads() {
       <tr key={l.id}
         onMouseEnter={e => e.currentTarget.style.background = C.surface}
         onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-        {/* Name */}
+        {/* Name — clickable */}
         <td style={td}>
-          <div style={{ fontWeight: 600, color: C.text }}>{displayName(l)}</div>
+          <div style={{ fontWeight: 600, color: C.accent, cursor: 'pointer' }} onClick={() => navigate(`/leads/${l.id}`)}>
+            {displayName(l)}
+          </div>
           {l.lead_type === 'verified' && l.company_name && <div style={{ fontSize: 12, color: C.muted }}>{l.contact_first} {l.contact_last}</div>}
           {l.form_timestamp && <div style={{ fontSize: 11, color: C.dim }}>{new Date(l.form_timestamp).toLocaleDateString('en-GB')}</div>}
         </td>
-
-        {/* Type (all tab only) */}
+        {/* Type chip — only on all tab */}
         {tab === 'all' && <td style={td}><TypeChip type={l.lead_type} /></td>}
 
         {/* Email */}
@@ -451,6 +454,13 @@ export default function Leads() {
           <td style={td}>{l.website ? <a href={l.website} target="_blank" rel="noreferrer" style={{ color: C.accent, fontSize: 12 }}>Visit</a> : <span style={{ color: C.dim }}>—</span>}</td>
         </>}
 
+        {/* Assigned to */}
+        <td style={td}>
+          <span style={{ fontSize: 12, color: C.muted }}>
+            {l.assigned_to ? profiles?.find?.(p => p.id === l.assigned_to)?.full_name || '—' : '—'}
+          </span>
+        </td>
+
         {/* Status */}
         <td style={td}><StatusBadge status={l.status} /></td>
 
@@ -468,17 +478,17 @@ export default function Leads() {
   }
 
   const renderHeaders = () => {
-    const common = ['Name', 'Email', 'Phone']
     const typeSpecific = {
       inbound:    ['Address','Property','Services','Price','Payment'],
       verified:   ['Address','Work Done','Last Payment','Renewal Due'],
       cold_agent: ['Address','Phone','Email Verified','Website'],
     }
     const headers = [
+      'Name',
       ...(tab === 'all' ? ['Type'] : []),
-      ...common,
+      'Email', 'Phone',
       ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
-      'Status', 'Change Status',
+      'Assigned To', 'Status', 'Change Status',
     ]
     return headers.map(h => <th key={h} style={th}>{h}</th>)
   }

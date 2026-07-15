@@ -14,9 +14,9 @@ import Campaigns from './pages/Campaigns'
 import Inboxes from './pages/Inboxes'
 import EmailInbox from './pages/EmailInbox'
 import Templates from './pages/Templates'
-import DocumentGenerator from './pages/DocumentGenerator'
 import Properties from './pages/Properties'
 import Invoices from './pages/Invoices'
+import LeadDetail from './pages/LeadDetail'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -44,16 +44,16 @@ function App() {
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="leads" element={<Leads />} />
-            <Route path="leads/:id" element={<ClientDetail />} />
+            <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="clients" element={<Clients />} />
             <Route path="clients/:id" element={<ClientDetail />} />
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="inbox" element={<EmailInbox />} />
             <Route path="templates" element={<Templates />} />
-            <Route path="documents" element={<DocumentGenerator />} />
-            <Route path="properties" element={<Properties />} />
             <Route path="invoices" element={<Invoices />} />
+            <Route path="documents" element={<Invoices />} />
+            <Route path="properties" element={<Properties />} />
             <Route path="campaigns" element={<AdminRoute><Campaigns /></AdminRoute>} />
             <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
