@@ -79,10 +79,11 @@ export default function Jobs() {
   const [showNew, setShowNew]               = useState(false)
 
   const blankJob = {
-    client_id: '', title: '', service_types: [], job_type: 'Inspection',
-    priority: 'Medium', assigned_to: '', scheduled_date: '',
+    client_id: null, title: '', service_types: [], job_type: 'Inspection',
+    priority: 'Medium', assigned_to: '', assigned_bdl: null, scheduled_date: '',
     scheduled_slot: 'Morning (8am–12pm)', site_address: '', site_postcode: '',
-    access_notes: '', tenant_name: '', tenant_phone: '', description: '', quoted_amount: '',
+    access_notes: '', tenant_name: '', tenant_phone: '', description: '',
+    quoted_amount: '', detail_of_service: '', job_source_type: 'inbound',
   }
   const [form, setForm]         = useState(blankJob)
   const [lineItems, setLineItems] = useState([
@@ -108,7 +109,10 @@ export default function Jobs() {
   }
 
   async function fetchClients() {
-    const { data } = await supabase.from('clients').select('id, first_name, last_name, company_name, street_address, city, postcode').eq('is_active', true).order('company_name')
+    const { data } = await supabase.from('clients')
+      .select('id, first_name, last_name, company_name, street_address, city, postcode')
+      .neq('is_active', false)  // includes null and true
+      .order('company_name')
     setClients(data || [])
   }
 
@@ -121,13 +125,22 @@ export default function Jobs() {
     if (!form.title) { showToast('Job title is required', 'error'); return }
     setSaving(true)
     const lineTotal = lineItems.filter(l => l.description).reduce((s, l) => s + (Number(l.quantity) * Number(l.unit_price || 0)), 0)
-    const { data: job, error } = await supabase.from('jobs').insert({
+
+    // Clean the form — remove empty strings for FK fields to avoid constraint errors
+    const payload = {
       ...form,
-      assigned_to: form.assigned_to || profile.id,
-      quoted_amount: Number(form.quoted_amount) || lineTotal,
+      client_id:      form.client_id      || null,
+      assigned_to:    form.assigned_to    || profile.id,
+      assigned_bdl:   form.assigned_bdl   || null,
+      quoted_amount:  Number(form.quoted_amount) || lineTotal,
       invoice_amount: lineTotal,
       source: 'manual',
-    }).select().single()
+    }
+    // Remove empty string fields that have FK constraints
+    if (!payload.client_id) delete payload.client_id
+    if (!payload.assigned_bdl) delete payload.assigned_bdl
+
+    const { data: job, error } = await supabase.from('jobs').insert(payload).select().single()
     if (error) { setSaving(false); showToast(error.message, 'error'); return }
 
     const validItems = lineItems.filter(l => l.description.trim())

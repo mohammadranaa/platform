@@ -43,7 +43,9 @@
       "Bash(grep -rln \"^} => {$\" src/)",
       "Read(//Users/mohammadrana/Downloads/**)",
       "Bash(supabase db *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(sed -n '/create table public.rep_activities/,/^\\);/p' supabase/migrations/07_leads_clients_restructure.sql)",
+      "Bash(sed -n '/create table public.client_activities/,/^\\);/p' supabase/migrations/03_jobs.sql)"
     ]
   }
 }

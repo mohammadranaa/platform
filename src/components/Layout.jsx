@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { to: '/templates',  icon: '📝', label: 'Templates'                 },
   { to: '/invoices',   icon: '🧾', label: 'Invoices'                  },
   { to: '/campaigns',  icon: '⚡', label: 'Cold Email',  adminOnly: true },
+  { to: '/cold-inbox', icon: '📨', label: 'Cold Inbox',  adminOnly: false },
   { to: '/inboxes',    icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
 ]
 

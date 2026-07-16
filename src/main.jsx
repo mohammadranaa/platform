@@ -17,6 +17,7 @@ import Templates from './pages/Templates'
 import Properties from './pages/Properties'
 import Invoices from './pages/Invoices'
 import LeadDetail from './pages/LeadDetail'
+import ColdInbox from './pages/ColdInbox'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -54,6 +55,7 @@ function App() {
             <Route path="invoices" element={<Invoices />} />
             <Route path="documents" element={<Invoices />} />
             <Route path="properties" element={<Properties />} />
+            <Route path="cold-inbox" element={<ColdInbox />} />
             <Route path="campaigns" element={<AdminRoute><Campaigns /></AdminRoute>} />
             <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
