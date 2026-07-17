@@ -101,7 +101,7 @@ export default function Jobs() {
   async function fetchJobs() {
     let q = supabase
       .from('jobs')
-      .select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, service_types, client_id, assigned_to, clients(first_name, last_name, company_name), profiles(full_name)')
+      .select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, service_types, client_id, assigned_to, auto_generated, clients(first_name, last_name, company_name), profiles(full_name)')
       .order('created_at', { ascending: false })
     if (!isAdmin) q = q.eq('assigned_to', profile.id)
     const { data } = await q
@@ -126,19 +126,28 @@ export default function Jobs() {
     setSaving(true)
     const lineTotal = lineItems.filter(l => l.description).reduce((s, l) => s + (Number(l.quantity) * Number(l.unit_price || 0)), 0)
 
-    // Clean the form — remove empty strings for FK fields to avoid constraint errors
-    const payload = {
-      ...form,
-      client_id:      form.client_id      || null,
-      assigned_to:    form.assigned_to    || profile.id,
-      assigned_bdl:   form.assigned_bdl   || null,
-      quoted_amount:  Number(form.quoted_amount) || lineTotal,
-      invoice_amount: lineTotal,
-      source: 'manual',
-    }
-    // Remove empty string fields that have FK constraints
-    if (!payload.client_id) delete payload.client_id
-    if (!payload.assigned_bdl) delete payload.assigned_bdl
+    // Build payload explicitly — only send non-empty values
+    // Empty strings break date columns and check constraints
+    const payload = { title: form.title }
+    if (form.client_id)                          payload.client_id = form.client_id
+    if (form.assigned_to)                        payload.assigned_to = form.assigned_to
+    else                                         payload.assigned_to = profile.id
+    if (form.service_types?.length > 0)          payload.service_types = form.service_types
+    if (form.priority)                           payload.priority = form.priority
+    if (form.site_address)                       payload.site_address = form.site_address
+    if (form.site_postcode)                      payload.site_postcode = form.site_postcode
+    if (form.scheduled_date)                     payload.scheduled_date = form.scheduled_date
+    if (form.scheduled_slot)                     payload.scheduled_slot = form.scheduled_slot
+    if (form.tenant_name)                        payload.tenant_name = form.tenant_name
+    if (form.tenant_phone)                       payload.tenant_phone = form.tenant_phone
+    if (form.access_notes)                       payload.access_notes = form.access_notes
+    if (form.description)                        payload.description = form.description
+    if (form.detail_of_service)                  payload.detail_of_service = form.detail_of_service
+    if (form.job_source_type)                     payload.job_source_type = form.job_source_type
+    if (Number(form.quoted_amount) > 0)          payload.quoted_amount = Number(form.quoted_amount)
+    else if (lineTotal > 0)                      payload.quoted_amount = lineTotal
+    if (lineTotal > 0)                           payload.invoice_amount = lineTotal
+    payload.source = 'manual'
 
     const { data: job, error } = await supabase.from('jobs').insert(payload).select().single()
     if (error) { setSaving(false); showToast(error.message, 'error'); return }
@@ -146,7 +155,12 @@ export default function Jobs() {
     const validItems = lineItems.filter(l => l.description.trim())
     if (validItems.length > 0) {
       await supabase.from('job_line_items').insert(validItems.map(l => ({
-        ...l, job_id: job.id, quantity: Number(l.quantity), unit_price: Number(l.unit_price || 0),
+        job_id: job.id,
+        description: l.description,
+        item_type: l.item_type || 'certificate',
+        quantity: Number(l.quantity) || 1,
+        unit: l.unit || 'ea',
+        unit_price: Number(l.unit_price || 0),
       })))
     }
     setSaving(false)
@@ -155,7 +169,6 @@ export default function Jobs() {
     setLineItems([{ id: 1, description: '', item_type: 'certificate', quantity: 1, unit: 'ea', unit_price: '' }])
     await fetchJobs()
     showToast(`Job ${job.job_number} created ✓`)
-    navigate(`/jobs/${job.id}`)
   }
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
@@ -237,7 +250,7 @@ export default function Jobs() {
                   <div key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
                     style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ color: C.accent, fontSize: 11, fontWeight: 700 }}>{job.job_number}</span>
+                      <span style={{ color: C.accent, fontSize: 11, fontWeight: 700 }}>{job.job_number}{job.auto_generated && <span style={{ background: C.tealSoft, color: C.teal, borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700, marginLeft: 5 }}>AUTO</span>}</span>
                       <PriorityChip priority={job.priority} />
                     </div>
                     <div style={{ fontWeight: 600, fontSize: 13, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{job.title}</div>
@@ -282,7 +295,7 @@ export default function Jobs() {
                   <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)} style={{ cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = C.surface}
                     onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                    <td style={td}><span style={{ color: C.accent, fontWeight: 700, fontSize: 13 }}>{job.job_number}</span></td>
+                    <td style={td}><span style={{ color: C.accent, fontWeight: 700, fontSize: 13 }}>{job.job_number}</span>{job.auto_generated && <span style={{ background: C.tealSoft, color: C.teal, borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700, marginLeft: 5 }}>AUTO</span>}</td>
                     <td style={td}><div style={{ fontWeight: 600, color: C.text }}>{job.title}</div><PriorityChip priority={job.priority} /></td>
                     <td style={td}><span style={{ color: C.text }}>{clientName(job.clients)}</span></td>
                     <td style={td}><div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{(job.service_types || []).slice(0, 2).map(s => <span key={s} style={{ background: C.accentSoft, color: C.accent, borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600 }}>{s}</span>)}</div></td>

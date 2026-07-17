@@ -444,17 +444,15 @@ export default function CalendarView() {
             ))}
           </div>
 
-          {/* Navigation */}
+          {/* Navigation — shows the period you are viewing */}
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button onClick={prev} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', fontSize: 16, color: C.text }}>‹</button>
-            <button onClick={goToday} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.text }}>Today</button>
+            <span style={{ padding: '7px 14px', fontSize: 13, fontWeight: 700, color: C.accent, minWidth: 160, textAlign: 'center' }}>{title()}</span>
             <button onClick={next} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', fontSize: 16, color: C.text }}>›</button>
+            <button onClick={goToday} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 12, color: C.muted, marginLeft: 6 }}>Go to today</button>
           </div>
         </div>
       </div>
-
-      {/* Current period title */}
-      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>{title()}</div>
 
       {/* Status legend */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>

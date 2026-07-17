@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
@@ -104,10 +104,16 @@ export default function Leads() {
 
   const [leads, setLeads]         = useState([])
   const [profiles, setProfiles]   = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0 })
+  const [page, setPage]           = useState(0)
+  const PAGE_SIZE = 50
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [tab, setTab]             = useState(searchParams.get('type') || 'all')
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch]       = useState('')
+  const searchTimer = useRef(null)
   const [filterStatus, setFilterStatus] = useState('All')
   const [renewalFilter, setRenewalFilter] = useState('All')
   const [selected, setSelected]   = useState(null) // lead detail panel
@@ -121,18 +127,70 @@ export default function Leads() {
   const [form, setForm]           = useState({ status: 'New', email_verified: 'Unknown' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { fetchLeads() }, [tab, profile])
+  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter])
 
-  async function fetchLeads() {
+  async function fetchLeads(p = page) {
     setLoading(true)
-    const [leadsRes, profilesRes] = await Promise.all([
-      (() => { let q = supabase.from('leads').select('*').order('created_at', { ascending: false }); if (tab !== 'all') q = q.eq('lead_type', tab); if (!isAdmin) q = q.eq('assigned_to', profile?.id); return q })(),
+    const from = p * PAGE_SIZE
+    const to   = from + PAGE_SIZE - 1
+
+    // Build query with server-side filters
+    let q = supabase.from('leads').select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (tab !== 'all') q = q.eq('lead_type', tab)
+    if (!isAdmin) q = q.eq('assigned_to', profile?.id)
+    if (filterStatus !== 'All') q = q.eq('status', filterStatus)
+
+    // Server-side search — search across key fields
+    if (search.trim()) {
+      const s = `%${search.trim()}%`
+      q = q.or(`inbound_name.ilike.${s},inbound_email.ilike.${s},company_name.ilike.${s},contact_first.ilike.${s},contact_last.ilike.${s},email_address.ilike.${s},cold_company_name.ilike.${s},cold_contact_name.ilike.${s},cold_email.ilike.${s}`)
+    }
+
+    // Renewal filter
+    if (renewalFilter !== 'All') {
+      const today = new Date().toISOString().slice(0, 10)
+      if (renewalFilter === '0') {
+        q = q.lt('renewal_due_date', today)
+      } else {
+        const future = new Date()
+        future.setDate(future.getDate() + parseInt(renewalFilter))
+        q = q.lte('renewal_due_date', future.toISOString().slice(0, 10))
+      }
+    }
+
+    const [leadsRes, profilesRes, countsRes] = await Promise.all([
+      q,
       supabase.from('profiles').select('id, full_name').eq('is_active', true),
+      // Get counts per type (one lightweight query)
+      supabase.from('leads').select('lead_type', { count: 'exact', head: false })
+        .then(async () => {
+          const [a, b, c, d] = await Promise.all([
+            supabase.from('leads').select('id', { count: 'exact', head: true }),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound'),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified'),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent'),
+          ])
+          return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0 }
+        })
     ])
+
     setLeads(leadsRes.data || [])
+    setTotalCount(leadsRes.count || 0)
     setProfiles(profilesRes.data || [])
+    setTabCounts(countsRes)
     setLoading(false)
   }
+
+  function goPage(newPage) {
+    setPage(newPage)
+    fetchLeads(newPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   // ── Update lead status ─────────────────────────────────────
   async function updateStatus(leadId, status) {
@@ -140,11 +198,13 @@ export default function Leads() {
     setLeads(p => p.map(l => l.id === leadId ? { ...l, status } : l))
     if (selected?.id === leadId) setSelected(p => ({ ...p, status }))
 
-    // If accepted → auto-convert to client
+    // Auto-conversion to client (+ job if paid inbound) now happens
+    // automatically via database trigger — no frontend action needed
     if (status === 'Accepted') {
-      await convertToClient(leads.find(l => l.id === leadId) || selected)
+      showToast('✓ Accepted — client auto-created by system')
+    } else {
+      showToast(`Status → ${status}`)
     }
-    showToast(`Status → ${status}`)
   }
 
   // ── Convert lead to client ─────────────────────────────────
@@ -418,27 +478,10 @@ export default function Leads() {
   const displayEmail = l => l.inbound_email || l.email_address || l.cold_email || '—'
   const displayPhone = l => l.inbound_phone || l.job_telephone || l.job_mobile || l.direct_number || l.landline_number || '—'
 
-  const counts = {
-    all: leads.length,
-    inbound: leads.filter(l => l.lead_type === 'inbound').length,
-    verified: leads.filter(l => l.lead_type === 'verified').length,
-    cold_agent: leads.filter(l => l.lead_type === 'cold_agent').length,
-  }
+  const counts = tabCounts
 
-  const filtered = useMemo(() => leads
-    .filter(l => filterStatus === 'All' || l.status === filterStatus)
-    .filter(l => {
-      if (renewalFilter === 'All' || l.lead_type !== 'verified') return renewalFilter === 'All' ? true : false
-      const days = l.renewal_due_date ? Math.floor((new Date(l.renewal_due_date) - new Date()) / 86400000) : null
-      if (renewalFilter === '0') return days !== null && days < 0
-      return days !== null && days <= parseInt(renewalFilter)
-    })
-    .filter(l => {
-      if (!search) return true
-      const q = search.toLowerCase()
-      return displayName(l).toLowerCase().includes(q) || displayEmail(l).toLowerCase().includes(q) || (l.company_name || l.cold_company_name || '').toLowerCase().includes(q)
-    })
-  , [leads, filterStatus, renewalFilter, search])
+  // No client-side filtering needed — server handles it all
+  const filtered = leads
 
   const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
   const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 14, verticalAlign: 'middle' }
@@ -552,7 +595,7 @@ export default function Leads() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Leads</h1>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{leads.length} total · {filtered.length} shown</div>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{totalCount} found · page {page + 1} of {totalPages || 1}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {isAdmin && <Btn small variant="ghost" onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>}
@@ -572,7 +615,11 @@ export default function Leads() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, company…"
+        <input value={searchInput} onChange={e => {
+            setSearchInput(e.target.value)
+            clearTimeout(searchTimer.current)
+            searchTimer.current = setTimeout(() => setSearch(e.target.value), 400)
+          }} placeholder="Search name, email, company…"
           style={{ ...inp, flex: 1, minWidth: 200, width: 'auto', padding: '8px 14px' }} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           style={{ ...inp, width: 'auto', padding: '8px 12px' }}>
@@ -608,6 +655,40 @@ export default function Leads() {
           </table>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16, padding: '12px 0' }}>
+          <button onClick={() => goPage(0)} disabled={page === 0}
+            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: page === 0 ? 'not-allowed' : 'pointer', color: page === 0 ? C.dim : C.text, opacity: page === 0 ? 0.5 : 1 }}>
+            « First
+          </button>
+          <button onClick={() => goPage(page - 1)} disabled={page === 0}
+            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: page === 0 ? 'not-allowed' : 'pointer', color: page === 0 ? C.dim : C.text, opacity: page === 0 ? 0.5 : 1 }}>
+            ‹ Prev
+          </button>
+          {/* Page numbers — show current ± 2 */}
+          {Array.from({ length: totalPages }, (_, i) => i)
+            .filter(i => Math.abs(i - page) <= 2)
+            .map(i => (
+            <button key={i} onClick={() => goPage(i)}
+              style={{ background: i === page ? C.accent : '#fff', color: i === page ? '#fff' : C.text, border: `1px solid ${i === page ? C.accent : C.border}`, borderRadius: 6, padding: '6px 12px', fontSize: 13, fontWeight: i === page ? 700 : 400, cursor: 'pointer', minWidth: 36 }}>
+              {i + 1}
+            </button>
+          ))}
+          <button onClick={() => goPage(page + 1)} disabled={page >= totalPages - 1}
+            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', color: page >= totalPages - 1 ? C.dim : C.text, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>
+            Next ›
+          </button>
+          <button onClick={() => goPage(totalPages - 1)} disabled={page >= totalPages - 1}
+            style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', color: page >= totalPages - 1 ? C.dim : C.text, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>
+            Last »
+          </button>
+          <span style={{ color: C.muted, fontSize: 12, marginLeft: 8 }}>
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
+          </span>
+        </div>
+      )}
 
       {/* ── Import Modal ─────────────────────────────────────── */}
       {showImport && isAdmin && (

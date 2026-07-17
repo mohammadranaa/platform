@@ -235,7 +235,7 @@ export default function Invoices() {
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{invoices.length} saved</div>
         </div>
         <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 3 }}>
-          <button onClick={() => {}} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: C.accent, color: '#fff' }}>
+          <button onClick={() => navigate('/invoices/new')} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: C.accent, color: '#fff' }}>
             + New Invoice
           </button>
         </div>

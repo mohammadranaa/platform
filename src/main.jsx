@@ -16,6 +16,7 @@ import EmailInbox from './pages/EmailInbox'
 import Templates from './pages/Templates'
 import Properties from './pages/Properties'
 import Invoices from './pages/Invoices'
+import DocumentGenerator from './pages/DocumentGenerator'
 import LeadDetail from './pages/LeadDetail'
 import ColdInbox from './pages/ColdInbox'
 import CalendarView from './pages/CalendarView'
@@ -54,8 +55,9 @@ function App() {
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="inbox" element={<EmailInbox />} />
             <Route path="templates" element={<Templates />} />
+            <Route path="invoices/new" element={<DocumentGenerator />} />
             <Route path="invoices" element={<Invoices />} />
-            <Route path="documents" element={<Invoices />} />
+            <Route path="documents" element={<DocumentGenerator />} />
             <Route path="properties" element={<Properties />} />
             <Route path="cold-inbox" element={<ColdInbox />} />
             <Route path="calendar" element={<CalendarView />} />

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
+import { supabase } from '../lib/supabase'
 import AISidebar from './AISidebar'
 
 const S = {
@@ -32,6 +33,30 @@ export default function Layout() {
   const { profile, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
   const [aiOpen, setAiOpen] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [notifOpen, setNotifOpen] = useState(false)
+  const unread = notifications.filter(n => !n.is_read).length
+
+  useEffect(() => {
+    fetchNotifications()
+    const channel = supabase
+      .channel('notif_live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, payload => {
+        setNotifications(p => [payload.new, ...p].slice(0, 30))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  async function fetchNotifications() {
+    const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(30)
+    setNotifications(data || [])
+  }
+
+  async function markAllRead() {
+    await supabase.from('notifications').update({ is_read: true }).eq('is_read', false)
+    setNotifications(p => p.map(n => ({ ...n, is_read: true })))
+  }
 
   async function handleSignOut() {
     await signOut()
@@ -78,6 +103,36 @@ export default function Layout() {
             AI Assistant
           </button>
         </nav>
+
+        {/* Notifications bell */}
+        <div style={{ padding: '8px 18px', borderTop: `1px solid ${S.sidebarBorder}`, position: 'relative' }}>
+          <button onClick={() => { setNotifOpen(p => !p); if (!notifOpen) markAllRead() }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'transparent', border: 'none', color: S.sidebarMuted, cursor: 'pointer', fontSize: 13, padding: '4px 0' }}>
+            <span style={{ fontSize: 15 }}>🔔</span> Notifications
+            {unread > 0 && (
+              <span style={{ background: '#DC2626', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 700, marginLeft: 'auto' }}>{unread}</span>
+            )}
+          </button>
+          {notifOpen && (
+            <div style={{ position: 'absolute', left: 210, bottom: 0, width: 320, maxHeight: 420, overflowY: 'auto', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', zIndex: 700 }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontWeight: 700, fontSize: 13, color: '#1F2937', display: 'flex', justifyContent: 'space-between' }}>
+                Notifications
+                <span onClick={() => setNotifOpen(false)} style={{ cursor: 'pointer', color: '#9CA3AF' }}>✕</span>
+              </div>
+              {notifications.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No notifications yet</div>
+              ) : notifications.map(n => (
+                <div key={n.id}
+                  onClick={() => { if (n.link) navigate(n.link); setNotifOpen(false) }}
+                  style={{ padding: '10px 16px', borderBottom: '1px solid #F5F7FA', cursor: n.link ? 'pointer' : 'default', background: n.is_read ? '#fff' : '#E6F4FC' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2937' }}>{n.title}</div>
+                  {n.body && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{n.body}</div>}
+                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>{new Date(n.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* User */}
         <div style={{ padding: '12px 18px', borderTop: `1px solid ${S.sidebarBorder}` }}>

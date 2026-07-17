@@ -156,6 +156,13 @@ export default function ClientDetail() {
           {client.phone && <div style={{ color: C.muted, fontSize: 13 }}>{client.phone}</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {client.phone && (
+            <a href={`tel:${client.phone}`}
+              onClick={() => logActivity({ clientId: id, repId: profile.id, repName: profile.full_name, type: 'call', title: `Outbound call to ${client.phone}`, body: `Called ${clientName()} on ${client.phone}` })}
+              style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              📞 Call
+            </a>
+          )}
           <Btn small variant="ghost" onClick={() => setShowEmail(true)}>✉ Send Email</Btn>
           <Btn small onClick={() => navigate(`/jobs?client=${id}`)}>+ New Job</Btn>
           {isAdmin && <Btn small variant={editing ? 'success' : 'ghost'} onClick={() => editing ? saveEdit() : setEditing(true)} disabled={saving}>

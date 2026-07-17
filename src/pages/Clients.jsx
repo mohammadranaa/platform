@@ -210,7 +210,7 @@ export default function Clients() {
                     onMouseEnter={e => e.currentTarget.style.background = C.surface}
                     onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                     <td style={td}>
-                      <div style={{ fontWeight: 600, color: C.text, cursor: 'pointer' }} onClick={() => navigate(`/clients/${c.id}`)}>{clientName(c)}</div>
+                      <div style={{ fontWeight: 600, color: C.text, cursor: 'pointer' }} onClick={() => navigate(`/clients/${c.id}`)}>{clientName(c)}{c.auto_generated && <span style={{ background: '#CCFBF1', color: '#0D9488', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700, marginLeft: 6 }}>AUTO</span>}</div>
                       {c.email && <div style={{ fontSize: 12, color: C.muted }}>{c.email}</div>}
                     </td>
                     <td style={td}>

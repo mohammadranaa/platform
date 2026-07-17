@@ -98,7 +98,8 @@ export default function LeadDetail() {
     showToast(`Status → ${status}`)
 
     // Auto-convert to client if Accepted
-    if (status === 'Accepted') await convertToClient()
+    // DB trigger auto-creates client (+ job for paid inbound) — no frontend call needed
+    if (status === 'Accepted') showToast('✓ Client auto-created by system')
   }
 
   async function updateAssignment(repId) {
@@ -172,6 +173,13 @@ export default function LeadDetail() {
           {displayPhone() && <div style={{ color: C.muted, fontSize: 13 }}>{displayPhone()}</div>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {displayPhone() && (
+            <a href={`tel:${displayPhone()}`}
+              onClick={() => logActivity({ leadId: id, repId: profile.id, repName: profile.full_name, type: 'call', title: `Outbound call to ${displayPhone()}`, body: `Called ${displayName()} on ${displayPhone()}` })}
+              style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              📞 Call
+            </a>
+          )}
           <Btn small variant="ghost" onClick={() => setShowEmail(true)}>✉ Send Email</Btn>
           {lead.status !== 'Accepted' && (
             <Btn small variant="success" onClick={() => updateStatus('Accepted')} disabled={saving}>

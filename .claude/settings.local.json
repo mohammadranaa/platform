@@ -45,7 +45,9 @@
       "Bash(supabase db *)",
       "Bash(echo \"exit: $?\")",
       "Bash(sed -n '/create table public.rep_activities/,/^\\);/p' supabase/migrations/07_leads_clients_restructure.sql)",
-      "Bash(sed -n '/create table public.client_activities/,/^\\);/p' supabase/migrations/03_jobs.sql)"
+      "Bash(sed -n '/create table public.client_activities/,/^\\);/p' supabase/migrations/03_jobs.sql)",
+      "Bash(supabase functions *)",
+      "Bash(supabase secrets *)"
     ]
   }
 }
