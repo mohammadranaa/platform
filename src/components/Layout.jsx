@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { to: '/clients',    icon: '◎',  label: 'Clients'                   },
   { to: '/jobs',       icon: '🔧', label: 'Jobs'                      },
   { to: '/calendar',   icon: '📅', label: 'Calendar'                  },
+  { to: '/calls',      icon: '📞', label: 'Calls (NUACOM)'            },
   { to: '/properties', icon: '🏠', label: 'Properties'                },
   { to: '/inbox',      icon: '✉️', label: 'Email Inbox'               },
   { to: '/templates',  icon: '📝', label: 'Templates'                 },

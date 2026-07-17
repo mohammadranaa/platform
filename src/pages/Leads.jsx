@@ -224,24 +224,57 @@ export default function Leads() {
     }
   }
 
-  // ── CSV parsing ────────────────────────────────────────────
+  // ── CSV parsing — handles \r\n, multiline quoted fields ────
   function parseCSV(text) {
-    const lines = text.trim().split('\n').filter(Boolean)
-    if (lines.length < 2) return []
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase().replace(/[\s\-\/]+/g, '_'))
-    return lines.slice(1).map(line => {
-      const vals = []
-      let current = '', inQuotes = false
-      for (const ch of line) {
-        if (ch === '"') inQuotes = !inQuotes
-        else if (ch === ',' && !inQuotes) { vals.push(current.trim()); current = '' }
-        else current += ch
+    // Normalise line endings
+    const normalised = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+    if (!normalised) return []
+
+    const rows = []
+    let row = []
+    let current = ''
+    let inQuotes = false
+
+    for (let i = 0; i < normalised.length; i++) {
+      const ch = normalised[i]
+      const next = normalised[i + 1]
+
+      if (ch === '"') {
+        if (inQuotes && next === '"') {
+          // Escaped quote inside quoted field
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (ch === ',' && !inQuotes) {
+        row.push(current.trim())
+        current = ''
+      } else if (ch === '\n' && !inQuotes) {
+        row.push(current.trim())
+        current = ''
+        if (row.some(v => v !== '')) rows.push(row)
+        row = []
+      } else {
+        current += ch
       }
-      vals.push(current.trim())
-      const row = {}
-      headers.forEach((h, i) => { row[h] = vals[i] || '' })
-      return row
-    }).filter(row => Object.values(row).some(v => v))
+    }
+    // Last field/row
+    row.push(current.trim())
+    if (row.some(v => v !== '')) rows.push(row)
+
+    if (rows.length < 2) return []
+
+    // First row = headers
+    const headers = rows[0].map(h =>
+      h.replace(/"/g, '').trim().toLowerCase().replace(/[\s\-\/]+/g, '_')
+    )
+
+    return rows.slice(1).map(vals => {
+      const obj = {}
+      headers.forEach((h, i) => { obj[h] = (vals[i] || '').replace(/^"|"$/g, '') })
+      return obj
+    }).filter(row => Object.values(row).some(v => v && v.trim()))
   }
 
   function handleCSVFile(e) {
@@ -301,7 +334,7 @@ export default function Leads() {
           work_done: workDone,
           last_payment_amount: parseFloat(row.payment_amount) || null,
           last_invoice_amount: parseFloat(row.total_invoice_amount) || null,
-          notes: row.notes || '',
+          notes: (row.notes || '').slice(0, 400),
           renewal_due_date: calcRenewal(workDone, jobDate),
           renewal_services: workDone,
           status: 'New',
@@ -317,24 +350,41 @@ export default function Leads() {
           landline_number: row.landline_number || '',
           direct_number: row.direct_number || '',
           cold_email: row.email || '',
-          email_verified: row.email_verified === 'Verified' || row.email_verified === 'yes' || row.email_verified === 'true' ? 'Verified' : row.email_verified === 'Unverified' ? 'Unverified' : 'Unknown',
+          email_verified: row.email_verified === 'Verified' ? 'Verified' : row.email_verified === 'Unverified' ? 'Unverified' : 'Unknown',
           website: row.website || '',
           status: 'New',
           assigned_to: profile.id,
         }
       }
-    })
+    }).filter(Boolean)
 
-    const { error } = await supabase.from('leads').insert(toInsert)
+    // Batch insert in chunks of 500 to handle large files
+    const BATCH_SIZE = 500
+    let inserted = 0
+    let errors = 0
+
+    for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+      const batch = toInsert.slice(i, i + BATCH_SIZE)
+      const { error } = await supabase.from('leads').insert(batch)
+      if (error) {
+        console.error('Batch error:', error)
+        errors++
+      } else {
+        inserted += batch.length
+      }
+      // Update progress
+      showToast(`Importing… ${inserted} / ${toInsert.length}`)
+    }
+
     setImporting(false)
-    if (error) { showToast(error.message, 'error'); return }
 
-    // Auto-convert paid inbound leads
-    if (importType === 'inbound') {
-      const paidRows = toInsert.filter(r => r.status === 'Accepted')
-      showToast(`${toInsert.length} leads imported · ${paidRows.length} auto-converted (paid)`)
+    if (errors > 0) {
+      showToast(`${inserted} imported, ${errors} batches failed — check console`, 'error')
+    } else if (importType === 'inbound') {
+      const paid = toInsert.filter(r => r.status === 'Accepted').length
+      showToast(`✓ ${inserted} leads imported · ${paid} auto-converted (paid)`)
     } else {
-      showToast(`${toInsert.length} leads imported ✓`)
+      showToast(`✓ ${inserted} leads imported`)
     }
 
     await fetchLeads()
