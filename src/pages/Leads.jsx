@@ -228,7 +228,6 @@ export default function Leads() {
       source: 'converted-lead',
       lead_id: lead.id,
       assigned_to: lead.assigned_to || profile.id,
-      is_active: true,
       status: 'Active',
     }).select().single()
 
