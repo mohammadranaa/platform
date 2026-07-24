@@ -1,6 +1,6 @@
 // Inbound Booking Webhook — receives bookings from MLC website form
 // Creates a lead in the platform, triggers notifications,
-// and auto-converts paid bookings to clients+jobs (see convertLeadToClient below)
+// and auto-converts paid bookings to clients+jobs via DB trigger
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -8,68 +8,6 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
-
-// Mirrors convertToClient/autoCreateJobs in src/pages/Leads.jsx — keep in sync
-// if that logic changes. Runs server-side so paid website bookings convert
-// immediately, without needing anyone to click "Accepted" in the Leads UI.
-async function convertLeadToClient(lead: any, servicesData: { name: string; price: number }[]) {
-  const { data: client, error } = await supabase.from('clients').insert({
-    client_type: 'Landlord',
-    company_name: null,
-    first_name: lead.inbound_name ? lead.inbound_name.split(' ')[0] : null,
-    last_name: lead.inbound_name ? lead.inbound_name.split(' ').slice(1).join(' ') : null,
-    email: lead.inbound_email,
-    phone: lead.inbound_phone,
-    street_address: lead.street_address,
-    city: lead.city,
-    postcode: lead.postcode,
-    source: 'converted-lead',
-    lead_id: lead.id,
-    assigned_to: lead.assigned_to || null,
-    status: 'Active',
-  }).select().single()
-
-  if (error || !client) {
-    console.error('Auto-convert client error:', error)
-    return null
-  }
-
-  if (!servicesData.length) return { client, job: null }
-
-  const siteAddress = [lead.street_address, lead.city, lead.postcode].filter(Boolean).join(', ')
-  const { data: job } = await supabase.from('jobs').insert({
-    client_id: client.id,
-    lead_id: lead.id,
-    title: servicesData.map(s => s.name.split('—')[0].trim()).join(' + '),
-    service_types: servicesData.map(s => s.name),
-    site_address: siteAddress,
-    site_postcode: lead.postcode,
-    scheduled_date: lead.appointment_date,
-    scheduled_slot: lead.time_slot,
-    status: 'Scheduled',
-    payment_status: 'Paid',
-    payment_amount: lead.total_price,
-    invoice_amount: lead.total_price,
-    quoted_amount: lead.total_price,
-    source: 'inbound-form',
-    assigned_to: lead.assigned_to || null,
-  }).select().single()
-
-  if (job) {
-    await supabase.from('job_line_items').insert(
-      servicesData.map(s => ({
-        job_id: job.id,
-        description: s.name,
-        item_type: 'certificate',
-        quantity: 1,
-        unit: 'ea',
-        unit_price: s.price,
-      }))
-    )
-  }
-
-  return { client, job }
-}
 
 Deno.serve(async (req: Request) => {
   // CORS
@@ -130,21 +68,18 @@ Deno.serve(async (req: Request) => {
     'boiler-installation': 'Boiler Installation',
   }
 
-  // servicesData keeps structured {name, price} for job/line-item creation;
-  // servicesReadable is the human-readable string stored on the lead.
-  const servicesData = (data.services || []).map((s: any) => {
-    const price = s.price ? parseFloat(s.price) : 0
-    if (s.label && s.label.includes(' — ')) {
-      return { name: s.label, price }
-    }
-    const name = SERVICE_NAMES[s.type] || SERVICE_NAMES[s.id] || s.type || ''
-    const variant = s.variant || ''
-    const fullLabel = variant && variant !== name ? `${name} — ${variant}` : name
-    return { name: fullLabel, price }
-  })
-
-  const servicesReadable = servicesData
-    .map(s => s.name + (s.price ? ` (£${s.price.toFixed(2)})` : ''))
+  const servicesReadable = (data.services || [])
+    .map((s: any) => {
+      if (s.label && s.label.includes(' — ')) {
+        const price = s.price ? ` (£${parseFloat(s.price).toFixed(2)})` : ''
+        return s.label + price
+      }
+      const name = SERVICE_NAMES[s.type] || SERVICE_NAMES[s.id] || s.type || ''
+      const variant = s.variant || ''
+      const fullLabel = variant && variant !== name ? `${name} — ${variant}` : name
+      const price = s.price ? ` (£${parseFloat(s.price).toFixed(2)})` : ''
+      return fullLabel + price
+    })
     .join(', ')
 
   // ── Additional charges ────────────────────────────────────
@@ -167,7 +102,7 @@ Deno.serve(async (req: Request) => {
   // Map website status → platform status
   let leadStatus = 'New'
   if (paymentStatus.toLowerCase() === 'paid') {
-    leadStatus = 'Accepted'  // triggers convertLeadToClient below
+    leadStatus = 'Accepted'  // DB trigger will auto-create client + job
   } else if (formStatus === 'Pending Payment' || formStatus === 'Abandoned — Reached Review') {
     leadStatus = 'Contacted'  // They've engaged but not paid
   } else if (formStatus === 'Saved Quote — Follow Up') {
@@ -189,6 +124,7 @@ Deno.serve(async (req: Request) => {
 
   const leadPayload = {
     lead_type: 'inbound',
+    form_timestamp: new Date().toISOString(),
     inbound_name: customerName,
     inbound_email: customerEmail,
     inbound_phone: customerPhone,
@@ -238,13 +174,6 @@ Deno.serve(async (req: Request) => {
       })
     }
     leadId = newLead.id
-  }
-
-  // ── Auto-convert paid bookings to client + job ─────────────
-  // Only on the transition into 'Accepted' — a resent webhook for an
-  // already-accepted lead must not create duplicate clients/jobs.
-  if (leadStatus === 'Accepted' && existingLead?.status !== 'Accepted') {
-    await convertLeadToClient({ ...leadPayload, id: leadId }, servicesData)
   }
 
   // ── Create notification ───────────────────────────────────
