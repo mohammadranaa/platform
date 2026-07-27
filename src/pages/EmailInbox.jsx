@@ -1,400 +1,287 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { useToast, Toast } from '../hooks/useToast'
-import AIEmailComposer from '../components/AIEmailComposer'
+import { useToast, Toast } from '../hooks/useToast.jsx'
 
 const C = {
-  bg: '#FFFFFF', surface: '#F5F7FA', surface2: '#EAECF0', border: '#E5E7EB',
+  bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#E6F4FC',
-  green: '#80D100', greenSoft: '#F0FAE0',
+  green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
   red: '#DC2626', redSoft: '#FEE2E2',
   purple: '#7C3AED', purpleSoft: '#EDE9FE',
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
-  const v = {
-    primary: { background: '#0093DB', color: '#fff', border: 'none' },
-    ghost:   { background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB' },
-    danger:  { background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644' },
-    success: { background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066' },
-    amber:   { background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770666' },
-    teal:    { background: '#CCFBF1', color: '#0D9488', border: '1px solid #0D948866' },
-    purple:  { background: '#EDE9FE', color: '#7C3AED', border: '1px solid #7C3AED66' },
-  }
-  return (
-    <button onClick={onClick} disabled={disabled}
-      style={{ cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, fontWeight: 600,
-        padding: small ? '6px 13px' : '9px 18px', fontSize: small ? 12 : 14,
-        opacity: disabled ? 0.5 : 1, ...v[variant], ...sx }}>
-      {children}
-    </button>
-  )
-}
-
-// ── Gmail OAuth URL builder ───────────────────────────────────
-function getGmailOAuthUrl() {
-  const clientId    = import.meta.env.VITE_GOOGLE_CLIENT_ID
-  const redirectUri = `${window.location.origin}/inbox/oauth-callback`
-  const scope = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/userinfo.email',
-  ].join(' ')
-  return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`
-}
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
+const REDIRECT_URI = `${window.location.origin}/inbox/oauth-callback`
+const COLORS = ['#0093DB','#80D100','#D97706','#7C3AED','#0D9488','#DC2626','#EC4899','#8B5CF6']
 
 export default function EmailInbox() {
-  const { profile } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const { toast, showToast } = useToast()
 
-  const [accounts, setAccounts]     = useState([])
-  const [selectedAccount, setSelectedAccount] = useState(null)
-  const [threads, setThreads]       = useState([])
-  const [selectedThread, setSelectedThread] = useState(null)
-  const [messages, setMessages]     = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [showCompose, setShowCompose] = useState(false)
-  const [filter, setFilter]         = useState('all') // all | unread | sent | campaign
+  const [accounts, setAccounts] = useState([])
+  const [messages, setMessages] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [fetching, setFetching] = useState(false)
+  const [tab, setTab]           = useState('All')
+  const [search, setSearch]     = useState('')
+  const [filterAccount, setFilterAccount] = useState('all')
+  const [selected, setSelected] = useState(null)
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [sending, setSending]     = useState(false)
 
-  useEffect(() => { fetchAccounts() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  useEffect(() => {
-    if (selectedAccount) fetchThreads(selectedAccount.id)
-  }, [selectedAccount, filter])
-
-  useEffect(() => {
-    if (selectedThread) fetchMessages(selectedThread.id)
-  }, [selectedThread])
-
-  async function fetchAccounts() {
+  async function fetchAll() {
     setLoading(true)
-    const { data } = await supabase
-      .from('user_email_accounts')
-      .select('*')
-      .eq('user_id', profile.id)
-      .eq('is_active', true)
-    setAccounts(data || [])
-    if (data?.length > 0) setSelectedAccount(data[0])
+    const [{ data: accs }, { data: msgs }] = await Promise.all([
+      supabase.from('user_email_accounts').select('*').eq('account_type', 'personal').eq('is_active', true).order('connected_at'),
+      supabase.from('gmail_messages').select('*, user_email_accounts(gmail_address)')
+        .order('date', { ascending: false }).limit(500),
+    ])
+    setAccounts(accs || [])
+    const personalIds = new Set((accs || []).map(a => a.id))
+    setMessages((msgs || []).filter(m => personalIds.has(m.account_id)))
     setLoading(false)
   }
 
-  async function fetchThreads(accountId) {
-    let q = supabase
-      .from('email_threads')
-      .select('*, clients(first_name, last_name, company_name)')
-      .eq('account_id', accountId)
-      .order('last_message_at', { ascending: false })
-      .limit(50)
-
-    if (filter === 'unread') q = q.eq('has_unread', true)
-    if (filter === 'campaign') q = q.eq('thread_type', 'campaign')
-
-    const { data } = await q
-    setThreads(data || [])
+  function connectAccount() {
+    if (!GOOGLE_CLIENT_ID) { showToast('VITE_GOOGLE_CLIENT_ID not set in Vercel', 'error'); return }
+    localStorage.setItem('oauth_account_type', 'personal')
+    const scopes = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify'
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`
   }
 
-  async function fetchMessages(threadId) {
-    const { data } = await supabase
-      .from('email_messages')
-      .select('*')
-      .eq('thread_id', threadId)
-      .order('created_at', { ascending: true })
-    setMessages(data || [])
-
-    // Mark thread as read
-    await supabase.from('email_threads').update({ has_unread: false }).eq('id', threadId)
-    setThreads(p => p.map(t => t.id === threadId ? { ...t, has_unread: false } : t))
-  }
-
-  async function handleSendEmail({ to, subject, body, aiAssisted }) {
-    if (!selectedAccount) return
-
+  async function fetchNewEmails() {
+    setFetching(true)
     try {
-      // Send via Gmail API using stored token
-      const { data: account } = await supabase
-        .from('user_email_accounts')
-        .select('*')
-        .eq('id', selectedAccount.id)
-        .single()
-
-      // Build RFC 2822 message
-      const emailLines = [
-        `From: ${account.display_name || account.gmail_address} <${account.gmail_address}>`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        `Content-Type: text/html; charset=utf-8`,
-        ``,
-        body.replace(/\n/g, '<br>'),
-      ]
-      const raw = btoa(emailLines.join('\r\n'))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-
-      // Call Gmail API send endpoint
-      const threadId = selectedThread?.gmail_thread_id
-      const sendUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`
-      const res = await fetch(sendUrl, {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-fetch`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${account.access_token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_type: 'personal', client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, max_results: 30 }),
+      })
+      const data = await res.json()
+      showToast(data.ok ? `✓ ${data.new_messages} new emails from ${data.accounts} accounts` : 'Fetch failed', data.ok ? undefined : 'error')
+      if (data.ok) await fetchAll()
+    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    setFetching(false)
+  }
+
+  async function sendReply() {
+    if (!replyText.trim() || !selected) return
+    setSending(true)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          raw,
-          ...(threadId ? { threadId } : {}),
+          account_id: selected.account_id,
+          thread_id: selected.thread_id,
+          to: selected.from_email,
+          subject: selected.subject,
+          message: replyText,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
         }),
       })
-
-      if (!res.ok) throw new Error('Gmail send failed')
-
-      const sentMsg = await res.json()
-
-      // Store in our DB
-      let threadRecord = selectedThread
-      if (!threadRecord) {
-        const { data: newThread } = await supabase.from('email_threads').insert({
-          account_id: selectedAccount.id,
-          subject,
-          participants: [to, account.gmail_address],
-          last_message_at: new Date().toISOString(),
-          message_count: 1,
-          thread_type: 'outbound',
-          gmail_thread_id: sentMsg.threadId,
-        }).select().single()
-        threadRecord = newThread
+      const data = await res.json()
+      if (data.ok) {
+        showToast('✓ Reply sent')
+        setReplyOpen(false); setReplyText('')
+        await fetchAll()
+      } else {
+        showToast('Failed: ' + (data.error || 'Unknown'), 'error')
       }
-
-      await supabase.from('email_messages').insert({
-        thread_id:       threadRecord.id,
-        gmail_message_id: sentMsg.id,
-        from_address:    account.gmail_address,
-        from_name:       account.display_name || account.gmail_address,
-        to_addresses:    [to],
-        subject,
-        body_text:       body,
-        body_html:       body.replace(/\n/g, '<br>'),
-        direction:       'outbound',
-        is_read:         true,
-        ai_assisted:     aiAssisted,
-        sent_at:         new Date().toISOString(),
-      })
-
-      await fetchThreads(selectedAccount.id)
-      setShowCompose(false)
-      showToast('Email sent ✓')
-    } catch (err) {
-      console.error('Send error:', err)
-      showToast('Failed to send email — check Gmail connection', 'error')
-    }
+    } catch (err) { showToast('Error: ' + err.message, 'error') }
+    setSending(false)
   }
 
-  const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim()
-  const timeAgo = (d) => {
-    const diff = Date.now() - new Date(d).getTime()
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  async function disconnectAccount(id) {
+    if (!window.confirm('Disconnect this account?')) return
+    await supabase.from('user_email_accounts').update({ is_active: false }).eq('id', id)
+    setAccounts(p => p.filter(a => a.id !== id))
+    showToast('Disconnected')
   }
 
-  // ── No account connected ──────────────────────────────────────
-  if (!loading && accounts.length === 0) {
-    return (
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 24 }}>Email Inbox</h1>
-        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 14, padding: 60, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📬</div>
-          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Connect your Gmail account</div>
-          <div style={{ color: C.muted, fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
-            Connect your Gmail account to send and receive emails directly inside the MLC platform.
-          </div>
+  const filtered = messages
+    .filter(m => tab === 'All' || (tab === 'Inbox' && m.mail_type === 'inbox') || (tab === 'Sent' && m.mail_type === 'sent') || (tab === 'Unread' && !m.is_read) || (tab === 'Replies' && m.is_reply))
+    .filter(m => filterAccount === 'all' || m.account_id === filterAccount)
+    .filter(m => { if (!search) return true; const q = search.toLowerCase(); return (m.from_email||'').toLowerCase().includes(q)||(m.from_name||'').toLowerCase().includes(q)||(m.subject||'').toLowerCase().includes(q)||(m.snippet||'').toLowerCase().includes(q)||(m.to_email||'').toLowerCase().includes(q) })
 
-          {/* Gmail OAuth Setup Guide */}
-          <div style={{ background: '#FEF3C7', border: '1px solid #D97706', borderRadius: 12, padding: 20, marginBottom: 24, textAlign: 'left', maxWidth: 500 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#D97706', marginBottom: 10 }}>⚠ Before connecting: Set up Google OAuth</div>
-            <div style={{ fontSize: 13, color: '#1F2937', lineHeight: 1.8 }}>
-              <strong>Step 1:</strong> Go to <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" style={{ color: '#0093DB' }}>console.cloud.google.com</a><br/>
-              <strong>Step 2:</strong> Select your MLC Platform project → APIs & Services → Credentials<br/>
-              <strong>Step 3:</strong> Click your OAuth Client ID → Add Authorised redirect URIs:<br/>
-              <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>{window.location.origin}/inbox/oauth-callback</code><br/>
-              <strong>Step 4:</strong> Add <code style={{ background: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>VITE_GOOGLE_CLIENT_ID</code> to your .env file<br/>
-              <strong>Step 5:</strong> Redeploy on Vercel with the Google Client ID env variable set
-            </div>
-          </div>
-
-          <a href={getGmailOAuthUrl()} style={{ display: 'inline-block', background: '#fff', color: '#333', border: '1px solid #ddd', borderRadius: 10, padding: '12px 24px', fontWeight: 700, fontSize: 15, textDecoration: 'none' }}>
-            <img src="https://www.google.com/favicon.ico" width="16" style={{ verticalAlign: 'middle', marginRight: 8 }} />
-            Connect Gmail Account
-          </a>
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 12 }}>
-            Error 401 invalid_client means the Google Client ID is not configured yet.
-          </div>
-        </div>
-        <Toast toast={toast} />
-      </div>
-    )
-  }
+  const stats = { total: messages.length, inbox: messages.filter(m=>m.mail_type==='inbox').length, sent: messages.filter(m=>m.mail_type==='sent').length, replies: messages.filter(m=>m.is_reply).length, unread: messages.filter(m=>!m.is_read).length }
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'
+  const getColor = accId => { const i = accounts.findIndex(a=>a.id===accId); return COLORS[i%COLORS.length] }
+  const inp = { background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:'8px 12px', fontSize:13 }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' }}>
+    <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Email Inbox</h1>
-          {accounts.length > 1 && (
-            <select
-              value={selectedAccount?.id}
-              onChange={e => setSelectedAccount(accounts.find(a => a.id === e.target.value))}
-              style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '6px 12px', fontSize: 13 }}
-            >
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.gmail_address}</option>)}
-            </select>
-          )}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+        <div>
+          <h1 style={{ fontSize:22, fontWeight:700, color:C.text }}>Email Inbox</h1>
+          <div style={{ color:C.muted, fontSize:13, marginTop:2 }}>{accounts.length} accounts · {stats.total} emails</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Btn small variant="ghost" onClick={() => selectedAccount && fetchThreads(selectedAccount.id)}>↻ Refresh</Btn>
-          <Btn small variant="purple" onClick={() => setShowCompose(true)}>✦ Compose with AI</Btn>
-          <a href={getGmailOAuthUrl()} style={{ display: 'inline-block', background: 'transparent', border: '1px solid #E5E7EB', color: C.muted, borderRadius: 8, padding: '6px 13px', fontSize: 12, fontWeight: 600 }}>
-            + Add Account
-          </a>
+        <div style={{ display:'flex', gap:8 }}>
+          <button onClick={fetchNewEmails} disabled={fetching||!accounts.length}
+            style={{ background:C.accentSoft, color:C.accent, border:`1px solid ${C.accent}44`, borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer', opacity:fetching?0.7:1 }}>
+            {fetching ? '⏳ Fetching…' : '🔄 Fetch Emails'}
+          </button>
+          {isAdmin && <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>+ Connect Account</button>}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, gap: 16, minHeight: 0 }}>
-
-        {/* ── Thread list ─────────────────────────────────── */}
-        <div style={{ width: 320, flexShrink: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Filter tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }}>
-            {[['all','All'],['unread','Unread'],['campaign','Campaign']].map(([key, label]) => (
-              <button key={key} onClick={() => setFilter(key)}
-                style={{ flex: 1, padding: '10px', border: 'none', background: filter === key ? C.surface : 'transparent', color: filter === key ? C.text : C.dim, cursor: 'pointer', fontSize: 13, fontWeight: filter === key ? 600 : 400, borderBottom: filter === key ? `2px solid ${C.accent}` : '2px solid transparent' }}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Thread list */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {loading ? (
-              <div style={{ padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading…</div>
-            ) : threads.length === 0 ? (
-              <div style={{ padding: 32, textAlign: 'center', color: C.muted, fontSize: 13 }}>No emails yet.</div>
-            ) : threads.map(thread => (
-              <div
-                key={thread.id}
-                onClick={() => setSelectedThread(thread)}
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: `1px solid ${C.border}18`,
-                  cursor: 'pointer',
-                  background: selectedThread?.id === thread.id ? C.accentSoft : thread.has_unread ? C.surface2 : 'transparent',
-                  borderLeft: selectedThread?.id === thread.id ? `3px solid ${C.accent}` : '3px solid transparent',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontWeight: thread.has_unread ? 700 : 500, fontSize: 13, color: C.text }} className="truncate" style2={{ maxWidth: 180 }}>
-                    {thread.participants?.find(p => p !== selectedAccount?.gmail_address) || thread.participants?.[0]}
-                  </div>
-                  <div style={{ fontSize: 11, color: C.dim, flexShrink: 0, marginLeft: 8 }}>{timeAgo(thread.last_message_at)}</div>
-                </div>
-                <div style={{ fontSize: 13, color: thread.has_unread ? C.text : C.muted, fontWeight: thread.has_unread ? 600 : 400 }} className="truncate">
-                  {thread.subject || '(no subject)'}
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 5 }}>
-                  {thread.clients && (
-                    <span style={{ background: C.accent + '22', color: C.accent, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600 }}>
-                      {clientName(thread.clients)}
-                    </span>
-                  )}
-                  {thread.thread_type === 'campaign' && (
-                    <span style={{ background: C.amber + '22', color: C.amber, borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600 }}>Campaign</span>
-                  )}
-                  {thread.has_unread && (
-                    <span style={{ background: C.accent, color: '#fff', borderRadius: '50%', width: 8, height: 8, display: 'inline-block', alignSelf: 'center' }} />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Thread detail ───────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {!selectedThread ? (
-            <div style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-              <div style={{ fontSize: 40 }}>✉️</div>
-              <div style={{ color: C.muted, fontSize: 14 }}>Select a thread to read it</div>
-              <Btn small variant="purple" onClick={() => setShowCompose(true)}>✦ Compose new email</Btn>
+      {/* Accounts */}
+      {accounts.length > 0 && (
+        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+          {accounts.map((acc,i) => (
+            <div key={acc.id} style={{ display:'flex', alignItems:'center', gap:8, background:'#fff', border:`1px solid ${C.border}`, borderLeft:`4px solid ${COLORS[i%COLORS.length]}`, borderRadius:8, padding:'6px 12px' }}>
+              <span style={{ fontSize:12, fontWeight:600, color:C.text }}>{acc.gmail_address}</span>
+              <span style={{ background:C.greenSoft, color:C.greenDark, borderRadius:20, padding:'1px 6px', fontSize:9, fontWeight:700 }}>Active</span>
+              {isAdmin && <button onClick={() => disconnectAccount(acc.id)} style={{ background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:14 }}>✕</button>}
             </div>
-          ) : (
-            <div style={{ flex: 1, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {/* Thread header */}
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }}>
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{selectedThread.subject || '(no subject)'}</div>
-                <div style={{ color: C.muted, fontSize: 13 }}>
-                  {selectedThread.message_count} message{selectedThread.message_count !== 1 ? 's' : ''} ·{' '}
-                  {selectedThread.participants?.join(', ')}
+          ))}
+          {isAdmin && accounts.length < 8 && <button onClick={connectAccount} style={{ border:`2px dashed ${C.border}`, background:'none', borderRadius:8, padding:'6px 16px', color:C.dim, cursor:'pointer', fontSize:12, fontWeight:600 }}>+ Add</button>}
+        </div>
+      )}
+
+      {/* No accounts */}
+      {!loading && !accounts.length && (
+        <div style={{ background:C.amberSoft, border:`1px solid ${C.amber}44`, borderRadius:12, padding:24, textAlign:'center', marginBottom:20 }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>📨</div>
+          <div style={{ fontWeight:700, color:C.text, fontSize:16, marginBottom:8 }}>No business email accounts connected</div>
+          <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>Connect your Gmail accounts to read and reply to business email.</div>
+          {isAdmin && <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontWeight:700, fontSize:14, cursor:'pointer' }}>Connect First Account →</button>}
+        </div>
+      )}
+
+      {/* Stats */}
+      {accounts.length > 0 && (
+        <div style={{ display:'flex', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+          {[{l:'Total',v:stats.total,c:C.text},{l:'Inbox',v:stats.inbox,c:C.accent},{l:'Sent',v:stats.sent,c:C.purple},{l:'Replies',v:stats.replies,c:C.greenDark},{l:'Unread',v:stats.unread,c:C.red}].map(s=>(
+            <div key={s.l} style={{ background:'#fff', border:`1px solid ${C.border}`, borderTop:`3px solid ${s.c}`, borderRadius:10, padding:'12px 18px', flex:1, minWidth:90 }}>
+              <div style={{ color:C.muted, fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4 }}>{s.l}</div>
+              <div style={{ color:s.c, fontSize:20, fontWeight:800 }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs + filters */}
+      {accounts.length > 0 && (
+        <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+          <div style={{ display:'flex', gap:4, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:4 }}>
+            {['All','Inbox','Sent','Replies','Unread'].map(t=>(
+              <button key={t} onClick={()=>setTab(t)} style={{ padding:'6px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:tab===t?700:400, background:tab===t?'#fff':'transparent', color:tab===t?C.accent:C.muted }}>{t}</button>
+            ))}
+          </div>
+          <select value={filterAccount} onChange={e=>setFilterAccount(e.target.value)} style={{...inp,width:'auto'}}>
+            <option value="all">All Accounts</option>
+            {accounts.map(a=><option key={a.id} value={a.id}>{a.gmail_address}</option>)}
+          </select>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{...inp,flex:1,minWidth:180}} />
+        </div>
+      )}
+
+      {/* Two-pane layout: email list + reading pane */}
+      {accounts.length > 0 && (
+        <div style={{ display:'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap:16 }}>
+          {/* Email list */}
+          <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', maxHeight:'70vh', overflowY:'auto' }}>
+            {loading ? <div style={{ padding:48, textAlign:'center', color:C.muted }}>Loading…</div> :
+            filtered.length === 0 ? <div style={{ padding:48, textAlign:'center', color:C.muted }}>{messages.length===0?'Click "Fetch Emails" to load.':'No match.'}</div> :
+            filtered.map(msg => (
+              <div key={msg.id} onClick={()=>setSelected(msg)}
+                style={{ display:'flex', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.border}`, background:selected?.id===msg.id?C.accentSoft:msg.is_read?'#fff':'#F8FAFF', cursor:'pointer' }}
+                onMouseEnter={e=>{if(selected?.id!==msg.id)e.currentTarget.style.background=C.surface}}
+                onMouseLeave={e=>{if(selected?.id!==msg.id)e.currentTarget.style.background=msg.is_read?'#fff':'#F8FAFF'}}>
+                <div style={{ width:8, height:8, borderRadius:'50%', background:getColor(msg.account_id), flexShrink:0, marginTop:6 }} />
+                <div style={{ width:16, flexShrink:0 }}>
+                  {msg.mail_type==='sent' ? <span style={{ color:C.purple, fontSize:11 }}>↗</span> : msg.is_reply ? <span style={{ color:C.greenDark, fontSize:11 }}>↩</span> : null}
+                </div>
+                <div style={{ flex:1, overflow:'hidden' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                    <span style={{ fontWeight:msg.is_read?400:700, color:C.text, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.mail_type==='sent'?`To: ${msg.to_email}`:(msg.from_name||msg.from_email)}</span>
+                    <span style={{ fontSize:10, color:C.dim, flexShrink:0 }}>{fmtDate(msg.date)}</span>
+                  </div>
+                  <div style={{ fontWeight:msg.is_read?400:600, color:C.text, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.subject||'(No subject)'}</div>
+                  <div style={{ fontSize:11, color:C.dim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.snippet}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Reading pane */}
+          {selected && (
+            <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', display:'flex', flexDirection:'column', maxHeight:'70vh' }}>
+              {/* Email header */}
+              <div style={{ padding:'16px 20px', borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.text }}>{selected.subject||'(No subject)'}</div>
+                  <button onClick={()=>{setSelected(null);setReplyOpen(false)}} style={{ background:'none', border:'none', color:C.dim, cursor:'pointer', fontSize:18 }}>✕</button>
+                </div>
+                <div style={{ fontSize:13, color:C.muted }}>
+                  <strong>From:</strong> {selected.from_name ? `${selected.from_name} <${selected.from_email}>` : selected.from_email}
+                </div>
+                <div style={{ fontSize:13, color:C.muted }}><strong>To:</strong> {selected.to_email}</div>
+                <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>
+                  {selected.date ? new Date(selected.date).toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''}
+                </div>
+                <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>
+                  via {selected.user_email_accounts?.gmail_address || 'unknown account'}
                 </div>
               </div>
 
-              {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {messages.map(msg => (
-                  <div key={msg.id} style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: msg.direction === 'outbound' ? 'flex-end' : 'flex-start',
-                  }}>
-                    <div style={{ fontSize: 11, color: C.dim, marginBottom: 4, display: 'flex', gap: 8 }}>
-                      <span>{msg.from_name || msg.from_address}</span>
-                      <span>{new Date(msg.sent_at || msg.received_at || msg.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                      {msg.ai_assisted && <span style={{ color: C.purple }}>✦ AI assisted</span>}
-                    </div>
-                    <div style={{
-                      background: msg.direction === 'outbound' ? C.accentSoft : C.bg,
-                      border: `1px solid ${msg.direction === 'outbound' ? C.accent + '44' : C.border}`,
-                      borderRadius: msg.direction === 'outbound' ? '12px 4px 12px 12px' : '4px 12px 12px 12px',
-                      padding: '12px 16px',
-                      fontSize: 14,
-                      lineHeight: 1.7,
-                      color: C.text,
-                      maxWidth: '80%',
-                      whiteSpace: 'pre-wrap',
-                    }}>
-                      {msg.body_text || '(no content)'}
-                    </div>
-                  </div>
-                ))}
+              {/* Email body */}
+              <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+                {selected.body_html ? (
+                  <div dangerouslySetInnerHTML={{ __html: selected.body_html }}
+                    style={{ fontSize:14, lineHeight:1.7, color:C.text, wordBreak:'break-word' }} />
+                ) : selected.body_text ? (
+                  <pre style={{ fontSize:14, lineHeight:1.7, color:C.text, whiteSpace:'pre-wrap', fontFamily:'inherit', margin:0 }}>{selected.body_text}</pre>
+                ) : (
+                  <p style={{ color:C.muted, fontSize:14 }}>{selected.snippet || 'No content available.'}</p>
+                )}
               </div>
 
-              {/* Reply compose */}
-              <div style={{ borderTop: '1px solid #E5E7EB', padding: 16 }}>
-                <AIEmailComposer
-                  context={{ type: 'inbox_compose', name: selectedThread.subject }}
-                  onSend={handleSendEmail}
-                  initialTo={selectedThread.participants?.find(p => p !== selectedAccount?.gmail_address)}
-                  initialSubject={`Re: ${selectedThread.subject}`}
-                  compact
-                />
+              {/* Reply section */}
+              <div style={{ borderTop:`1px solid ${C.border}`, padding:'12px 20px', flexShrink:0 }}>
+                {!replyOpen ? (
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={()=>setReplyOpen(true)}
+                      style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 20px', fontWeight:600, fontSize:13, cursor:'pointer', flex:1 }}>
+                      ↩ Reply
+                    </button>
+                    <a href={`https://mail.google.com/mail/u/0/#inbox/${selected.gmail_id}`} target="_blank" rel="noreferrer"
+                      style={{ background:C.surface, color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, textDecoration:'none', textAlign:'center' }}>
+                      Open in Gmail
+                    </a>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:12, color:C.muted, marginBottom:6 }}>Replying to {selected.from_email} via {accounts.find(a=>a.id===selected.account_id)?.gmail_address}</div>
+                    <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} rows={5}
+                      placeholder="Type your reply…"
+                      style={{ width:'100%', background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:'10px 12px', fontSize:14, resize:'vertical', fontFamily:'inherit', lineHeight:1.6, marginBottom:8 }} />
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={sendReply} disabled={sending||!replyText.trim()}
+                        style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 20px', fontWeight:600, fontSize:13, cursor:'pointer', opacity:sending?0.7:1 }}>
+                        {sending ? 'Sending…' : '📤 Send Reply'}
+                      </button>
+                      <button onClick={()=>{setReplyOpen(false);setReplyText('')}}
+                        style={{ background:'#fff', color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Compose modal */}
-      {showCompose && (
-        <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowCompose(false)}>
-          <div style={{ width: 680, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <AIEmailComposer
-              context={{ type: 'inbox_compose' }}
-              onSend={handleSendEmail}
-              onClose={() => setShowCompose(false)}
-            />
-          </div>
         </div>
       )}
 
