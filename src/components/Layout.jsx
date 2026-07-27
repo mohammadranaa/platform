@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { to: '/jobs',       icon: '🔧', label: 'Jobs'                      },
   { to: '/calendar',   icon: '📅', label: 'Calendar'                  },
   { to: '/calls',      icon: '📞', label: 'Calls (NUACOM)'            },
-  { to: '/properties', icon: '🏠', label: 'Properties'                },
+  { to: '/properties', icon: '🏠', label: 'Properties', adminOnly: true },
   { to: '/inbox',      icon: '✉️', label: 'Email Inbox'               },
   { to: '/templates',  icon: '📝', label: 'Templates'                 },
   { to: '/invoices',   icon: '🧾', label: 'Invoices'                  },

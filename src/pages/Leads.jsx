@@ -215,13 +215,35 @@ export default function Leads() {
   }
 
   async function deleteAllShown() {
-    if (!window.confirm('Delete all ' + totalCount + ' leads shown in this filter? This cannot be undone.')) return
-    const ids = filtered.map(l => l.id)
-    for (let i = 0; i < ids.length; i += 100) {
-      await supabase.from('leads').delete().in('id', ids.slice(i, i + 100))
+    if (!window.confirm('Delete all ' + totalCount + ' leads shown? This cannot be undone.')) return
+    const allIds = []
+    let p = 0
+    while (true) {
+      let q = supabase.from('leads').select('id')
+      if (tab !== 'all') q = q.eq('lead_type', tab)
+      if (filterStatus !== 'All') q = q.eq('status', filterStatus)
+      const { data } = await q.range(p * 500, (p + 1) * 500 - 1)
+      if (!data || data.length === 0) break
+      allIds.push(...data.map(l => l.id))
+      p++
+    }
+    for (let i = 0; i < allIds.length; i += 100) {
+      await supabase.from('leads').delete().in('id', allIds.slice(i, i + 100))
     }
     await fetchLeads()
-    showToast('Leads deleted')
+    showToast(allIds.length + ' leads deleted')
+  }
+
+  async function assignToMe(leadId) {
+    await supabase.from('leads').update({ assigned_to: profile.id }).eq('id', leadId)
+    setLeads(p => p.map(l => l.id === leadId ? { ...l, assigned_to: profile.id } : l))
+    showToast('Assigned to you')
+  }
+
+  async function unassignLead(leadId) {
+    await supabase.from('leads').update({ assigned_to: null }).eq('id', leadId)
+    setLeads(p => p.map(l => l.id === leadId ? { ...l, assigned_to: null } : l))
+    showToast('Unassigned')
   }
 
   // ── Convert lead to client ─────────────────────────────────
@@ -575,11 +597,29 @@ export default function Leads() {
 
         {/* Actions */}
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <select value={l.status} onChange={e => updateStatus(l.id, e.target.value)}
-              style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '3px 6px', fontSize: 11, cursor: 'pointer' }}>
+              style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6, color: '#1F2937', padding: '3px 6px', fontSize: 11, cursor: 'pointer' }}>
               {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {!l.assigned_to && (
+              <button onClick={e => { e.stopPropagation(); assignToMe(l.id) }}
+                style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Claim
+              </button>
+            )}
+            {l.assigned_to === profile?.id && (
+              <button onClick={e => { e.stopPropagation(); unassignLead(l.id) }}
+                style={{ background: '#F5F7FA', color: '#6B7280', border: '1px solid #E5E7EB', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Release
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }}
+                style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
+                ✕
+              </button>
+            )}
           </div>
         </td>
       </tr>
