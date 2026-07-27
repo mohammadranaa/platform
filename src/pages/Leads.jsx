@@ -207,6 +207,24 @@ export default function Leads() {
     }
   }
 
+  async function deleteLead(leadId) {
+    if (!window.confirm('Delete this lead? This cannot be undone.')) return
+    await supabase.from('leads').delete().eq('id', leadId)
+    await fetchLeads()
+    showToast('Lead deleted')
+  }
+
+  async function deleteAllFiltered() {
+    const count = filtered.length
+    if (!window.confirm('Delete all ' + count + ' leads currently shown? This cannot be undone.')) return
+    const ids = filtered.map(l => l.id)
+    for (let i = 0; i < ids.length; i += 100) {
+      await supabase.from('leads').delete().in('id', ids.slice(i, i + 100))
+    }
+    await fetchLeads()
+    showToast(count + ' leads deleted')
+  }
+
   // ── Convert lead to client ─────────────────────────────────
   async function convertToClient(lead) {
     if (!lead) return
@@ -597,6 +615,7 @@ export default function Leads() {
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{totalCount} found · page {page + 1} of {totalPages || 1}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {isAdmin && <Btn small variant="danger" onClick={deleteAllFiltered}>🗑 Delete Shown</Btn>}
           {isAdmin && <Btn small variant="ghost" onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>}
           <Btn small onClick={() => setShowAdd(true)}>+ Add Lead</Btn>
         </div>
