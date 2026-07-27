@@ -47,7 +47,10 @@
       "Bash(sed -n '/create table public.rep_activities/,/^\\);/p' supabase/migrations/07_leads_clients_restructure.sql)",
       "Bash(sed -n '/create table public.client_activities/,/^\\);/p' supabase/migrations/03_jobs.sql)",
       "Bash(supabase functions *)",
-      "Bash(supabase secrets *)"
+      "Bash(supabase secrets *)",
+      "Bash(rm -rf mlc-fixes-complete)",
+      "Bash(unzip -o -q ~/Downloads/mlc-fixes-complete.zip -d mlc-fixes-complete)",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-mohammadrana-Desktop-platform/0b21580d-ea1c-4205-aa37-45064ca98109/scratchpad)"
     ]
   }
 }
