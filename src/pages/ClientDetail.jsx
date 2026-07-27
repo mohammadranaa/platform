@@ -147,6 +147,18 @@ export default function ClientDetail() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Btn variant="ghost" small onClick={() => navigate('/clients')}>← Clients</Btn>
             <span style={{ background: tm.bg, color: tm.color, border: `1px solid ${tm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{client.client_type}</span>
+            {isAdmin && (
+              <select value={client.client_type || 'Landlord'}
+                onChange={async e => {
+                  await supabase.from('clients').update({ client_type: e.target.value }).eq('id', id)
+                  setClient(p => ({ ...p, client_type: e.target.value }))
+                }}
+                style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>
+                <option value="Landlord">Landlord</option>
+                <option value="Estate Agent">Estate Agent</option>
+                <option value="Other">Other</option>
+              </select>
+            )}
             <span style={{ background: client.is_active !== false ? C.greenSoft : C.redSoft, color: client.is_active !== false ? C.greenDark : C.red, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600 }}>
               {client.is_active !== false ? 'Active' : 'Inactive'}
             </span>
