@@ -9,22 +9,25 @@ const C = {
   green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
   red: '#DC2626', redSoft: '#FEE2E2',
+  purple: '#7C3AED', purpleSoft: '#EDE9FE',
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const TABS = ['All', 'Inbox', 'Sent', 'Replied', 'Bounced']
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
+const REDIRECT_URI = `${window.location.origin}/inbox/oauth-callback`
 
-const ACCOUNT_COLORS = [
-  '#0093DB', '#80D100', '#D97706', '#7C3AED', '#0D9488', '#DC2626',
-]
+const ACCOUNT_COLORS = ['#0093DB', '#80D100', '#D97706', '#7C3AED', '#0D9488', '#DC2626', '#EC4899', '#8B5CF6']
 
 export default function ColdInbox() {
   const { profile, isAdmin } = useAuth()
   const { toast, showToast } = useToast()
 
   const [accounts, setAccounts]   = useState([])
-  const [emails, setEmails]       = useState([])
+  const [messages, setMessages]   = useState([])
   const [loading, setLoading]     = useState(true)
+  const [fetching, setFetching]   = useState(false)
   const [tab, setTab]             = useState('All')
   const [search, setSearch]       = useState('')
   const [filterAccount, setFilterAccount] = useState('all')
@@ -32,238 +35,336 @@ export default function ColdInbox() {
 
   useEffect(() => { fetchAll() }, [])
 
+  // Handle OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const accountType = localStorage.getItem('oauth_account_type') || 'cold'
+    if (code) {
+      handleOAuthCallback(code, accountType)
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+      localStorage.removeItem('oauth_account_type')
+    }
+  }, [])
+
   async function fetchAll() {
     setLoading(true)
-    // Get all cold inboxes (SMTP accounts used for cold outreach)
-    const { data: inboxes } = await supabase
-      .from('inboxes')
-      .select('id, label, email, is_active, sent_today, warmup_start_limit')
-      .order('created_at')
-
-    setAccounts(inboxes || [])
-
-    // Get all email sends from campaigns
-    const { data: sends } = await supabase
-      .from('email_sends')
-      .select(`
-        id, subject, status, sent_at, open_count, click_count,
-        campaign_contacts(email, first_name, last_name, company),
-        campaigns(name, from_name)
-      `)
-      .order('sent_at', { ascending: false })
-      .limit(200)
-
-    setEmails(sends || [])
+    const [{ data: accs }, { data: msgs }] = await Promise.all([
+      supabase.from('user_email_accounts').select('*').eq('account_type', 'cold').eq('is_active', true).order('connected_at'),
+      supabase.from('gmail_messages').select('*, user_email_accounts(gmail_address, display_name)')
+        .order('date', { ascending: false }).limit(200),
+    ])
+    setAccounts(accs || [])
+    // Only show messages from cold accounts
+    const coldIds = new Set((accs || []).map(a => a.id))
+    setMessages((msgs || []).filter(m => coldIds.has(m.account_id)))
     setLoading(false)
   }
 
-  const filtered = emails.filter(e => {
-    if (tab === 'Inbox' || tab === 'Replied') return e.status === 'replied'
-    if (tab === 'Sent') return ['sent','opened','clicked'].includes(e.status)
-    if (tab === 'Bounced') return e.status === 'bounced'
-    return true
-  }).filter(e => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    const contact = e.campaign_contacts
-    return (contact?.email || '').toLowerCase().includes(q) ||
-           (contact?.first_name || '').toLowerCase().includes(q) ||
-           (contact?.company || '').toLowerCase().includes(q) ||
-           (e.subject || '').toLowerCase().includes(q)
-  })
+  function connectAccount() {
+    if (!GOOGLE_CLIENT_ID) {
+      showToast('Google Client ID not configured. Add VITE_GOOGLE_CLIENT_ID to Vercel env vars.', 'error')
+      return
+    }
+    localStorage.setItem('oauth_account_type', 'cold')
+    const scopes = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify'
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`
+    window.location.href = url
+  }
+
+  async function handleOAuthCallback(code, accountType) {
+    showToast('Connecting Gmail account…')
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-oauth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          redirect_uri: REDIRECT_URI,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          user_id: profile?.id,
+          account_type: accountType,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(`✓ ${data.email} connected`)
+        await fetchAll()
+      } else {
+        showToast('Connection failed: ' + (data.error || 'Unknown error'), 'error')
+      }
+    } catch (err) {
+      showToast('Connection failed: ' + err.message, 'error')
+    }
+  }
+
+  async function fetchNewEmails() {
+    setFetching(true)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_type: 'cold',
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          max_results: 30,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        showToast(`✓ ${data.new_messages} new emails from ${data.accounts} accounts`)
+        await fetchAll()
+      } else {
+        showToast('Fetch failed', 'error')
+      }
+    } catch (err) {
+      showToast('Fetch error: ' + err.message, 'error')
+    }
+    setFetching(false)
+  }
+
+  async function disconnectAccount(id) {
+    if (!window.confirm('Disconnect this account?')) return
+    await supabase.from('user_email_accounts').update({ is_active: false }).eq('id', id)
+    setAccounts(p => p.filter(a => a.id !== id))
+    showToast('Account disconnected')
+  }
+
+  // Filtering
+  const filtered = messages
+    .filter(m => {
+      if (tab === 'Replies') return m.is_reply
+      if (tab === 'Sent') return !m.is_reply
+      if (tab === 'Unread') return !m.is_read
+      return true
+    })
+    .filter(m => filterAccount === 'all' || m.account_id === filterAccount)
+    .filter(m => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      return (m.from_email || '').toLowerCase().includes(q) ||
+             (m.from_name || '').toLowerCase().includes(q) ||
+             (m.subject || '').toLowerCase().includes(q) ||
+             (m.snippet || '').toLowerCase().includes(q)
+    })
 
   const stats = {
-    total:    emails.length,
-    sent:     emails.filter(e => ['sent','opened','clicked','replied'].includes(e.status)).length,
-    opened:   emails.filter(e => e.open_count > 0).length,
-    replied:  emails.filter(e => e.status === 'replied').length,
-    bounced:  emails.filter(e => e.status === 'bounced').length,
-  }
-  const openRate   = stats.sent > 0 ? Math.round((stats.opened  / stats.sent) * 100) : 0
-  const replyRate  = stats.sent > 0 ? Math.round((stats.replied / stats.sent) * 100) : 0
-
-  const statusColor = s => ({
-    sent:    { bg: C.surface,   color: C.muted },
-    opened:  { bg: C.accentSoft, color: C.accent },
-    clicked: { bg: C.accentSoft, color: C.accent },
-    replied: { bg: C.greenSoft,  color: C.greenDark },
-    bounced: { bg: C.redSoft,    color: C.red },
-    failed:  { bg: C.redSoft,    color: C.red },
-  }[s] || { bg: C.surface, color: C.muted })
-
-  const contactName = e => {
-    const c = e.campaign_contacts
-    if (!c) return '—'
-    return `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.company || c.email || '—'
+    total:   messages.length,
+    replies: messages.filter(m => m.is_reply).length,
+    unread:  messages.filter(m => !m.is_read).length,
+    sent:    messages.filter(m => !m.is_reply).length,
   }
 
-  const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13, width: '100%' }
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'
+  const getAccountColor = (accId) => {
+    const idx = accounts.findIndex(a => a.id === accId)
+    return ACCOUNT_COLORS[idx % ACCOUNT_COLORS.length]
+  }
+
   const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
   const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 13, verticalAlign: 'middle' }
+  const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 12px', fontSize: 13 }
 
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Cold Inbox</h1>
-        <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
-          All {accounts.length} cold accounts combined · {stats.total} total emails
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>Cold Inbox</h1>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
+            {accounts.length} account{accounts.length !== 1 ? 's' : ''} connected · {messages.length} emails
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={fetchNewEmails} disabled={fetching || accounts.length === 0}
+            style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: fetching ? 0.7 : 1 }}>
+            {fetching ? '⏳ Fetching…' : '🔄 Fetch New Emails'}
+          </button>
+          {isAdmin && (
+            <button onClick={connectAccount}
+              style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              + Connect Gmail Account
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Account pills */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {accounts.map((acc, i) => (
-          <div key={acc.id} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: '#fff', border: `1px solid ${C.border}`,
-            borderLeft: `4px solid ${ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]}`,
-            borderRadius: 8, padding: '8px 14px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          }}>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{acc.label || acc.email}</div>
-              <div style={{ fontSize: 11, color: C.muted }}>{acc.email}</div>
-            </div>
-            <span style={{
-              background: acc.is_active ? C.greenSoft : C.surface,
-              color: acc.is_active ? C.greenDark : C.muted,
-              borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700,
-            }}>
-              {acc.is_active ? `${acc.sent_today || 0}/${acc.warmup_start_limit || 10} today` : 'Paused'}
-            </span>
+      {/* No accounts connected state */}
+      {!loading && accounts.length === 0 && (
+        <div style={{ background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 12, padding: 24, marginBottom: 20, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📨</div>
+          <div style={{ fontWeight: 700, color: C.text, fontSize: 16, marginBottom: 8 }}>No cold email accounts connected</div>
+          <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>
+            Connect your @trymylandlordcertificate.com Gmail accounts to see sent emails and replies.
           </div>
-        ))}
+          {isAdmin && (
+            <button onClick={connectAccount}
+              style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              Connect First Account →
+            </button>
+          )}
+          {!isAdmin && <div style={{ color: C.dim, fontSize: 13 }}>Ask your admin to connect the cold email accounts.</div>}
+        </div>
+      )}
 
-        {accounts.length === 0 && (
-          <div style={{ color: C.muted, fontSize: 13, padding: '8px 0' }}>
-            No cold inboxes connected yet. Add them in SMTP Inboxes →
-          </div>
-        )}
-      </div>
+      {/* Connected accounts */}
+      {accounts.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {accounts.map((acc, i) => (
+            <div key={acc.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: '#fff', border: `1px solid ${C.border}`,
+              borderLeft: `4px solid ${ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]}`,
+              borderRadius: 8, padding: '6px 12px',
+            }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{acc.gmail_address}</div>
+                <div style={{ fontSize: 10, color: C.dim }}>Connected {acc.connected_at ? new Date(acc.connected_at).toLocaleDateString('en-GB') : ''}</div>
+              </div>
+              <span style={{ background: C.greenSoft, color: C.greenDark, borderRadius: 20, padding: '2px 6px', fontSize: 9, fontWeight: 700 }}>Active</span>
+              {isAdmin && (
+                <button onClick={() => disconnectAccount(acc.id)}
+                  style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14, marginLeft: 4 }}>✕</button>
+              )}
+            </div>
+          ))}
+          {isAdmin && accounts.length < 8 && (
+            <button onClick={connectAccount}
+              style={{ border: `2px dashed ${C.border}`, background: 'none', borderRadius: 8, padding: '6px 16px', color: C.dim, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+              + Add Account
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Total Sent',   value: stats.sent,            color: C.text   },
-          { label: 'Opened',       value: `${stats.opened} (${openRate}%)`,  color: C.accent },
-          { label: 'Replied',      value: `${stats.replied} (${replyRate}%)`, color: C.greenDark },
-          { label: 'Bounced',      value: stats.bounced,          color: C.red    },
-        ].map(s => (
-          <div key={s.label} style={{ background: '#fff', border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 12, padding: '14px 18px', flex: 1, minWidth: 110, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
-            <div style={{ color: s.color, fontSize: 20, fontWeight: 800 }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Important notice about external emails */}
-      <div style={{ background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: C.text }}>
-        <strong style={{ color: C.amber }}>📌 Note on external emails:</strong> Emails sent directly from Gmail
-        (not through this platform) will appear here once each Gmail account is connected via Google OAuth
-        in the <strong>Email Inbox</strong> section. All replies — including to emails sent before connecting —
-        will be visible immediately after connecting.
-      </div>
-
-      {/* Tabs + search */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: tab === t ? 700 : 400, background: tab === t ? '#fff' : 'transparent', color: tab === t ? C.accent : C.muted }}>
-              {t}
-              {t === 'Replied' && stats.replied > 0 && (
-                <span style={{ background: C.greenSoft, color: C.greenDark, borderRadius: 20, padding: '1px 6px', fontSize: 10, fontWeight: 700, marginLeft: 5 }}>{stats.replied}</span>
-              )}
-            </button>
+      {accounts.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total Emails', value: stats.total,   color: C.text },
+            { label: 'Replies',      value: stats.replies,  color: C.greenDark },
+            { label: 'Unread',       value: stats.unread,   color: C.red },
+            { label: 'Sent',         value: stats.sent,     color: C.accent },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#fff', border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: '12px 18px', flex: 1, minWidth: 100, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
+              <div style={{ color: s.color, fontSize: 20, fontWeight: 800 }}>{s.value}</div>
+            </div>
           ))}
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search contact, email, subject…"
-          style={{ ...inp, flex: 1, minWidth: 200 }} />
-      </div>
+      )}
+
+      {/* Tabs + filters */}
+      {accounts.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4 }}>
+            {['All', 'Replies', 'Sent', 'Unread'].map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                style={{ padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: tab === t ? 700 : 400, background: tab === t ? '#fff' : 'transparent', color: tab === t ? C.accent : C.muted }}>
+                {t} {t === 'Replies' && stats.replies > 0 && <span style={{ background: C.greenSoft, color: C.greenDark, borderRadius: 20, padding: '1px 5px', fontSize: 10, fontWeight: 700, marginLeft: 3 }}>{stats.replies}</span>}
+                {t === 'Unread' && stats.unread > 0 && <span style={{ background: C.redSoft, color: C.red, borderRadius: 20, padding: '1px 5px', fontSize: 10, fontWeight: 700, marginLeft: 3 }}>{stats.unread}</span>}
+              </button>
+            ))}
+          </div>
+          <select value={filterAccount} onChange={e => setFilterAccount(e.target.value)} style={{ ...inp, width: 'auto' }}>
+            <option value="all">All Accounts</option>
+            {accounts.map(a => <option key={a.id} value={a.id}>{a.gmail_address}</option>)}
+          </select>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search emails…"
+            style={{ ...inp, flex: 1, minWidth: 180 }} />
+        </div>
+      )}
 
       {/* Email list */}
-      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        {loading ? (
-          <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>Loading emails…</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>
-            {emails.length === 0
-              ? 'No emails sent yet. Create a campaign to start sending.'
-              : 'No emails match this filter.'}
-          </div>
-        ) : (
-          <>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {['Contact', 'Email', 'Subject', 'Campaign', 'Status', 'Opens', 'Sent'].map(h => (
-                    <th key={h} style={th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(e => {
-                  const sc = statusColor(e.status)
-                  return (
-                    <tr key={e.id}
-                      onClick={() => setSelected(selected?.id === e.id ? null : e)}
-                      style={{ cursor: 'pointer' }}
-                      onMouseEnter={ev => ev.currentTarget.style.background = C.surface}
-                      onMouseLeave={ev => ev.currentTarget.style.background = '#fff'}>
-                      <td style={td}>
-                        <div style={{ fontWeight: 600, color: C.text }}>{contactName(e)}</div>
-                        {e.campaign_contacts?.company && (
-                          <div style={{ fontSize: 11, color: C.muted }}>{e.campaign_contacts.company}</div>
-                        )}
-                      </td>
-                      <td style={td}><span style={{ color: C.muted, fontSize: 12 }}>{e.campaign_contacts?.email || '—'}</span></td>
-                      <td style={td}><span style={{ color: C.text, fontSize: 13 }}>{e.subject || '—'}</span></td>
-                      <td style={td}><span style={{ color: C.muted, fontSize: 12 }}>{e.campaigns?.name || '—'}</span></td>
-                      <td style={td}>
-                        <span style={{ background: sc.bg, color: sc.color, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
-                          {e.status}
-                        </span>
-                      </td>
-                      <td style={td}>
-                        <span style={{ color: e.open_count > 0 ? C.accent : C.dim, fontWeight: e.open_count > 0 ? 700 : 400 }}>
-                          {e.open_count || 0}
-                        </span>
-                      </td>
-                      <td style={td}>
-                        <span style={{ color: C.dim, fontSize: 12 }}>
-                          {e.sent_at ? new Date(e.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {accounts.length > 0 && (
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          {loading ? (
+            <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>Loading…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 48, textAlign: 'center', color: C.muted }}>
+              {messages.length === 0 ? 'No emails yet. Click "Fetch New Emails" to pull from Gmail.' : 'No emails match this filter.'}
+            </div>
+          ) : (
+            <div>
+              {filtered.map(msg => (
+                <div key={msg.id}
+                  onClick={() => setSelected(selected?.id === msg.id ? null : msg)}
+                  style={{
+                    display: 'flex', gap: 12, padding: '12px 16px',
+                    borderBottom: `1px solid ${C.border}`,
+                    background: selected?.id === msg.id ? C.accentSoft : msg.is_read ? '#fff' : '#FAFBFF',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={e => { if (selected?.id !== msg.id) e.currentTarget.style.background = C.surface }}
+                  onMouseLeave={e => { if (selected?.id !== msg.id) e.currentTarget.style.background = msg.is_read ? '#fff' : '#FAFBFF' }}>
 
-            {/* Expanded email detail */}
-            {selected && (
-              <div style={{ padding: 20, background: C.surface, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>{selected.subject}</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-                      To: {selected.campaign_contacts?.email} · {selected.sent_at ? new Date(selected.sent_at).toLocaleString('en-GB') : '—'}
+                  {/* Account color dot */}
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: getAccountColor(msg.account_id), flexShrink: 0, marginTop: 6 }} />
+
+                  {/* Reply indicator */}
+                  <div style={{ width: 20, flexShrink: 0, marginTop: 2 }}>
+                    {msg.is_reply && <span style={{ color: C.greenDark, fontSize: 14, fontWeight: 700 }}>↩</span>}
+                  </div>
+
+                  {/* From */}
+                  <div style={{ width: 180, flexShrink: 0 }}>
+                    <div style={{ fontWeight: msg.is_read ? 400 : 700, color: C.text, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {msg.from_name || msg.from_email}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {msg.user_email_accounts?.gmail_address || ''}
                     </div>
                   </div>
-                  <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 18 }}>✕</button>
+
+                  {/* Subject + snippet */}
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontWeight: msg.is_read ? 400 : 600, color: C.text, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {msg.subject || '(No subject)'}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {msg.snippet}
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div style={{ width: 100, flexShrink: 0, textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: C.dim }}>{fmtDate(msg.date)}</div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 20, fontSize: 13, color: C.muted }}>
-                  <span>📬 Opens: <strong style={{ color: C.text }}>{selected.open_count || 0}</strong></span>
-                  <span>🖱 Clicks: <strong style={{ color: C.text }}>{selected.click_count || 0}</strong></span>
-                  <span>📅 Opened: <strong style={{ color: C.text }}>{selected.opened_at ? new Date(selected.opened_at).toLocaleString('en-GB') : 'Not yet'}</strong></span>
-                  <span>↩ Replied: <strong style={{ color: C.text }}>{selected.replied_at ? new Date(selected.replied_at).toLocaleString('en-GB') : 'Not yet'}</strong></span>
-                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Expanded email */}
+      {selected && (
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, marginTop: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>{selected.subject || '(No subject)'}</div>
+              <div style={{ fontSize: 13, color: C.muted }}>
+                From: <strong>{selected.from_name || selected.from_email}</strong> {'<'}{selected.from_email}{'>'}
               </div>
-            )}
-          </>
-        )}
-      </div>
+              <div style={{ fontSize: 13, color: C.muted }}>To: {selected.to_email}</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>{selected.date ? new Date(selected.date).toLocaleString('en-GB') : '—'}</div>
+            </div>
+            <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 20 }}>✕</button>
+          </div>
+          <div style={{ fontSize: 14, color: C.text, lineHeight: 1.7, whiteSpace: 'pre-wrap', padding: '16px 0', borderTop: `1px solid ${C.border}` }}>
+            {selected.snippet || 'No preview available. Open in Gmail for full content.'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <a href={`https://mail.google.com/mail/u/0/#inbox/${selected.gmail_id}`} target="_blank" rel="noreferrer"
+              style={{ background: C.accent, color: '#fff', borderRadius: 8, padding: '8px 16px', fontWeight: 600, fontSize: 13, textDecoration: 'none' }}>
+              Open in Gmail →
+            </a>
+          </div>
+        </div>
+      )}
 
       <Toast toast={toast} />
     </div>
