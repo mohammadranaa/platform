@@ -21,6 +21,7 @@ import LeadDetail from './pages/LeadDetail'
 import ColdInbox from './pages/ColdInbox'
 import CalendarView from './pages/CalendarView'
 import NuacomDialer from './pages/NuacomDialer'
+import OAuthCallback from './pages/OAuthCallback'
 import './index.css'
 
 function ProtectedRoute({ children }) {
@@ -54,6 +55,7 @@ function App() {
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="inbox" element={<EmailInbox />} />
+            <Route path="inbox/oauth-callback" element={<OAuthCallback />} />
             <Route path="templates" element={<Templates />} />
             <Route path="invoices/new" element={<DocumentGenerator />} />
             <Route path="invoices" element={<Invoices />} />
