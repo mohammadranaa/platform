@@ -55,6 +55,8 @@ export default function Clients() {
   const [search, setSearch]       = useState('')
   const [filterType, setFilterType]       = useState('All')
   const [filterActive, setFilterActive]   = useState('Active')
+  const [sortField, setSortField]         = useState('created_at')
+  const [sortDirection, setSortDirection] = useState('desc')
   const [showAdd, setShowAdd]     = useState(false)
   const [showFromLead, setShowFromLead]   = useState(false)
   const [selectedLead, setSelectedLead]   = useState('')
@@ -146,15 +148,43 @@ export default function Clients() {
   const leadName = l => l.inbound_name || l.company_name || l.cold_company_name || `${l.contact_first || ''} ${l.contact_last || ''}`.trim() || '—'
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
 
-  const filtered = useMemo(() => clients
-    .filter(c => filterType === 'All' || c.client_type === filterType)
-    .filter(c => filterActive === 'All' || (filterActive === 'Active' ? c.is_active !== false : c.is_active === false))
-    .filter(c => {
-      if (!search) return true
-      const q = search.toLowerCase()
-      return clientName(c).toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q)
+  function toggleSort(field) {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortArrow = field => sortField !== field ? '' : sortDirection === 'asc' ? ' ▲' : ' ▼'
+
+  const filtered = useMemo(() => {
+    const rows = clients
+      .filter(c => filterType === 'All' || c.client_type === filterType)
+      .filter(c => filterActive === 'All' || (filterActive === 'Active' ? c.is_active !== false : c.is_active === false))
+      .filter(c => {
+        if (!search) return true
+        const q = search.toLowerCase()
+        return clientName(c).toLowerCase().includes(q) || c.email?.toLowerCase().includes(q) || c.phone?.includes(q)
+      })
+
+    const dir = sortDirection === 'asc' ? 1 : -1
+    const getValue = c => {
+      switch (sortField) {
+        case 'name':         return clientName(c).toLowerCase()
+        case 'client_type':  return c.client_type || ''
+        case 'created_at':   return c.created_at || ''
+        default:             return ''
+      }
+    }
+    return [...rows].sort((a, b) => {
+      const av = getValue(a), bv = getValue(b)
+      if (av < bv) return -1 * dir
+      if (av > bv) return 1 * dir
+      return 0
     })
-  , [clients, filterType, filterActive, search])
+  }, [clients, filterType, filterActive, search, sortField, sortDirection])
 
   const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
   const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 14, verticalAlign: 'middle' }
@@ -200,7 +230,19 @@ export default function Clients() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['Client','Type','Status','Email','Phone','Jobs','Revenue','Rep','Actions'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+              <tr>
+                {[
+                  { label: 'Client', field: 'name' },
+                  { label: 'Type',   field: 'client_type' },
+                  { label: 'Status' }, { label: 'Email' }, { label: 'Phone' },
+                  { label: 'Jobs' }, { label: 'Revenue' }, { label: 'Rep' }, { label: 'Actions' },
+                ].map(h => (
+                  <th key={h.label} style={h.field ? { ...th, cursor: 'pointer', userSelect: 'none' } : th}
+                    onClick={h.field ? () => toggleSort(h.field) : undefined}>
+                    {h.label}{h.field ? sortArrow(h.field) : ''}
+                  </th>
+                ))}
+              </tr>
             </thead>
             <tbody>
               {filtered.map(c => {

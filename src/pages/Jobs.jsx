@@ -61,6 +61,8 @@ export default function Jobs() {
   const [filterBDL, setFilterBDL]           = useState('All')
   const [search, setSearch]                 = useState('')
   const [showNew, setShowNew]               = useState(false)
+  const [sortField, setSortField]           = useState('created_at')
+  const [sortDirection, setSortDirection]   = useState('desc')
 
   const blankJob = {
     title: '', service_types: [], priority: 'Medium', assigned_to: '',
@@ -79,7 +81,7 @@ export default function Jobs() {
     setLoading(true)
     const [{ data: j }, { data: c }, { data: e }] = await Promise.all([
       (() => {
-        let q = supabase.from('jobs').select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, payment_amount, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, clients(first_name, last_name, company_name), profiles(full_name)').order('created_at', { ascending: false })
+        let q = supabase.from('jobs').select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, payment_amount, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at, clients(first_name, last_name, company_name), profiles(full_name)').order('created_at', { ascending: false })
         if (!isAdmin) q = q.eq('assigned_to', profile?.id)
         return q
       })(),
@@ -136,16 +138,48 @@ export default function Jobs() {
   const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || '—'
   const lineTotal = lineItems.reduce((s, l) => s + (Number(l.quantity) * Number(l.unit_price || 0)), 0)
 
-  const filtered = useMemo(() => jobs
-    .filter(j => filterStatus === 'All' || j.status === filterStatus)
-    .filter(j => filterEngineer === 'All' || j.assigned_to === filterEngineer)
-    .filter(j => filterBDL === 'All' || j.assigned_to === filterBDL)
-    .filter(j => {
-      if (!search) return true
-      const q = search.toLowerCase()
-      return j.title?.toLowerCase().includes(q) || j.job_number?.toLowerCase().includes(q) || clientName(j.clients)?.toLowerCase().includes(q) || (j.engineer_name || '').toLowerCase().includes(q)
+  function toggleSort(field) {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortArrow = field => sortField !== field ? '' : sortDirection === 'asc' ? ' ▲' : ' ▼'
+
+  const filtered = useMemo(() => {
+    const rows = jobs
+      .filter(j => filterStatus === 'All' || j.status === filterStatus)
+      .filter(j => filterEngineer === 'All' || j.assigned_to === filterEngineer)
+      .filter(j => filterBDL === 'All' || j.assigned_to === filterBDL)
+      .filter(j => {
+        if (!search) return true
+        const q = search.toLowerCase()
+        return j.title?.toLowerCase().includes(q) || j.job_number?.toLowerCase().includes(q) || clientName(j.clients)?.toLowerCase().includes(q) || (j.engineer_name || '').toLowerCase().includes(q)
+      })
+
+    const dir = sortDirection === 'asc' ? 1 : -1
+    const getValue = j => {
+      switch (sortField) {
+        case 'client_name':      return clientName(j.clients)?.toLowerCase() || ''
+        case 'job_number':       return j.job_number || ''
+        case 'scheduled_date':   return j.scheduled_date || ''
+        case 'status':           return j.status || ''
+        case 'amount_received':  return Number(j.amount_received || 0)
+        case 'gross_profit':     return Number(j.gross_profit || 0)
+        case 'created_at':       return j.created_at || ''
+        default:                 return ''
+      }
+    }
+    return [...rows].sort((a, b) => {
+      const av = getValue(a), bv = getValue(b)
+      if (av < bv) return -1 * dir
+      if (av > bv) return 1 * dir
+      return 0
     })
-  , [jobs, filterStatus, filterEngineer, filterBDL, search])
+  }, [jobs, filterStatus, filterEngineer, filterBDL, search, sortField, sortDirection])
 
   // BDL revenue summary
   const bdlSummary = useMemo(() => {
@@ -262,8 +296,29 @@ export default function Jobs() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1400 }}>
               <thead>
                 <tr>
-                  {['Job #','Date','Client','Service','Assigned BDL','Detail','Status','Amt Received','Payment','Work Done','Cert Sent','Cert Status','Remedial Sent','Google Review','Engineer','Eng. Paid','Gross Profit'].map(h => (
-                    <th key={h} style={th}>{h}</th>
+                  {[
+                    { label: 'Job #',          field: 'job_number' },
+                    { label: 'Date',           field: 'scheduled_date' },
+                    { label: 'Client',         field: 'client_name' },
+                    { label: 'Service',        field: null },
+                    { label: 'Assigned BDL',   field: null },
+                    { label: 'Detail',         field: null },
+                    { label: 'Status',         field: 'status' },
+                    { label: 'Amt Received',   field: 'amount_received' },
+                    { label: 'Payment Status', field: null },
+                    { label: 'Work Done',      field: null },
+                    { label: 'Cert Sent',      field: null },
+                    { label: 'Cert Status',    field: null },
+                    { label: 'Remedial Sent',  field: null },
+                    { label: 'Google Review',  field: null },
+                    { label: 'Engineer',       field: null },
+                    { label: 'Eng. Paid',      field: null },
+                    { label: 'Gross Profit',   field: 'gross_profit' },
+                  ].map(h => (
+                    <th key={h.label} style={h.field ? { ...th, cursor: 'pointer', userSelect: 'none' } : th}
+                      onClick={h.field ? () => toggleSort(h.field) : undefined}>
+                      {h.label}{h.field ? sortArrow(h.field) : ''}
+                    </th>
                   ))}
                 </tr>
               </thead>

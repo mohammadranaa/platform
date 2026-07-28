@@ -116,6 +116,8 @@ export default function Leads() {
   const searchTimer = useRef(null)
   const [filterStatus, setFilterStatus] = useState('All')
   const [renewalFilter, setRenewalFilter] = useState('All')
+  const [sortField, setSortField]       = useState('created_at')
+  const [sortDirection, setSortDirection] = useState('desc')
   const [selected, setSelected]   = useState(null) // lead detail panel
   const [showAdd, setShowAdd]     = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -127,7 +129,28 @@ export default function Leads() {
   const [form, setForm]           = useState({ status: 'New', email_verified: 'Unknown' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter])
+  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDirection])
+
+  // "name" isn't a single DB column — it maps to a different field per lead type.
+  // On the "All" tab there's no consistent name column, so fall back to created_at.
+  function resolveSortField() {
+    if (sortField !== 'name') return sortField
+    if (tab === 'inbound')    return 'inbound_name'
+    if (tab === 'verified')   return 'company_name'
+    if (tab === 'cold_agent') return 'cold_company_name'
+    return 'created_at'
+  }
+
+  function toggleSort(field) {
+    if (sortField === field) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortArrow = field => sortField !== field ? '' : sortDirection === 'asc' ? ' ▲' : ' ▼'
 
   async function fetchLeads(p = page) {
     setLoading(true)
@@ -136,7 +159,7 @@ export default function Leads() {
 
     // Build query with server-side filters
     let q = supabase.from('leads').select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
+      .order(resolveSortField(), { ascending: sortDirection === 'asc' })
       .range(from, to)
 
     if (tab !== 'all') q = q.eq('lead_type', tab)
@@ -628,18 +651,23 @@ export default function Leads() {
 
   const renderHeaders = () => {
     const typeSpecific = {
-      inbound:    ['Address','Property','Services','Price','Payment'],
-      verified:   ['Address','Work Done','Last Payment','Renewal Due'],
-      cold_agent: ['Address','Phone','Email Verified','Website'],
+      inbound:    [{ label: 'Address' }, { label: 'Property' }, { label: 'Services' }, { label: 'Price', field: 'total_price' }, { label: 'Payment' }],
+      verified:   [{ label: 'Address' }, { label: 'Work Done' }, { label: 'Last Payment' }, { label: 'Renewal Due' }],
+      cold_agent: [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
     }
     const headers = [
-      'Name',
-      ...(tab === 'all' ? ['Type'] : []),
-      'Email', 'Phone',
+      { label: 'Name', field: 'name' },
+      ...(tab === 'all' ? [{ label: 'Type' }] : []),
+      { label: 'Email' }, { label: 'Phone' },
       ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
-      'Assigned To', 'Status', 'Change Status',
+      { label: 'Assigned To' }, { label: 'Status', field: 'status' }, { label: 'Change Status' },
     ]
-    return headers.map(h => <th key={h} style={th}>{h}</th>)
+    return headers.map(h => (
+      <th key={h.label} style={h.field ? { ...th, cursor: 'pointer', userSelect: 'none' } : th}
+        onClick={h.field ? () => toggleSort(h.field) : undefined}>
+        {h.label}{h.field ? sortArrow(h.field) : ''}
+      </th>
+    ))
   }
 
   return (
