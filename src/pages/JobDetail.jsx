@@ -15,14 +15,16 @@ const C = {
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const JOB_STATUSES = [
-  { key: 'Quote',     color: '#7C3AED', bg: '#EDE9FE', icon: '📋' },
-  { key: 'Scheduled', color: '#0284C7', bg: '#E0F2FE', icon: '📅' },
-  { key: 'Invoiced',  color: '#D97706', bg: '#FEF3C7', icon: '🧾' },
-  { key: 'Paid',      color: '#0093DB', bg: '#E6F4FC', icon: '💰' },
-  { key: 'Completed', color: '#3d7a00', bg: '#F0FAE0', icon: '✅' },
-]
-const STATUS_MAP = Object.fromEntries(JOB_STATUSES.map(s => [s.key, s]))
+const JOB_STATUSES = ['New', 'In Progress', 'Confirmed', 'Completed', 'Declined']
+const STATUS_STYLE = {
+  'New':         { color: '#6B7280', bg: '#F5F7FA' },
+  'In Progress': { color: '#0284C7', bg: '#DBEAFE' },
+  'Confirmed':   { color: C.accent,    bg: C.accentSoft },
+  'Completed':   { color: C.greenDark, bg: C.greenSoft },
+  'Declined':    { color: C.red,       bg: C.redSoft },
+}
+const CERT_STATUSES = ['Not Issued', 'Issued', 'Delivered', 'Passed', 'Failed']
+const PAYMENT_STATUSES = ['Paid', 'Unpaid', 'Partial']
 const DIARY_ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬', status_change: '🔄', system: '⚙️' }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
@@ -76,7 +78,7 @@ export default function JobDetail() {
   const certRef  = useRef()
   const photoRef = useRef()
 
-  useEffect(() => { fetchAll() }, [id])
+  useEffect(() => { if (id) fetchAll() }, [id])
 
   async function fetchAll() {
     setLoading(true)
@@ -85,17 +87,27 @@ export default function JobDetail() {
   }
 
   async function fetchJob() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('jobs')
-      .select('*, clients(*), profiles(full_name, id), job_line_items(*)')
+      .select('*, clients(id, first_name, last_name, company_name, email, phone, street_address), profiles!jobs_assigned_to_fkey(id, full_name), job_line_items(*), job_diary(*), job_files(*)')
       .eq('id', id)
       .single()
-    if (data) {
+    if (error) {
+      console.error('JobDetail fetch error:', error, 'ID:', id)
+      setJob(null)
+    } else {
+      console.log('Job loaded:', data?.job_number)
       setJob(data)
       setClient(data.clients)
       setLineItems(data.job_line_items || [])
       setRemarksText(data.engineer_remarks || '')
     }
+  }
+
+  async function saveField(field, value) {
+    await supabase.from('jobs').update({ [field]: value }).eq('id', id)
+    setJob(p => ({ ...p, [field]: value }))
+    showToast('Saved ✓')
   }
 
   async function fetchDiary() {
@@ -196,16 +208,10 @@ export default function JobDetail() {
   // ── Update status ────────────────────────────────────────────
   async function updateStatus(status) {
     setSaving(true)
-    const updates = {
-      status,
-      ...(status === 'Completed' && !job.completed_date ? { completed_date: new Date().toISOString().slice(0, 10) } : {}),
-      ...(status === 'Invoiced' ? { invoice_number: job.invoice_number || `INV-${job.job_number}`, invoice_sent_date: new Date().toISOString().slice(0, 10), invoice_amount: lineItems.reduce((s, l) => s + (l.total || l.quantity * l.unit_price), 0) } : {}),
-      ...(status === 'Paid' ? { paid_date: new Date().toISOString().slice(0, 10), payment_status: 'Paid', payment_amount: lineItems.reduce((s, l) => s + (l.total || l.quantity * l.unit_price), 0) } : {}),
-    }
-    await supabase.from('jobs').update(updates).eq('id', id)
+    await supabase.from('jobs').update({ status }).eq('id', id)
     await supabase.from('job_diary').insert({ job_id: id, author_id: profile.id, author_name: profile.full_name, entry_type: 'status_change', content: `Status changed to "${status}"` })
     setSaving(false)
-    setJob(p => ({ ...p, ...updates }))
+    setJob(p => ({ ...p, status }))
     await fetchDiary()
     showToast(`Status → ${status}`)
   }
@@ -241,7 +247,7 @@ export default function JobDetail() {
   if (loading) return <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>Loading job…</div>
   if (!job)    return <div style={{ color: C.red,   padding: 40, textAlign: 'center' }}>Job not found.</div>
 
-  const sm = STATUS_MAP[job.status] || { color: C.muted, bg: C.surface, icon: '?' }
+  const sm = STATUS_STYLE[job.status] || { color: C.muted, bg: C.surface }
 
   return (
     <div>
@@ -256,7 +262,7 @@ export default function JobDetail() {
             <Btn variant="ghost" small onClick={() => navigate('/jobs')}>← Jobs</Btn>
             <span style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>{job.job_number}</span>
             <span style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}33`, borderRadius: 6, padding: '2px 9px', fontSize: 12, fontWeight: 600 }}>
-              {sm.icon} {job.status}
+              {job.status}
             </span>
             <span style={{ color: { Low: C.dim, Medium: C.amber, High: C.red }[job.priority] || C.muted, fontSize: 12, fontWeight: 600 }}>● {job.priority}</span>
           </div>
@@ -273,36 +279,13 @@ export default function JobDetail() {
         </div>
       </div>
 
-      {/* Status stepper */}
+      {/* Status */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Status — click to change</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
-          {JOB_STATUSES.map((step, i) => {
-            const order = JOB_STATUSES.map(s => s.key)
-            const isActive = job.status === step.key
-            const isDone   = order.indexOf(job.status) > order.indexOf(step.key)
-            return (
-              <div key={step.key} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                <button onClick={() => updateStatus(step.key)} disabled={saving}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 12px',
-                    background: isActive ? step.bg : isDone ? '#F0FAE0' : '#fff',
-                    border: `1px solid ${isActive ? step.color : isDone ? '#80D10044' : C.border}`,
-                    borderRadius: 8, cursor: 'pointer', minWidth: 90 }}>
-                  <span style={{ fontSize: 16 }}>{step.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? step.color : isDone ? C.greenDark : C.dim, whiteSpace: 'nowrap' }}>{step.key}</span>
-                </button>
-                {i < JOB_STATUSES.length - 1 && <div style={{ width: 20, height: 2, background: isDone ? '#80D10066' : C.border, flexShrink: 0 }} />}
-              </div>
-            )
-          })}
-          <div style={{ display: 'flex', alignItems: 'center', marginLeft: 6 }}>
-            <div style={{ width: 20, height: 2, background: C.border }} />
-            <button onClick={() => updateStatus('Cancelled')} disabled={saving}
-              style={{ padding: '8px 12px', background: job.status === 'Cancelled' ? C.redSoft : '#fff', border: `1px solid ${C.red}44`, borderRadius: 8, cursor: 'pointer', color: C.red, fontSize: 12, fontWeight: 600 }}>
-              ✕ Cancel
-            </button>
-          </div>
-        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Job Status</div>
+        <select value={job.status} disabled={saving} onChange={e => updateStatus(e.target.value)}
+          style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
 
       {/* Main grid */}
@@ -340,6 +323,61 @@ export default function JobDetail() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Job Tracking */}
+          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Tracking</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Name</label>
+                <input defaultValue={job.engineer_name || ''} onBlur={e => saveField('engineer_name', e.target.value)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Paid (£)</label>
+                <input type="number" defaultValue={job.engineer_paid_amount || ''} onBlur={e => saveField('engineer_paid_amount', Number(e.target.value) || 0)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Work Done</label>
+                <input defaultValue={job.work_done || ''} onBlur={e => saveField('work_done', e.target.value)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Amount Received (£)</label>
+                <input type="number" defaultValue={job.amount_received || ''} onBlur={e => saveField('amount_received', Number(e.target.value) || 0)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Payment Status</label>
+                <select value={job.payment_status || ''} onChange={e => saveField('payment_status', e.target.value)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }}>
+                  <option value="">—</option>
+                  {PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Certificate Status</label>
+                <select value={job.certificate_status || ''} onChange={e => saveField('certificate_status', e.target.value)}
+                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }}>
+                  <option value="">—</option>
+                  {CERT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+                <input type="checkbox" checked={!!job.certificate_sent} onChange={e => saveField('certificate_sent', e.target.checked)} id="certificate_sent" />
+                <label htmlFor="certificate_sent" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Certificate Sent</label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
+                <input type="checkbox" checked={!!job.remedial_quotation_sent} onChange={e => saveField('remedial_quotation_sent', e.target.checked)} id="remedial_quotation_sent" />
+                <label htmlFor="remedial_quotation_sent" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Remedial Quotation Sent</label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={!!job.google_review_requested} onChange={e => saveField('google_review_requested', e.target.checked)} id="google_review_requested" />
+                <label htmlFor="google_review_requested" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Google Review Requested</label>
+              </div>
             </div>
           </div>
 
