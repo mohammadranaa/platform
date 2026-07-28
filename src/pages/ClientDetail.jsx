@@ -85,7 +85,7 @@ export default function ClientDetail() {
     setLoading(true)
     const [{ data: c }, { data: j }, { data: inv }, { data: p }] = await Promise.all([
       supabase.from('clients').select('*, profiles(full_name)').eq('id', id).single(),
-      supabase.from('jobs').select('id, job_number, title, status, scheduled_date, invoice_amount, payment_status, service_types, profiles(full_name)').eq('client_id', id).order('created_at', { ascending: false }),
+      supabase.from('jobs').select('id, job_number, title, status, scheduled_date, invoice_amount, payment_status, service_types, profiles!jobs_assigned_to_fkey(full_name)').eq('client_id', id).order('created_at', { ascending: false }),
       supabase.from('invoices').select('id, invoice_number, doc_type, total, balance_due, status, created_at').eq('client_id', id).order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
     ])

@@ -117,7 +117,10 @@ export default function Leads() {
   const [filterStatus, setFilterStatus] = useState('All')
   const [renewalFilter, setRenewalFilter] = useState('All')
   const [sortField, setSortField]       = useState('created_at')
-  const [sortDirection, setSortDirection] = useState('desc')
+  const [sortDir, setSortDir]           = useState('desc')
+  const [selectedIds, setSelectedIds]   = useState(new Set())
+  const [bulkAssignTo, setBulkAssignTo] = useState('')
+  const [showBulkBar, setShowBulkBar]   = useState(false)
   const [selected, setSelected]   = useState(null) // lead detail panel
   const [showAdd, setShowAdd]     = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -129,28 +132,7 @@ export default function Leads() {
   const [form, setForm]           = useState({ status: 'New', email_verified: 'Unknown' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDirection])
-
-  // "name" isn't a single DB column — it maps to a different field per lead type.
-  // On the "All" tab there's no consistent name column, so fall back to created_at.
-  function resolveSortField() {
-    if (sortField !== 'name') return sortField
-    if (tab === 'inbound')    return 'inbound_name'
-    if (tab === 'verified')   return 'company_name'
-    if (tab === 'cold_agent') return 'cold_company_name'
-    return 'created_at'
-  }
-
-  function toggleSort(field) {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
-
-  const sortArrow = field => sortField !== field ? '' : sortDirection === 'asc' ? ' ▲' : ' ▼'
+  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir])
 
   async function fetchLeads(p = page) {
     setLoading(true)
@@ -159,7 +141,7 @@ export default function Leads() {
 
     // Build query with server-side filters
     let q = supabase.from('leads').select('*', { count: 'exact' })
-      .order(resolveSortField(), { ascending: sortDirection === 'asc' })
+      .order(sortField === 'name' ? 'inbound_name' : sortField, { ascending: sortDir === 'asc' })
       .range(from, to)
 
     if (tab !== 'all') q = q.eq('lead_type', tab)
@@ -267,6 +249,28 @@ export default function Leads() {
     await supabase.from('leads').update({ assigned_to: null }).eq('id', leadId)
     setLeads(p => p.map(l => l.id === leadId ? { ...l, assigned_to: null } : l))
     showToast('Unassigned')
+  }
+
+  async function bulkAssign() {
+    if (!bulkAssignTo || selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    const { error } = await supabase.from('leads')
+      .update({ assigned_to: bulkAssignTo || null })
+      .in('id', ids)
+    if (error) { showToast(error.message, 'error'); return }
+    showToast(ids.length + ' leads assigned')
+    setSelectedIds(new Set())
+    setBulkAssignTo('')
+    await fetchLeads()
+  }
+
+  async function bulkUnassign() {
+    if (selectedIds.size === 0) return
+    if (!window.confirm('Unassign ' + selectedIds.size + ' leads?')) return
+    await supabase.from('leads').update({ assigned_to: null }).in('id', [...selectedIds])
+    showToast(selectedIds.size + ' leads unassigned')
+    setSelectedIds(new Set())
+    await fetchLeads()
   }
 
   // ── Convert lead to client ─────────────────────────────────
@@ -547,6 +551,15 @@ export default function Leads() {
   const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
   const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 14, verticalAlign: 'middle' }
 
+  function SortTh({ label, field, style: sx }) {
+    return (
+      <th onClick={() => { if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortField(field); setSortDir('asc') } }}
+        style={{ cursor: 'pointer', textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA', color: '#6B7280', userSelect: 'none', whiteSpace: 'nowrap', ...sx }}>
+        {label} {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ color: '#D1D5DB' }}>↕</span>}
+      </th>
+    )
+  }
+
   // ── Render columns per tab ─────────────────────────────────
   const renderRow = (l) => {
     const days = l.renewal_due_date ? Math.floor((new Date(l.renewal_due_date) - new Date()) / 86400000) : null
@@ -556,6 +569,22 @@ export default function Leads() {
       <tr key={l.id}
         onMouseEnter={e => e.currentTarget.style.background = C.surface}
         onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+        {/* Select */}
+        <td style={{ padding: '8px 12px', borderBottom: '1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
+          <input type="checkbox"
+            checked={selectedIds.has(l.id)}
+            onChange={e => {
+              const next = new Set(selectedIds)
+              if (e.target.checked) next.add(l.id)
+              else next.delete(l.id)
+              setSelectedIds(next)
+            }}
+          />
+        </td>
+
+        {/* Date */}
+        <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{l.created_at ? new Date(l.created_at).toLocaleDateString('en-GB') : '—'}</span></td>
+
         {/* Name — clickable */}
         <td style={td}>
           <div style={{ fontWeight: 600, color: C.accent, cursor: 'pointer' }} onClick={() => navigate(`/leads/${l.id}`)}>
@@ -656,18 +685,27 @@ export default function Leads() {
       cold_agent: [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
     }
     const headers = [
+      { label: 'Date', field: 'created_at' },
       { label: 'Name', field: 'name' },
       ...(tab === 'all' ? [{ label: 'Type' }] : []),
       { label: 'Email' }, { label: 'Phone' },
       ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
       { label: 'Assigned To' }, { label: 'Status', field: 'status' }, { label: 'Change Status' },
     ]
-    return headers.map(h => (
-      <th key={h.label} style={h.field ? { ...th, cursor: 'pointer', userSelect: 'none' } : th}
-        onClick={h.field ? () => toggleSort(h.field) : undefined}>
-        {h.label}{h.field ? sortArrow(h.field) : ''}
-      </th>
-    ))
+    return (
+      <>
+        <th style={{ width: 36, padding: '8px 12px', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }}>
+          <input type="checkbox"
+            checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
+            onChange={e => setSelectedIds(e.target.checked ? new Set(filtered.map(l => l.id)) : new Set())}
+          />
+        </th>
+        {headers.map(h => h.field
+          ? <SortTh key={h.label} label={h.label} field={h.field} />
+          : <th key={h.label} style={th}>{h.label}</th>
+        )}
+      </>
+    )
   }
 
   return (
@@ -722,6 +760,28 @@ export default function Leads() {
           </select>
         )}
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: '#E6F4FC', border: '1px solid #0093DB44', borderRadius: 10, marginBottom: 12 }}>
+          <span style={{ fontWeight: 700, color: '#0093DB', fontSize: 13 }}>{selectedIds.size} selected</span>
+          <select value={bulkAssignTo} onChange={e => setBulkAssignTo(e.target.value)}
+            style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6, padding: '5px 10px', fontSize: 13, minWidth: 160 }}>
+            <option value="">— Assign to rep —</option>
+            {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+          <button onClick={bulkAssign} disabled={!bulkAssignTo}
+            style={{ background: '#0093DB', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 16px', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: bulkAssignTo ? 1 : 0.5 }}>
+            ✓ Assign
+          </button>
+          <button onClick={bulkUnassign}
+            style={{ background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB', borderRadius: 7, padding: '6px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            Unassign
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 18, marginLeft: 'auto' }}>✕</button>
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>

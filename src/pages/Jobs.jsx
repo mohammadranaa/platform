@@ -10,20 +10,21 @@ const C = {
   green: '#80D100', greenSoft: '#F0FAE0', greenDark: '#3d7a00',
   amber: '#D97706', amberSoft: '#FEF3C7',
   red: '#DC2626', redSoft: '#FEE2E2',
-  purple: '#7C3AED', purpleSoft: '#EDE9FE',
+  blue: '#0284C7', blueSoft: '#DBEAFE',
   teal: '#0D9488', tealSoft: '#CCFBF1',
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const JOB_STATUSES = [
-  { key: 'New',         color: '#6B7280', bg: '#F5F7FA', icon: '📋' },
-  { key: 'In Progress', color: '#0284C7', bg: '#DBEAFE', icon: '🔧' },
-  { key: 'Confirmed',   color: '#0093DB', bg: '#E6F4FC', icon: '✓'  },
-  { key: 'Completed',   color: '#3d7a00', bg: '#F0FAE0', icon: '✅' },
-  { key: 'Declined',    color: '#DC2626', bg: '#FEE2E2', icon: '✕'  },
-]
-const STATUS_MAP = Object.fromEntries(JOB_STATUSES.map(s => [s.key, s]))
-const MLC_SERVICES = ['EICR','GSC (CP12)','EPC','FRA','FSC','PAT Testing','Remedial Works','Consumer Unit','Diagnostics','Asbestos Survey','Fire Alarm','Boiler Installation','Other']
+const JOB_STATUSES = ['New', 'In Progress', 'Confirmed', 'Completed', 'Declined']
+const MLC_SERVICES = ['EICR', 'GSC (CP12)', 'EPC', 'FRA', 'FSC', 'PAT Testing', 'Remedial Works', 'Consumer Unit', 'Diagnostics', 'Asbestos Survey', 'Fire Alarm', 'Boiler Installation', 'Other']
+
+const STATUS_COLORS = {
+  'New':         { color: C.muted,     bg: C.surface },
+  'In Progress': { color: C.blue,      bg: C.blueSoft },
+  'Confirmed':   { color: C.accent,    bg: C.accentSoft },
+  'Completed':   { color: C.greenDark, bg: C.greenSoft },
+  'Declined':    { color: C.red,       bg: C.redSoft },
+}
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
@@ -45,156 +46,119 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
 const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
 const lbl = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
+const blankJob = {
+  title: '', client_id: '', assigned_to: '', service_types: [],
+  scheduled_date: '', scheduled_slot: '', site_address: '',
+  detail_of_service: '', tenant_name: '', tenant_phone: '', job_source_type: 'inbound',
+}
+
 export default function Jobs() {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
-  const [jobs, setJobs]           = useState([])
-  const [clients, setClients]     = useState([])
-  const [engineers, setEngineers] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [saving, setSaving]       = useState(false)
-  const [viewMode, setViewMode]   = useState('list')
-  const [filterStatus, setFilterStatus]     = useState('All')
-  const [filterEngineer, setFilterEngineer] = useState('All')
-  const [filterBDL, setFilterBDL]           = useState('All')
-  const [search, setSearch]                 = useState('')
-  const [showNew, setShowNew]               = useState(false)
-  const [sortField, setSortField]           = useState('created_at')
-  const [sortDirection, setSortDirection]   = useState('desc')
-
-  const blankJob = {
-    title: '', service_types: [], priority: 'Medium', assigned_to: '',
-    scheduled_date: '', scheduled_slot: '', site_address: '', site_postcode: '',
-    tenant_name: '', tenant_phone: '', access_notes: '', detail_of_service: '',
-    job_source_type: 'inbound', description: '',
-  }
+  const [jobs, setJobs]         = useState([])
+  const [clients, setClients]   = useState([])
+  const [profiles, setProfiles] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+  const [viewMode, setViewMode] = useState('list')
+  const [filterStatus, setFilterStatus] = useState('All')
+  const [search, setSearch]     = useState('')
+  const [showNew, setShowNew]   = useState(false)
+  const [sortField, setSortField] = useState('created_at')
+  const [sortDir, setSortDir]     = useState('desc')
   const [form, setForm] = useState(blankJob)
-  const [lineItems, setLineItems] = useState([
-    { id: 1, description: '', item_type: 'certificate', quantity: 1, unit: 'ea', unit_price: '' },
-  ])
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { fetchAll() }, [profile])
+  useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: j }, { data: c }, { data: e }] = await Promise.all([
-      (() => {
-        let q = supabase.from('jobs').select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, payment_amount, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at, clients(first_name, last_name, company_name), profiles(full_name)').order('created_at', { ascending: false })
-        if (!isAdmin) q = q.eq('assigned_to', profile?.id)
-        return q
-      })(),
-      supabase.from('clients').select('id, first_name, last_name, company_name, street_address, city, postcode').neq('is_active', false).order('company_name'),
-      supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
+    const [{ data: j, error }, { data: c }, { data: p }] = await Promise.all([
+      supabase.from('jobs').select('id, job_number, title, status, priority, scheduled_date, invoice_amount, payment_status, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at, clients(first_name, last_name, company_name), profiles!jobs_assigned_to_fkey(full_name)').order('created_at', { ascending: false }),
+      supabase.from('clients').select('id, first_name, last_name, company_name, street_address, city, postcode').eq('is_active', true).order('company_name'),
+      supabase.from('profiles').select('id, full_name, role').eq('is_active', true)
     ])
+    if (error) console.error('Jobs fetch error:', error)
     setJobs(j || [])
     setClients(c || [])
-    setEngineers(e || [])
+    setProfiles(p || [])
     setLoading(false)
   }
 
   async function createJob() {
-    if (!form.title) { showToast('Job title is required', 'error'); return }
+    if (!form.title) { showToast('Title required', 'error'); return }
     setSaving(true)
-    const lineTotal = lineItems.filter(l => l.description).reduce((s, l) => s + (Number(l.quantity) * Number(l.unit_price || 0)), 0)
     const payload = { title: form.title, source: 'manual' }
-    if (form.client_id)         payload.client_id = form.client_id
-    if (form.assigned_to)       payload.assigned_to = form.assigned_to
-    else                        payload.assigned_to = profile.id
-    if (form.service_types?.length > 0) payload.service_types = form.service_types
-    if (form.priority)          payload.priority = form.priority
-    if (form.site_address)      payload.site_address = form.site_address
-    if (form.site_postcode)     payload.site_postcode = form.site_postcode
-    if (form.scheduled_date)    payload.scheduled_date = form.scheduled_date
-    if (form.scheduled_slot)    payload.scheduled_slot = form.scheduled_slot
-    if (form.tenant_name)       payload.tenant_name = form.tenant_name
-    if (form.tenant_phone)      payload.tenant_phone = form.tenant_phone
-    if (form.access_notes)      payload.access_notes = form.access_notes
+    if (form.client_id) payload.client_id = form.client_id
+    if (form.assigned_to) payload.assigned_to = form.assigned_to
+    else payload.assigned_to = profile.id
+    if (form.service_types?.length) payload.service_types = form.service_types
+    if (form.scheduled_date) payload.scheduled_date = form.scheduled_date
+    if (form.scheduled_slot) payload.scheduled_slot = form.scheduled_slot
+    if (form.site_address) payload.site_address = form.site_address
     if (form.detail_of_service) payload.detail_of_service = form.detail_of_service
-    if (form.job_source_type)   payload.job_source_type = form.job_source_type
-    if (form.description)       payload.description = form.description
-    if (lineTotal > 0)          { payload.quoted_amount = lineTotal; payload.invoice_amount = lineTotal }
-
+    if (form.tenant_name) payload.tenant_name = form.tenant_name
+    if (form.tenant_phone) payload.tenant_phone = form.tenant_phone
+    if (form.job_source_type) payload.job_source_type = form.job_source_type
     const { data: job, error } = await supabase.from('jobs').insert(payload).select().single()
     if (error) { setSaving(false); showToast(error.message, 'error'); return }
-
-    const validItems = lineItems.filter(l => l.description.trim())
-    if (validItems.length > 0) {
-      await supabase.from('job_line_items').insert(validItems.map(l => ({
-        job_id: job.id, description: l.description, item_type: l.item_type || 'certificate',
-        quantity: Number(l.quantity) || 1, unit: l.unit || 'ea', unit_price: Number(l.unit_price || 0),
-      })))
-    }
-    setSaving(false); setShowNew(false); setForm(blankJob)
-    setLineItems([{ id: 1, description: '', item_type: 'certificate', quantity: 1, unit: 'ea', unit_price: '' }])
+    setSaving(false)
+    setShowNew(false)
+    setForm({ title: '', service_types: [], scheduled_date: '', scheduled_slot: '', site_address: '', detail_of_service: '', tenant_name: '', tenant_phone: '', job_source_type: 'inbound', client_id: '', assigned_to: '' })
     await fetchAll()
-    showToast(`Job ${job.job_number} created ✓`)
+    showToast('Job ' + job.job_number + ' created')
   }
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const toggleService = svc => setForm(p => ({ ...p, service_types: p.service_types.includes(svc) ? p.service_types.filter(s => s !== svc) : [...p.service_types, svc] }))
-  const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
-  const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || '—'
-  const lineTotal = lineItems.reduce((s, l) => s + (Number(l.quantity) * Number(l.unit_price || 0)), 0)
 
-  function toggleSort(field) {
-    if (sortField === field) {
-      setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDirection('asc')
-    }
-  }
-
-  const sortArrow = field => sortField !== field ? '' : sortDirection === 'asc' ? ' ▲' : ' ▼'
+  const clientName = c => c?.company_name || (c?.first_name + ' ' + (c?.last_name || '')).trim() || '—'
+  const fmt = v => '£' + Number(v || 0).toFixed(2)
 
   const filtered = useMemo(() => {
-    const rows = jobs
-      .filter(j => filterStatus === 'All' || j.status === filterStatus)
-      .filter(j => filterEngineer === 'All' || j.assigned_to === filterEngineer)
-      .filter(j => filterBDL === 'All' || j.assigned_to === filterBDL)
-      .filter(j => {
-        if (!search) return true
-        const q = search.toLowerCase()
-        return j.title?.toLowerCase().includes(q) || j.job_number?.toLowerCase().includes(q) || clientName(j.clients)?.toLowerCase().includes(q) || (j.engineer_name || '').toLowerCase().includes(q)
-      })
-
-    const dir = sortDirection === 'asc' ? 1 : -1
-    const getValue = j => {
-      switch (sortField) {
-        case 'client_name':      return clientName(j.clients)?.toLowerCase() || ''
-        case 'job_number':       return j.job_number || ''
-        case 'scheduled_date':   return j.scheduled_date || ''
-        case 'status':           return j.status || ''
-        case 'amount_received':  return Number(j.amount_received || 0)
-        case 'gross_profit':     return Number(j.gross_profit || 0)
-        case 'created_at':       return j.created_at || ''
-        default:                 return ''
-      }
+    let result = [...jobs]
+    if (filterStatus !== 'All') result = result.filter(j => j.status === filterStatus)
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(j =>
+        (j.title || '').toLowerCase().includes(q) ||
+        (j.job_number || '').toLowerCase().includes(q) ||
+        (j.clients?.company_name || j.clients?.first_name || '').toLowerCase().includes(q)
+      )
     }
-    return [...rows].sort((a, b) => {
-      const av = getValue(a), bv = getValue(b)
-      if (av < bv) return -1 * dir
-      if (av > bv) return 1 * dir
-      return 0
+    result.sort((a, b) => {
+      let av = a[sortField] ?? '', bv = b[sortField] ?? ''
+      if (sortField === 'client') { av = a.clients?.company_name || a.clients?.first_name || ''; bv = b.clients?.company_name || b.clients?.first_name || '' }
+      if (sortField === 'bdl') { av = a.profiles?.full_name || ''; bv = b.profiles?.full_name || '' }
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+      return sortDir === 'asc' ? av - bv : bv - av
     })
-  }, [jobs, filterStatus, filterEngineer, filterBDL, search, sortField, sortDirection])
+    return result
+  }, [jobs, filterStatus, search, sortField, sortDir])
 
-  // BDL revenue summary
   const bdlSummary = useMemo(() => {
-    const summary = {}
+    const s = {}
     jobs.forEach(j => {
-      const bdl = j.profiles?.full_name || 'Unassigned'
-      if (!summary[bdl]) summary[bdl] = { jobs: 0, revenue: 0, profit: 0 }
-      summary[bdl].jobs++
-      summary[bdl].revenue += Number(j.amount_received || 0)
-      summary[bdl].profit += Number(j.gross_profit || 0)
+      const name = j.profiles?.full_name || 'Unassigned'
+      if (!s[name]) s[name] = { jobs: 0, revenue: 0, profit: 0 }
+      s[name].jobs++
+      s[name].revenue += Number(j.amount_received || 0)
+      s[name].profit += Number(j.gross_profit || 0)
     })
-    return Object.entries(summary).sort((a, b) => b[1].profit - a[1].profit)
+    return Object.entries(s).sort((a, b) => b[1].profit - a[1].profit)
   }, [jobs])
 
-  const th = { textAlign: 'left', padding: '8px 12px', color: C.muted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface, whiteSpace: 'nowrap' }
+  function SortHeader({ label, field }) {
+    return (
+      <th onClick={() => { if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortField(field); setSortDir('asc') } }}
+        style={{ cursor: 'pointer', userSelect: 'none', textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA', color: '#6B7280', whiteSpace: 'nowrap' }}>
+        {label} {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+      </th>
+    )
+  }
+
+  const th = { textAlign: 'left', padding: '8px 12px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, background: C.surface, whiteSpace: 'nowrap' }
   const td = { padding: '9px 12px', borderBottom: `1px solid ${C.border}`, fontSize: 13, verticalAlign: 'middle' }
 
   return (
@@ -207,7 +171,7 @@ export default function Jobs() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-            {[['board','▦ Board'],['list','☰ List']].map(([m, l]) => (
+            {[['board', '▦ Board'], ['list', '☰ List']].map(([m, l]) => (
               <button key={m} onClick={() => setViewMode(m)}
                 style={{ padding: '7px 14px', border: 'none', background: viewMode === m ? C.accent : 'transparent', color: viewMode === m ? '#fff' : C.muted, cursor: 'pointer', fontSize: 13, fontWeight: viewMode === m ? 600 : 400 }}>
                 {l}
@@ -237,14 +201,8 @@ export default function Jobs() {
           style={{ ...inp, flex: 1, minWidth: 180, width: 'auto', padding: '8px 12px' }} />
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...inp, width: 'auto', padding: '8px 10px', fontSize: 13 }}>
           <option value="All">All Statuses</option>
-          {JOB_STATUSES.map(s => <option key={s.key}>{s.key}</option>)}
+          {JOB_STATUSES.map(s => <option key={s}>{s}</option>)}
         </select>
-        {isAdmin && (
-          <select value={filterBDL} onChange={e => setFilterBDL(e.target.value)} style={{ ...inp, width: 'auto', padding: '8px 10px', fontSize: 13 }}>
-            <option value="All">All BDLs</option>
-            {engineers.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-          </select>
-        )}
       </div>
 
       {loading ? (
@@ -253,12 +211,13 @@ export default function Jobs() {
         /* BOARD VIEW */
         <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, alignItems: 'flex-start' }}>
           {JOB_STATUSES.map(status => {
-            const statusJobs = filtered.filter(j => j.status === status.key)
+            const sc = STATUS_COLORS[status]
+            const statusJobs = filtered.filter(j => j.status === status)
             return (
-              <div key={status.key} style={{ minWidth: 230, flex: '0 0 230px' }}>
-                <div style={{ background: status.bg, border: `1px solid ${status.color}33`, borderLeft: `4px solid ${status.color}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: status.color, fontWeight: 700, fontSize: 13 }}>{status.icon} {status.key}</span>
-                  <span style={{ background: '#fff', color: status.color, border: `1px solid ${status.color}44`, borderRadius: 20, padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>{statusJobs.length}</span>
+              <div key={status} style={{ minWidth: 230, flex: '0 0 230px' }}>
+                <div style={{ background: sc.bg, border: `1px solid ${sc.color}33`, borderLeft: `4px solid ${sc.color}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: sc.color, fontWeight: 700, fontSize: 13 }}>{status}</span>
+                  <span style={{ background: '#fff', color: sc.color, border: `1px solid ${sc.color}44`, borderRadius: 20, padding: '1px 8px', fontSize: 12, fontWeight: 700 }}>{statusJobs.length}</span>
                 </div>
                 {statusJobs.map(job => (
                   <div key={job.id} onClick={() => navigate(`/jobs/${job.id}`)}
@@ -275,8 +234,8 @@ export default function Jobs() {
                       <span style={{ color: C.greenDark, fontWeight: 600 }}>{job.amount_received > 0 ? fmt(job.amount_received) : ''}</span>
                       <span style={{ color: C.dim }}>{job.profiles?.full_name?.split(' ')[0] || ''}</span>
                     </div>
-                    {job.gross_profit != null && job.gross_profit > 0 && (
-                      <div style={{ fontSize: 10, color: C.teal, fontWeight: 600, marginTop: 3 }}>GP: {fmt(job.gross_profit)}</div>
+                    {job.gross_profit != null && job.gross_profit !== 0 && (
+                      <div style={{ fontSize: 10, color: job.gross_profit > 0 ? C.teal : C.red, fontWeight: 600, marginTop: 3 }}>GP: {fmt(job.gross_profit)}</div>
                     )}
                   </div>
                 ))}
@@ -296,35 +255,27 @@ export default function Jobs() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1400 }}>
               <thead>
                 <tr>
-                  {[
-                    { label: 'Job #',          field: 'job_number' },
-                    { label: 'Date',           field: 'scheduled_date' },
-                    { label: 'Client',         field: 'client_name' },
-                    { label: 'Service',        field: null },
-                    { label: 'Assigned BDL',   field: null },
-                    { label: 'Detail',         field: null },
-                    { label: 'Status',         field: 'status' },
-                    { label: 'Amt Received',   field: 'amount_received' },
-                    { label: 'Payment Status', field: null },
-                    { label: 'Work Done',      field: null },
-                    { label: 'Cert Sent',      field: null },
-                    { label: 'Cert Status',    field: null },
-                    { label: 'Remedial Sent',  field: null },
-                    { label: 'Google Review',  field: null },
-                    { label: 'Engineer',       field: null },
-                    { label: 'Eng. Paid',      field: null },
-                    { label: 'Gross Profit',   field: 'gross_profit' },
-                  ].map(h => (
-                    <th key={h.label} style={h.field ? { ...th, cursor: 'pointer', userSelect: 'none' } : th}
-                      onClick={h.field ? () => toggleSort(h.field) : undefined}>
-                      {h.label}{h.field ? sortArrow(h.field) : ''}
-                    </th>
-                  ))}
+                  <SortHeader label="Job #" field="job_number" />
+                  <SortHeader label="Date" field="scheduled_date" />
+                  <SortHeader label="Client" field="client" />
+                  <th style={th}>Service</th>
+                  <SortHeader label="BDL" field="bdl" />
+                  <SortHeader label="Status" field="status" />
+                  <SortHeader label="Amt Received" field="amount_received" />
+                  <th style={th}>Payment</th>
+                  <th style={th}>Work Done</th>
+                  <th style={th}>Cert Sent</th>
+                  <th style={th}>Cert Status</th>
+                  <th style={th}>Remedial</th>
+                  <th style={th}>Google Review</th>
+                  <th style={th}>Engineer</th>
+                  <th style={th}>Eng. Paid</th>
+                  <SortHeader label="Gross Profit" field="gross_profit" />
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(job => {
-                  const sc = STATUS_MAP[job.status] || { color: C.muted, bg: C.surface }
+                  const sc = STATUS_COLORS[job.status] || { color: C.muted, bg: C.surface }
                   return (
                     <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)} style={{ cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = C.surface}
@@ -337,7 +288,6 @@ export default function Jobs() {
                       <td style={td}><span style={{ fontWeight: 600, color: C.text, fontSize: 12 }}>{clientName(job.clients)}</span></td>
                       <td style={td}><span style={{ fontSize: 11, color: C.muted }}>{(job.service_types || []).join(', ') || '—'}</span></td>
                       <td style={td}><span style={{ fontSize: 12, color: C.text }}>{job.profiles?.full_name || '—'}</span></td>
-                      <td style={td}><span style={{ fontSize: 11, color: C.muted }}>{job.detail_of_service || '—'}</span></td>
                       <td style={td}><span style={{ background: sc.bg, color: sc.color, borderRadius: 5, padding: '2px 7px', fontSize: 10, fontWeight: 600 }}>{job.status}</span></td>
                       <td style={td}><span style={{ color: C.greenDark, fontWeight: 600, fontSize: 12 }}>{job.amount_received > 0 ? fmt(job.amount_received) : '—'}</span></td>
                       <td style={td}>
@@ -370,9 +320,9 @@ export default function Jobs() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={lbl}>Client</label>
-                <select value={form.client_id || ''} onChange={e => {
+                <select value={form.client_id} onChange={e => {
                   const client = clients.find(c => c.id === e.target.value)
-                  set('client_id', e.target.value || undefined)
+                  set('client_id', e.target.value)
                   if (client) set('site_address', [client.street_address, client.city, client.postcode].filter(Boolean).join(', '))
                 }} style={inp}>
                   <option value="">— Select client —</option>
@@ -394,7 +344,7 @@ export default function Jobs() {
               <div><label style={lbl}>Assign BDL</label>
                 <select value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} style={inp}>
                   <option value="">— Select —</option>
-                  {engineers.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+                  {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
               </div>
               <div><label style={lbl}>Type</label>
@@ -412,24 +362,6 @@ export default function Jobs() {
               <div style={{ gridColumn: 'span 2' }}><label style={lbl}>Detail of Service</label><input value={form.detail_of_service} onChange={e => set('detail_of_service', e.target.value)} placeholder="Additional details…" style={inp} /></div>
               <div><label style={lbl}>Tenant Name</label><input value={form.tenant_name} onChange={e => set('tenant_name', e.target.value)} style={inp} /></div>
               <div><label style={lbl}>Tenant Phone</label><input value={form.tenant_phone} onChange={e => set('tenant_phone', e.target.value)} style={inp} /></div>
-            </div>
-
-            {/* Line items */}
-            <div style={{ marginTop: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <label style={lbl}>Line Items</label>
-                <button onClick={() => setLineItems(p => [...p, { id: Date.now(), description: '', item_type: 'certificate', quantity: 1, unit: 'ea', unit_price: '' }])}
-                  style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>+ Add line</button>
-              </div>
-              {lineItems.map(item => (
-                <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '2fr 60px 80px 28px', gap: 6, marginBottom: 8 }}>
-                  <input value={item.description} onChange={e => setLineItems(p => p.map(l => l.id === item.id ? { ...l, description: e.target.value } : l))} placeholder="Description" style={{ ...inp, padding: '7px 10px', fontSize: 13 }} />
-                  <input type="number" value={item.quantity} onChange={e => setLineItems(p => p.map(l => l.id === item.id ? { ...l, quantity: e.target.value } : l))} style={{ ...inp, padding: '7px 8px', fontSize: 13 }} />
-                  <input type="number" value={item.unit_price} onChange={e => setLineItems(p => p.map(l => l.id === item.id ? { ...l, unit_price: e.target.value } : l))} placeholder="£" style={{ ...inp, padding: '7px 8px', fontSize: 13 }} />
-                  <button onClick={() => setLineItems(p => p.filter(l => l.id !== item.id))} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', fontSize: 16 }}>✕</button>
-                </div>
-              ))}
-              <div style={{ textAlign: 'right', color: C.accent, fontWeight: 700, fontSize: 16, marginTop: 8 }}>Total: {fmt(lineTotal)}</div>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
