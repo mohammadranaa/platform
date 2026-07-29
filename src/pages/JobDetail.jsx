@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
+import EmailCompose from '../components/EmailCompose'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -74,6 +75,9 @@ export default function JobDetail() {
   const [editRemarks, setEditRemarks]   = useState(false)
   const [remarksText, setRemarksText]   = useState('')
   const [diaryInput, setDiaryInput]     = useState({ type: 'note', content: '' })
+  const [editingClient, setEditingClient]         = useState(false)
+  const [allClients, setAllClients]               = useState([])
+  const [showEmailCompose, setShowEmailCompose]   = useState(false)
 
   const certRef  = useRef()
   const photoRef = useRef()
@@ -102,6 +106,9 @@ export default function JobDetail() {
       setLineItems(data.job_line_items || [])
       setRemarksText(data.engineer_remarks || '')
     }
+
+    const { data: clientsData } = await supabase.from('clients').select('id, first_name, last_name, company_name').eq('is_active', true).order('company_name')
+    setAllClients(clientsData || [])
   }
 
   async function saveField(field, value) {
@@ -267,14 +274,37 @@ export default function JobDetail() {
             <span style={{ color: { Low: C.dim, Medium: C.amber, High: C.red }[job.priority] || C.muted, fontSize: 12, fontWeight: 600 }}>● {job.priority}</span>
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{job.title}</h1>
-          {client && (
-            <button onClick={() => navigate(`/clients/${job.client_id}`)}
-              style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 14, marginTop: 4, padding: 0 }}>
-              {clientName(client)} →
-            </button>
+          {editingClient ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+              <select value={job.client_id || ''} onChange={async e => {
+                const newId = e.target.value || null
+                await supabase.from('jobs').update({ client_id: newId }).eq('id', id)
+                setJob(p => ({ ...p, client_id: newId }))
+                setClient(allClients.find(c => c.id === newId) || null)
+                setEditingClient(false)
+                showToast('Client updated ✓')
+              }} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '6px 10px', fontSize: 13, minWidth: 200 }}>
+                <option value="">— No client —</option>
+                {allClients.map(c => <option key={c.id} value={c.id}>{c.company_name || c.first_name + ' ' + (c.last_name || '')}</option>)}
+              </select>
+              <button onClick={() => setEditingClient(false)} style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <span style={{ fontWeight: 600, color: C.accent }}>{clientName(client)}</span>
+              <button onClick={() => setEditingClient(true)} style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer' }}>Change</button>
+            </div>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button onClick={() => navigate('/invoices/new', { state: { job } })}
+            style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            🧾 Generate Invoice
+          </button>
+          <button onClick={() => setShowEmailCompose(true)}
+            style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+            ✉ Send Email
+          </button>
           {isAdmin && <Btn small variant="danger" onClick={deleteJob}>Delete</Btn>}
         </div>
       </div>
@@ -332,7 +362,7 @@ export default function JobDetail() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Name</label>
-                <input defaultValue={job.engineer_name || ''} onBlur={e => saveField('engineer_name', e.target.value)}
+                <input defaultValue={job.engineer_name || job.profiles?.full_name || ''} onBlur={e => saveField('engineer_name', e.target.value)}
                   style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
               </div>
               <div>
@@ -586,6 +616,23 @@ export default function JobDetail() {
           <img src={lightbox} alt="" onClick={e => e.stopPropagation()}
             style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }} />
         </div>
+      )}
+
+      {showEmailCompose && job.clients && (
+        <EmailCompose
+          context={{
+            clientId: job.client_id,
+            jobId: job.id,
+            toEmail: job.clients.email,
+            toName: job.clients.company_name || job.clients.first_name,
+            name: job.clients.company_name || job.clients.first_name,
+            address: job.site_address,
+            services: (job.service_types || []).join(', '),
+            repName: profile?.full_name,
+            scheduledDate: job.scheduled_date,
+          }}
+          onClose={() => setShowEmailCompose(false)}
+        />
       )}
 
       <Toast toast={toast} />
