@@ -16,14 +16,6 @@ const C = {
   text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
-const JOB_STATUS_COLORS = {
-  'Quote':     { color: '#7C3AED', bg: '#EDE9FE' },
-  'Scheduled': { color: '#0284C7', bg: '#E0F2FE' },
-  'Invoiced':  { color: '#D97706', bg: '#FEF3C7' },
-  'Paid':      { color: '#0093DB', bg: '#E6F4FC' },
-  'Completed': { color: '#3d7a00', bg: '#F0FAE0' },
-  'Cancelled': { color: '#DC2626', bg: '#FEE2E2' },
-}
 
 const TYPE_COLORS = {
   'Landlord':     { color: C.accent,    bg: C.accentSoft },
@@ -68,7 +60,7 @@ export default function ClientDetail() {
   const { toast, showToast } = useToast()
 
   const [client, setClient]   = useState(null)
-  const [jobs, setJobs]       = useState([])
+  const [clientJobs, setClientJobs] = useState([])
   const [invoices, setInvoices] = useState([])
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -85,12 +77,12 @@ export default function ClientDetail() {
     setLoading(true)
     const [{ data: c }, { data: j }, { data: inv }, { data: p }] = await Promise.all([
       supabase.from('clients').select('*, profiles(full_name)').eq('id', id).single(),
-      supabase.from('jobs').select('id, job_number, title, status, scheduled_date, invoice_amount, payment_status, service_types, profiles!jobs_assigned_to_fkey(full_name)').eq('client_id', id).order('created_at', { ascending: false }),
+      supabase.from('jobs').select('id, job_number, title, status, amount_received, gross_profit, scheduled_date, payment_status, service_types').eq('client_id', id).order('scheduled_date', { ascending: false }),
       supabase.from('invoices').select('id, invoice_number, doc_type, total, balance_due, status, created_at').eq('client_id', id).order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
     ])
     setClient(c)
-    setJobs(j || [])
+    setClientJobs(j || [])
     setInvoices(inv || [])
     setProfiles(p || [])
     if (c) setEditForm(c)
@@ -188,19 +180,21 @@ export default function ClientDetail() {
       </div>
 
       {/* Stats bar */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Total Jobs',    value: client.total_jobs || jobs.length || 0,      color: C.accent },
-          { label: 'Total Revenue', value: fmt(client.total_revenue || 0),              color: C.greenDark },
-          { label: 'Invoices',      value: invoices.length,                             color: C.purple },
-          { label: 'Outstanding',   value: fmt(invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.balance_due || 0), 0)), color: C.amber },
-        ].map(s => (
-          <div key={s.label} style={{ background: '#fff', border: `1px solid ${C.border}`, borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: '12px 18px', flex: 1, minWidth: 110, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
-            <div style={{ color: s.color, fontSize: 20, fontWeight: 800 }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
+      {clientJobs.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total Jobs', value: clientJobs.length, color: '#0093DB' },
+            { label: 'Total Revenue', value: '£' + clientJobs.reduce((s, j) => s + Number(j.amount_received || 0), 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), color: '#3d7a00' },
+            { label: 'Gross Profit', value: '£' + clientJobs.reduce((s, j) => s + Number(j.gross_profit || 0), 0).toLocaleString('en-GB', { minimumFractionDigits: 2 }), color: '#0D9488' },
+            { label: 'Completed', value: clientJobs.filter(j => j.status === 'Completed').length, color: '#3d7a00' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#fff', border: '1px solid #E5E7EB', borderTop: `3px solid ${s.color}`, borderRadius: 10, padding: '10px 16px', flex: 1, minWidth: 110 }}>
+              <div style={{ color: '#6B7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{s.label}</div>
+              <div style={{ color: s.color, fontSize: 18, fontWeight: 800 }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Assigned rep bar */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -227,7 +221,7 @@ export default function ClientDetail() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, marginBottom: 20, width: 'fit-content' }}>
-        {[['overview','📄 Overview'],['jobs','🔧 Jobs'],['invoices','🧾 Invoices'],['activity','📋 Activity']].map(([t, label]) => (
+        {[['overview','📄 Overview'],['jobs',`🔧 Jobs (${clientJobs.length})`],['invoices','🧾 Invoices'],['activity','📋 Activity']].map(([t, label]) => (
           <button key={t} onClick={() => setActiveTab(t)}
             style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === t ? 700 : 400, background: activeTab === t ? '#fff' : 'transparent', color: activeTab === t ? C.accent : C.muted }}>
             {label}
@@ -297,39 +291,27 @@ export default function ClientDetail() {
 
       {/* Jobs tab */}
       {activeTab === 'jobs' && (
-        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 20px', borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
-            <div style={{ fontWeight: 700, color: C.text }}>{jobs.length} Jobs</div>
-            <Btn small onClick={() => navigate('/jobs')}>+ New Job</Btn>
-          </div>
-          {jobs.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: C.muted }}>No jobs yet.</div>
-          ) : (
+        <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
+          {clientJobs.length === 0 ? <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF' }}>No jobs yet.</div> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: C.surface }}>
-                  {['Job #','Title','Status','Services','Engineer','Value','Date'].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '10px 16px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                <tr>
+                  {['Job #','Date','Service','Status','Revenue','Profit'].map(h => (
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA', color: '#6B7280' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {jobs.map(job => {
-                  const sc = JOB_STATUS_COLORS[job.status] || { color: C.muted, bg: C.surface }
-                  return (
-                    <tr key={job.id} onClick={() => navigate(`/jobs/${job.id}`)} style={{ cursor: 'pointer' }}
-                      onMouseEnter={e => e.currentTarget.style.background = C.surface}
-                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}` }}><span style={{ color: C.accent, fontWeight: 700 }}>{job.job_number}</span></td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{job.title}</td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}` }}><span style={{ background: sc.bg, color: sc.color, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{job.status}</span></td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 12, color: C.muted }}>{(job.service_types || []).join(', ') || '—'}</td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 13, color: C.muted }}>{job.profiles?.full_name || '—'}</td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, color: C.greenDark, fontWeight: 600 }}>{job.invoice_amount > 0 ? fmt(job.invoice_amount) : '—'}</td>
-                      <td style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 12, color: C.dim }}>{job.scheduled_date || '—'}</td>
-                    </tr>
-                  )
-                })}
+                {clientJobs.map(j => (
+                  <tr key={j.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/jobs/' + j.id)} onMouseEnter={e => e.currentTarget.style.background = '#F5F7FA'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB', fontSize: 12 }}><span style={{ color: '#0093DB', fontWeight: 700 }}>{j.job_number}</span></td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB', fontSize: 12, color: '#9CA3AF' }}>{j.scheduled_date || '—'}</td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB', fontSize: 12, color: '#6B7280' }}>{(j.service_types || []).join(', ') || j.title}</td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB' }}><span style={{ background: j.status === 'Completed' ? '#F0FAE0' : '#F5F7FA', color: j.status === 'Completed' ? '#3d7a00' : '#6B7280', borderRadius: 5, padding: '2px 7px', fontSize: 10, fontWeight: 600 }}>{j.status}</span></td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, color: '#3d7a00' }}>£{Number(j.amount_received || 0).toFixed(2)}</td>
+                    <td style={{ padding: '9px 12px', borderBottom: '1px solid #E5E7EB', fontSize: 12, fontWeight: 700, color: Number(j.gross_profit) > 0 ? '#0D9488' : '#DC2626' }}>£{Number(j.gross_profit || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}

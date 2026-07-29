@@ -141,7 +141,7 @@ export default function Leads() {
 
     // Build query with server-side filters
     let q = supabase.from('leads').select('*', { count: 'exact' })
-      .order(sortField === 'name' ? 'inbound_name' : sortField, { ascending: sortDir === 'asc' })
+      .order(sortField, { ascending: sortDir === 'asc' })
       .range(from, to)
 
     if (tab !== 'all') q = q.eq('lead_type', tab)
@@ -551,11 +551,12 @@ export default function Leads() {
   const th = { textAlign: 'left', padding: '10px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: `1px solid ${C.border}`, background: C.surface }
   const td = { padding: '11px 14px', borderBottom: `1px solid ${C.border}`, fontSize: 14, verticalAlign: 'middle' }
 
-  function SortTh({ label, field, style: sx }) {
+  function SortTh({ label, field, style: sx = {} }) {
+    const on = sortField === field
     return (
-      <th onClick={() => { if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortField(field); setSortDir('asc') } }}
-        style={{ cursor: 'pointer', textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA', color: '#6B7280', userSelect: 'none', whiteSpace: 'nowrap', ...sx }}>
-        {label} {sortField === field ? (sortDir === 'asc' ? '▲' : '▼') : <span style={{ color: '#D1D5DB' }}>↕</span>}
+      <th onClick={() => on ? setSortDir(d => d === 'asc' ? 'desc' : 'asc') : (setSortField(field), setSortDir('asc'))}
+        style={{ cursor: 'pointer', padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA', color: on ? '#0093DB' : '#6B7280', whiteSpace: 'nowrap', userSelect: 'none', ...sx }}>
+        {label} <span style={{ opacity: 0.5 }}>{on ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
       </th>
     )
   }
@@ -686,7 +687,7 @@ export default function Leads() {
     }
     const headers = [
       { label: 'Date', field: 'created_at' },
-      { label: 'Name', field: 'name' },
+      { label: 'Name', field: 'inbound_name' },
       ...(tab === 'all' ? [{ label: 'Type' }] : []),
       { label: 'Email' }, { label: 'Phone' },
       ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
