@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
@@ -113,6 +113,20 @@ export default function ColdInbox() {
     .filter(m => filterAccount === 'all' || m.account_id === filterAccount)
     .filter(m => { if (!search) return true; const q = search.toLowerCase(); return (m.from_email||'').toLowerCase().includes(q)||(m.from_name||'').toLowerCase().includes(q)||(m.subject||'').toLowerCase().includes(q)||(m.snippet||'').toLowerCase().includes(q)||(m.to_email||'').toLowerCase().includes(q) })
 
+  const threads = useMemo(() => {
+    const threadMap = {}
+    filtered.forEach(m => {
+      const key = m.thread_id || m.gmail_id
+      if (!threadMap[key]) threadMap[key] = { latest: m, count: 1, hasReply: m.is_reply }
+      else {
+        threadMap[key].count++
+        if (new Date(m.date) > new Date(threadMap[key].latest.date)) threadMap[key].latest = m
+        if (m.is_reply) threadMap[key].hasReply = true
+      }
+    })
+    return Object.values(threadMap).sort((a,b) => new Date(b.latest.date) - new Date(a.latest.date))
+  }, [filtered])
+
   const stats = { total: messages.length, inbox: messages.filter(m=>m.mail_type==='inbox').length, sent: messages.filter(m=>m.mail_type==='sent').length, replies: messages.filter(m=>m.is_reply).length, unread: messages.filter(m=>!m.is_read).length }
   const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'
   const getColor = accId => { const i = accounts.findIndex(a=>a.id===accId); return COLORS[i%COLORS.length] }
@@ -193,8 +207,10 @@ export default function ColdInbox() {
           {/* Email list */}
           <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', maxHeight:'70vh', overflowY:'auto' }}>
             {loading ? <div style={{ padding:48, textAlign:'center', color:C.muted }}>Loading…</div> :
-            filtered.length === 0 ? <div style={{ padding:48, textAlign:'center', color:C.muted }}>{messages.length===0?'Click "Fetch Emails" to load.':'No match.'}</div> :
-            filtered.map(msg => (
+            threads.length === 0 ? <div style={{ padding:48, textAlign:'center', color:C.muted }}>{messages.length===0?'Click "Fetch Emails" to load.':'No match.'}</div> :
+            threads.map(t => {
+              const msg = t.latest
+              return (
               <div key={msg.id} onClick={()=>setSelected(msg)}
                 style={{ display:'flex', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.border}`, background:selected?.id===msg.id?C.accentSoft:msg.is_read?'#fff':'#F8FAFF', cursor:'pointer' }}
                 onMouseEnter={e=>{if(selected?.id!==msg.id)e.currentTarget.style.background=C.surface}}
@@ -205,14 +221,18 @@ export default function ColdInbox() {
                 </div>
                 <div style={{ flex:1, overflow:'hidden' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
-                    <span style={{ fontWeight:msg.is_read?400:700, color:C.text, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.mail_type==='sent'?`To: ${msg.to_email}`:(msg.from_name||msg.from_email)}</span>
+                    <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      <span style={{ fontWeight:msg.is_read?400:700, color:C.text, fontSize:13 }}>{msg.mail_type==='sent'?`To: ${msg.to_email}`:(msg.from_name||msg.from_email)}</span>
+                      {t.count > 1 && <span style={{ background:'#E6F4FC', color:'#0093DB', borderRadius:20, padding:'1px 6px', fontSize:10, fontWeight:700, marginLeft:6 }}>{t.count}</span>}
+                    </span>
                     <span style={{ fontSize:10, color:C.dim, flexShrink:0 }}>{fmtDate(msg.date)}</span>
                   </div>
                   <div style={{ fontWeight:msg.is_read?400:600, color:C.text, fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.subject||'(No subject)'}</div>
                   <div style={{ fontSize:11, color:C.dim, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{msg.snippet}</div>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Reading pane */}

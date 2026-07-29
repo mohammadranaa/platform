@@ -15,12 +15,11 @@ const C = {
 }
 
 const STATUS_COLORS = {
-  'Quote':     { color: '#7C3AED', bg: '#EDE9FE', dot: '#7C3AED' },
-  'Scheduled': { color: '#0284C7', bg: '#DBEAFE', dot: '#0284C7' },
-  'Invoiced':  { color: '#D97706', bg: '#FEF3C7', dot: '#D97706' },
-  'Paid':      { color: '#0093DB', bg: '#E6F4FC', dot: '#0093DB' },
-  'Completed': { color: '#3d7a00', bg: '#F0FAE0', dot: '#3d7a00' },
-  'Cancelled': { color: '#DC2626', bg: '#FEE2E2', dot: '#DC2626' },
+  'New':         { color: '#6B7280', bg: '#F5F7FA', dot: '#6B7280' },
+  'In Progress': { color: '#0284C7', bg: '#DBEAFE', dot: '#0284C7' },
+  'Confirmed':   { color: '#0093DB', bg: '#E6F4FC', dot: '#0093DB' },
+  'Completed':   { color: '#3d7a00', bg: '#F0FAE0', dot: '#3d7a00' },
+  'Declined':    { color: '#DC2626', bg: '#FEE2E2', dot: '#DC2626' },
 }
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
@@ -63,35 +62,13 @@ export default function CalendarView() {
 
   async function fetchJobs() {
     setLoading(true)
-    // Get date range based on view
-    let from, to
-    if (view === 'day') {
-      from = formatDate(current)
-      to   = formatDate(current)
-    } else if (view === 'week') {
-      const mon = getMonday(current)
-      const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
-      from = formatDate(mon)
-      to   = formatDate(sun)
-    } else {
-      const first = new Date(current.getFullYear(), current.getMonth(), 1)
-      const last  = new Date(current.getFullYear(), current.getMonth() + 1, 0)
-      from = formatDate(first)
-      to   = formatDate(last)
-    }
-
-    let q = supabase
+    const { data: jobData } = await supabase
       .from('jobs')
-      .select('id, job_number, title, status, scheduled_date, scheduled_slot, site_address, assigned_to, service_types, clients(first_name, last_name, company_name), profiles(full_name)')
-      .gte('scheduled_date', from)
-      .lte('scheduled_date', to)
-      .neq('status', 'Cancelled')
-      .order('scheduled_date')
+      .select('id, job_number, title, status, scheduled_date, scheduled_slot, site_address, assigned_to, service_types, clients(first_name, last_name, company_name), profiles!jobs_assigned_to_fkey(full_name)')
+      .not('scheduled_date', 'is', null)
+      .order('scheduled_date', { ascending: true })
 
-    if (!isAdmin) q = q.eq('assigned_to', profile.id)
-
-    const { data } = await q
-    setJobs(data || [])
+    setJobs(jobData || [])
     setLoading(false)
   }
 

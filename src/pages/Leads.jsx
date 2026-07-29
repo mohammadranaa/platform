@@ -16,18 +16,11 @@ const C = {
 }
 
 const LEAD_STATUSES = ['New','Contacted','In Discussion','Declined','Accepted']
-const STATUS_COLORS = {
-  'New':           { color: C.muted,    bg: C.surface },
-  'Contacted':     { color: C.accent,   bg: C.accentSoft },
-  'In Discussion': { color: C.amber,    bg: C.amberSoft },
-  'Declined':      { color: C.red,      bg: C.redSoft },
-  'Accepted':      { color: C.greenDark, bg: C.greenSoft },
-}
 
 const TYPE_META = {
-  inbound:    { label: 'Inbound',     color: C.accent,  bg: C.accentSoft },
-  verified:   { label: 'Verified',    color: C.purple,  bg: C.purpleSoft },
-  cold_agent: { label: 'Cold Agents', color: C.amber,   bg: C.amberSoft  },
+  inbound:    { label: 'Inbound',        color: C.accent,  bg: C.accentSoft },
+  verified:   { label: 'Verified',       color: C.purple,  bg: C.purpleSoft },
+  cold_agent: { label: 'Estate Agents',  color: C.amber,   bg: C.amberSoft  },
 }
 
 const RENEWAL_YEARS = { 'FRA': 1, 'GSC': 1, 'CP12': 1, 'Gas Safety': 1, 'PAT': 1, 'FSC': 1, 'EICR': 5, 'EPC': 10 }
@@ -75,11 +68,6 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
-const StatusBadge = ({ status }) => {
-  const m = STATUS_COLORS[status] || { color: C.muted, bg: C.surface }
-  return <span style={{ background: m.bg, color: m.color, border: `1px solid ${m.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{status}</span>
-}
-
 const TypeChip = ({ type }) => {
   const m = TYPE_META[type] || { label: type, color: C.muted, bg: C.surface }
   return <span style={{ background: m.bg, color: m.color, border: `1px solid ${m.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{m.label}</span>
@@ -91,8 +79,7 @@ const lbl = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'upp
 const TABS = [
   { key: 'all', label: 'All Leads' },
   { key: 'inbound', label: 'Inbound' },
-  { key: 'verified', label: 'Verified' },
-  { key: 'cold_agent', label: 'Cold Agents' },
+  { key: 'cold_agent', label: 'Estate Agents' },
 ]
 
 export default function Leads() {
@@ -121,6 +108,8 @@ export default function Leads() {
   const [selectedIds, setSelectedIds]   = useState(new Set())
   const [bulkAssignTo, setBulkAssignTo] = useState('')
   const [showBulkBar, setShowBulkBar]   = useState(false)
+  const [editingField, setEditingField] = useState(null) // { id, field }
+  const [editingValue, setEditingValue] = useState('')
   const [selected, setSelected]   = useState(null) // lead detail panel
   const [showAdd, setShowAdd]     = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -543,6 +532,25 @@ export default function Leads() {
   const displayEmail = l => l.inbound_email || l.email_address || l.cold_email || '—'
   const displayPhone = l => l.inbound_phone || l.job_telephone || l.job_mobile || l.direct_number || l.landline_number || '—'
 
+  function displayEmailField(l) {
+    if (l.lead_type === 'inbound') return 'inbound_email'
+    if (l.lead_type === 'cold_agent') return 'cold_email'
+    return 'email_address'
+  }
+
+  function displayPhoneField(l) {
+    if (l.lead_type === 'inbound') return 'inbound_phone'
+    if (l.lead_type === 'cold_agent') return 'landline_number'
+    return 'job_telephone'
+  }
+
+  async function saveInlineEdit() {
+    if (!editingField) return
+    await supabase.from('leads').update({ [editingField.field]: editingValue }).eq('id', editingField.id)
+    setLeads(p => p.map(l => l.id === editingField.id ? { ...l, [editingField.field]: editingValue } : l))
+    setEditingField(null)
+  }
+
   const counts = tabCounts
 
   // No client-side filtering needed — server handles it all
@@ -597,11 +605,43 @@ export default function Leads() {
         {/* Type chip — only on all tab */}
         {tab === 'all' && <td style={td}><TypeChip type={l.lead_type} /></td>}
 
-        {/* Email */}
-        <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{displayEmail(l)}</span></td>
+        {/* Email — double-click to edit */}
+        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12, maxWidth:160 }} onClick={e => e.stopPropagation()}>
+          {editingField?.id === l.id && editingField?.field === displayEmailField(l) ? (
+            <input autoFocus value={editingValue}
+              onChange={e => setEditingValue(e.target.value)}
+              onBlur={saveInlineEdit}
+              onKeyDown={e => e.key === 'Enter' ? saveInlineEdit() : e.key === 'Escape' ? setEditingField(null) : null}
+              style={{ width:'100%', border:'1px solid #0093DB', borderRadius:4, padding:'2px 6px', fontSize:11 }}
+            />
+          ) : (
+            <span
+              onDoubleClick={() => { setEditingField({ id: l.id, field: displayEmailField(l) }); setEditingValue(displayEmail(l)) }}
+              title="Double-click to edit"
+              style={{ color:'#6B7280', fontSize:11, cursor:'text', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {displayEmail(l) || <span style={{ color:'#D1D5DB' }}>—</span>}
+            </span>
+          )}
+        </td>
 
-        {/* Phone */}
-        <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{displayPhone(l)}</span></td>
+        {/* Phone — double-click to edit */}
+        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12, maxWidth:160 }} onClick={e => e.stopPropagation()}>
+          {editingField?.id === l.id && editingField?.field === displayPhoneField(l) ? (
+            <input autoFocus value={editingValue}
+              onChange={e => setEditingValue(e.target.value)}
+              onBlur={saveInlineEdit}
+              onKeyDown={e => e.key === 'Enter' ? saveInlineEdit() : e.key === 'Escape' ? setEditingField(null) : null}
+              style={{ width:'100%', border:'1px solid #0093DB', borderRadius:4, padding:'2px 6px', fontSize:11 }}
+            />
+          ) : (
+            <span
+              onDoubleClick={() => { setEditingField({ id: l.id, field: displayPhoneField(l) }); setEditingValue(displayPhone(l)) }}
+              title="Double-click to edit"
+              style={{ color:'#6B7280', fontSize:11, cursor:'text', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {displayPhone(l) || <span style={{ color:'#D1D5DB' }}>—</span>}
+            </span>
+          )}
+        </td>
 
         {/* Type-specific columns */}
         {(tab === 'inbound') && <>
@@ -645,8 +685,29 @@ export default function Leads() {
           </span>
         </td>
 
-        {/* Status */}
-        <td style={td}><StatusBadge status={l.status} /></td>
+        {/* Status — inline editable */}
+        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
+          <select
+            value={l.status}
+            onChange={async e => {
+              const newStatus = e.target.value
+              await supabase.from('leads').update({ status: newStatus }).eq('id', l.id)
+              setLeads(p => p.map(x => x.id === l.id ? { ...x, status: newStatus } : x))
+            }}
+            style={{
+              background: 'transparent',
+              border: '1px solid #E5E7EB',
+              borderRadius: 6,
+              padding: '3px 6px',
+              fontSize: 11,
+              cursor: 'pointer',
+              color: l.status === 'Accepted' ? '#3d7a00' : l.status === 'Declined' ? '#DC2626' : l.status === 'Contacted' ? '#0093DB' : '#6B7280'
+            }}>
+            {['New','Contacted','In Discussion','Accepted','Declined'].map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </td>
 
         {/* Actions */}
         <td style={{ ...td, whiteSpace: 'nowrap' }}>

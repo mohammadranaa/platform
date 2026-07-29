@@ -39,7 +39,7 @@ export default function Jobs() {
     setLoading(true)
     const { data: j, error: je } = await supabase
       .from('jobs')
-      .select('id, job_number, title, status, scheduled_date, payment_status, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at')
+      .select('id, job_number, title, status, scheduled_date, payment_status, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at, clients(first_name, last_name, company_name), profiles!jobs_assigned_to_fkey(full_name)')
       .order('created_at', { ascending: false })
 
     if (je) console.error('JOBS FETCH ERROR:', JSON.stringify(je))
@@ -251,7 +251,7 @@ export default function Jobs() {
                         <Td><span style={{color:C.dim,fontSize:11}}>{fmtD(j.scheduled_date)}</span></Td>
                         <Td><span style={{fontWeight:600,color:C.text}}>{cName(j.clients)}</span></Td>
                         <Td><span style={{fontSize:11,color:C.muted}}>{(j.service_types||[]).join(', ')||'—'}</span></Td>
-                        <Td><span style={{fontSize:11}}>{j.profiles?.full_name?.split(' ')[0]||'—'}</span></Td>
+                        <Td><span style={{fontSize:11}}>{j.profiles?.full_name||'—'}</span></Td>
                         <Td><span style={{fontSize:11,color:C.muted}}>{j.detail_of_service||'—'}</span></Td>
                         <Td>{badge(j.status,ss.color,ss.bg)}</Td>
                         <Td><span style={{color:C.greenDark,fontWeight:700}}>{j.amount_received>0?fmt(j.amount_received):'—'}</span></Td>
