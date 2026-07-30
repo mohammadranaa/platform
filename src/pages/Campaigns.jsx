@@ -77,6 +77,14 @@ const Field = ({ label, value, onChange, type = 'text', placeholder, rows, optio
   </div>
 )
 
+function contactName(l) {
+  return l.cold_company_name || l.cold_contact_name || l.inbound_name ||
+         l.company_name || ((l.contact_first || '') + ' ' + (l.contact_last || '')).trim() || '—'
+}
+function contactEmail(l) {
+  return l.cold_email || l.inbound_email || l.email_address || ''
+}
+
 export default function Campaigns() {
   const { profile } = useAuth()
   const { toast, showToast } = useToast()
@@ -94,6 +102,12 @@ export default function Campaigns() {
   const [showNewCampaign, setShowNewCampaign] = useState(false)
   const [showNewStep, setShowNewStep]         = useState(false)
   const [showAddContacts, setShowAddContacts] = useState(false)
+  const [showImportLeads, setShowImportLeads] = useState(false)
+  const [importLeads, setImportLeads]         = useState([])
+  const [importLoading, setImportLoading]     = useState(false)
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
+  const [leadFilterTab, setLeadFilterTab]     = useState('all')
+  const [leadSearch, setLeadSearch]           = useState('')
 
   const blankCampaign = { name: '', from_name: '', target_type: 'cold_agent', daily_limit: 50, track_opens: true, track_clicks: true }
   const blankStep = { step_number: '', delay_days: '0', subject: '', body_html: '' }
@@ -220,6 +234,56 @@ export default function Campaigns() {
     showToast(`${rows.length} contacts imported ✓`)
   }
 
+  async function openImportLeads() {
+    setShowImportLeads(true)
+    setSelectedLeadIds(new Set())
+    setLeadFilterTab('all')
+    setLeadSearch('')
+    setImportLoading(true)
+    const { data } = await supabase
+      .from('leads')
+      .select('id, lead_type, inbound_name, inbound_email, company_name, cold_company_name, cold_email, cold_contact_name, email_address, contact_first, contact_last, status, assigned_to, profiles(full_name)')
+      .order('created_at', { ascending: false })
+    setImportLeads((data || []).filter(l => contactEmail(l)))
+    setImportLoading(false)
+  }
+
+  const filteredImportLeads = useMemo(() => {
+    let r = importLeads
+    if (leadFilterTab === 'cold_agent') r = r.filter(l => l.lead_type === 'cold_agent')
+    if (leadFilterTab === 'inbound') r = r.filter(l => l.lead_type === 'inbound')
+    if (leadSearch.trim()) {
+      const q = leadSearch.trim().toLowerCase()
+      r = r.filter(l => contactName(l).toLowerCase().includes(q) || contactEmail(l).toLowerCase().includes(q))
+    }
+    return r
+  }, [importLeads, leadFilterTab, leadSearch])
+
+  async function addSelectedLeadsToCampaign() {
+    if (!selected || selectedLeadIds.size === 0) return
+    const chosen = importLeads.filter(l => selectedLeadIds.has(l.id))
+    setSaving(true)
+    const firstStep = steps[0]
+    const { error } = await supabase.from('campaign_contacts').insert(
+      chosen.map(l => ({
+        campaign_id: selected.id,
+        email: contactEmail(l),
+        first_name: contactName(l),
+        company: l.cold_company_name || l.company_name || '',
+        status: 'active',
+        current_step: 0,
+        next_send_at: firstStep ? new Date(Date.now() + (firstStep.delay_days || 0) * 86400000).toISOString() : null,
+      }))
+    )
+    setSaving(false)
+    if (error) { showToast(error.message, 'error'); return }
+    const { data } = await supabase.from('campaign_contacts').select('*').eq('campaign_id', selected.id).order('enrolled_at', { ascending: false })
+    setContacts(data || [])
+    setShowImportLeads(false)
+    setSelectedLeadIds(new Set())
+    showToast(`${chosen.length} contact${chosen.length !== 1 ? 's' : ''} added ✓`)
+  }
+
   // Analytics
   const analytics = useMemo(() => {
     const total   = sends.length
@@ -303,7 +367,10 @@ export default function Campaigns() {
           <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Contacts ({contacts.length})</div>
-              <Btn small onClick={() => setShowAddContacts(true)}>+ Add</Btn>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn small variant="teal" onClick={openImportLeads}>📋 Import from Leads</Btn>
+                <Btn small onClick={() => setShowAddContacts(true)}>+ Add</Btn>
+              </div>
             </div>
             <div style={{ maxHeight: 340, overflowY: 'auto' }}>
               {contacts.length === 0 ? (
@@ -395,6 +462,81 @@ export default function Campaigns() {
                 <Btn style={{ marginTop: 12 }} onClick={bulkImport} disabled={saving || !bulkCSV.trim()}>
                   {saving ? 'Importing…' : `Import ${bulkCSV.trim().split('\n').filter(l => l.includes('@')).length} contacts`}
                 </Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import from Leads Modal */}
+        {showImportLeads && (
+          <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowImportLeads(false)}>
+            <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 620, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Import from Leads</div>
+              <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Select leads with an email address to add to this campaign.</div>
+
+              {/* Filter tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {[['all', 'All'], ['cold_agent', 'Estate Agents'], ['inbound', 'Inbound']].map(([k, l]) => (
+                  <button key={k} onClick={() => setLeadFilterTab(k)}
+                    style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${leadFilterTab === k ? C.accent : '#E5E7EB'}`, background: leadFilterTab === k ? C.accentSoft : '#fff', color: leadFilterTab === k ? C.accent : C.muted, cursor: 'pointer', fontSize: 12, fontWeight: leadFilterTab === k ? 700 : 400 }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search */}
+              <input value={leadSearch} onChange={e => setLeadSearch(e.target.value)} placeholder="Search name or email…"
+                style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%', marginBottom: 12 }} />
+
+              {/* Select all + count */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.muted, cursor: 'pointer' }}>
+                  <input type="checkbox"
+                    checked={filteredImportLeads.length > 0 && filteredImportLeads.every(l => selectedLeadIds.has(l.id))}
+                    onChange={e => {
+                      setSelectedLeadIds(prev => {
+                        const next = new Set(prev)
+                        if (e.target.checked) filteredImportLeads.forEach(l => next.add(l.id))
+                        else filteredImportLeads.forEach(l => next.delete(l.id))
+                        return next
+                      })
+                    }} />
+                  Select All
+                </label>
+                <span style={{ fontSize: 12, color: C.dim }}>{selectedLeadIds.size} of {filteredImportLeads.length} selected</span>
+              </div>
+
+              {/* List */}
+              <div style={{ border: '1px solid #E5E7EB', borderRadius: 10, maxHeight: 400, overflowY: 'auto' }}>
+                {importLoading ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: C.dim, fontSize: 13 }}>Loading leads…</div>
+                ) : filteredImportLeads.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: C.dim, fontSize: 13 }}>No leads found.</div>
+                ) : filteredImportLeads.map(l => (
+                  <label key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: '1px solid #F5F7FA', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selectedLeadIds.has(l.id)}
+                      onChange={e => {
+                        setSelectedLeadIds(prev => {
+                          const next = new Set(prev)
+                          if (e.target.checked) next.add(l.id); else next.delete(l.id)
+                          return next
+                        })
+                      }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contactName(l)}</div>
+                      <div style={{ color: C.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contactEmail(l)}</div>
+                    </div>
+                    <span style={{ color: C.muted, fontSize: 11, whiteSpace: 'nowrap' }}>{l.status}</span>
+                    <span style={{ color: C.dim, fontSize: 12, minWidth: 90, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.profiles?.full_name || 'Unassigned'}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                <Btn onClick={addSelectedLeadsToCampaign} disabled={saving || selectedLeadIds.size === 0}>
+                  {saving ? 'Adding…' : `Add ${selectedLeadIds.size} contact${selectedLeadIds.size !== 1 ? 's' : ''}`}
+                </Btn>
+                <Btn variant="ghost" onClick={() => setShowImportLeads(false)}>Cancel</Btn>
               </div>
             </div>
           </div>

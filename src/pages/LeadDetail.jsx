@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import ActivityFeed, { logActivity } from '../components/ActivityFeed.jsx'
 import EmailCompose from '../components/EmailCompose.jsx'
+import { fixUrl } from '../lib/url'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -259,7 +260,7 @@ export default function LeadDetail() {
                 <Field label="Landline"       value={lead.landline_number} />
                 <Field label="Zoopla #"       value={lead.zoopla_number} />
                 <Field label="Address"        value={lead.cold_address} />
-                <Field label="Website"        value={lead.website} />
+                <Field label="Website"        value={lead.website ? <a href={fixUrl(lead.website)} target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>{lead.website}</a> : null} />
                 <Field label="Email Verified" value={lead.email_verified} />
               </>}
               {lead.notes && (

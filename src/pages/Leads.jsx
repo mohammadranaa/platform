@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
+import { fixUrl } from '../lib/url'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -675,7 +676,7 @@ export default function Leads() {
               borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600,
             }}>{l.email_verified || 'Unknown'}</span>
           </td>
-          <td style={td}>{l.website ? <a href={l.website} target="_blank" rel="noreferrer" style={{ color: C.accent, fontSize: 12 }}>Visit</a> : <span style={{ color: C.dim }}>—</span>}</td>
+          <td style={td}>{l.website ? <a href={fixUrl(l.website)} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 12 }}>Visit</a> : <span style={{ color: C.dim }}>—</span>}</td>
         </>}
 
         {/* Assigned to */}
