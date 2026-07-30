@@ -27,6 +27,8 @@ const STATUS_STYLE = {
 const CERT_STATUSES = ['Not Issued', 'Issued', 'Delivered', 'Passed', 'Failed']
 const PAYMENT_STATUSES = ['Paid', 'Unpaid', 'Partial']
 const DIARY_ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬', status_change: '🔄', system: '⚙️' }
+const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
+const lbl = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
 const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: sx = {} }) => {
   const v = {
@@ -64,19 +66,19 @@ export default function JobDetail() {
   const [job, setJob]             = useState(null)
   const [client, setClient]       = useState(null)
   const [lineItems, setLineItems] = useState([])
+  const [savingItems, setSavingItems] = useState(false)
   const [diary, setDiary]         = useState([])
-  const [engineers, setEngineers] = useState([])
   const [files, setFiles]         = useState([])
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox]   = useState(null)
-  const [editEngineer, setEditEngineer] = useState(false)
   const [editRemarks, setEditRemarks]   = useState(false)
   const [remarksText, setRemarksText]   = useState('')
   const [diaryInput, setDiaryInput]     = useState({ type: 'note', content: '' })
   const [editingClient, setEditingClient]         = useState(false)
   const [allClients, setAllClients]               = useState([])
+  const [allProfiles, setAllProfiles]             = useState([])
   const [showEmailCompose, setShowEmailCompose]   = useState(false)
 
   const certRef  = useRef()
@@ -86,7 +88,7 @@ export default function JobDetail() {
 
   async function fetchAll() {
     setLoading(true)
-    await Promise.all([fetchJob(), fetchDiary(), fetchEngineers(), fetchFiles()])
+    await Promise.all([fetchJob(), fetchDiary(), fetchFiles()])
     setLoading(false)
   }
 
@@ -103,28 +105,30 @@ export default function JobDetail() {
       console.log('Job loaded:', data?.job_number)
       setJob(data)
       setClient(data.clients)
-      setLineItems(data.job_line_items || [])
       setRemarksText(data.engineer_remarks || '')
     }
 
-    const { data: clientsData } = await supabase.from('clients').select('id, first_name, last_name, company_name').eq('is_active', true).order('company_name')
+    const [{ data: clientsData }, { data: profilesData }] = await Promise.all([
+      supabase.from('clients').select('id, first_name, last_name, company_name').eq('is_active', true).order('company_name'),
+      supabase.from('profiles').select('id, full_name').eq('is_active', true)
+    ])
     setAllClients(clientsData || [])
+    setAllProfiles(profilesData || [])
+
+    const { data: items } = await supabase.from('job_line_items').select('*').eq('job_id', id).order('created_at')
+    setLineItems(items || [])
   }
 
   async function saveField(field, value) {
-    await supabase.from('jobs').update({ [field]: value }).eq('id', id)
-    setJob(p => ({ ...p, [field]: value }))
+    const { error } = await supabase.from('jobs').update({ [field]: value }).eq('id', id)
+    if (error) { showToast(error.message, 'error'); return }
+    setJob(prev => ({ ...prev, [field]: value }))
     showToast('Saved ✓')
   }
 
   async function fetchDiary() {
     const { data } = await supabase.from('job_diary').select('*').eq('job_id', id).order('created_at', { ascending: false })
     setDiary(data || [])
-  }
-
-  async function fetchEngineers() {
-    const { data } = await supabase.from('profiles').select('id, full_name, role').eq('is_active', true)
-    setEngineers(data || [])
   }
 
   async function fetchFiles() {
@@ -193,15 +197,6 @@ export default function JobDetail() {
     showToast('File deleted')
   }
 
-  // ── Update engineer ──────────────────────────────────────────
-  async function updateEngineer(engineerId) {
-    await supabase.from('jobs').update({ assigned_to: engineerId }).eq('id', id)
-    const eng = engineers.find(e => e.id === engineerId)
-    setJob(p => ({ ...p, assigned_to: engineerId, profiles: eng }))
-    setEditEngineer(false)
-    showToast('Engineer updated ✓')
-  }
-
   // ── Save engineer remarks ────────────────────────────────────
   async function saveRemarks() {
     setSaving(true)
@@ -246,7 +241,6 @@ export default function JobDetail() {
 
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
   const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || '—'
-  const lineTotal = lineItems.reduce((s, l) => s + (l.total || l.quantity * l.unit_price), 0)
   const certificates = files.filter(f => f.file_type === 'certificate')
   const photos       = files.filter(f => f.file_type === 'photo')
   const fmtSize = b => b < 1048576 ? `${(b / 1024).toFixed(0)}KB` : `${(b / 1048576).toFixed(1)}MB`
@@ -278,11 +272,9 @@ export default function JobDetail() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
               <select value={job.client_id || ''} onChange={async e => {
                 const newId = e.target.value || null
-                await supabase.from('jobs').update({ client_id: newId }).eq('id', id)
-                setJob(p => ({ ...p, client_id: newId }))
-                setClient(allClients.find(c => c.id === newId) || null)
+                await saveField('client_id', newId)
                 setEditingClient(false)
-                showToast('Client updated ✓')
+                await fetchJob()
               }} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '6px 10px', fontSize: 13, minWidth: 200 }}>
                 <option value="">— No client —</option>
                 {allClients.map(c => <option key={c.id} value={c.id}>{c.company_name || c.first_name + ' ' + (c.last_name || '')}</option>)}
@@ -297,14 +289,6 @@ export default function JobDetail() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <button onClick={() => navigate('/invoices/new', { state: { job } })}
-            style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-            🧾 Generate Invoice
-          </button>
-          <button onClick={() => setShowEmailCompose(true)}
-            style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '7px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-            ✉ Send Email
-          </button>
           {isAdmin && <Btn small variant="danger" onClick={deleteJob}>Delete</Btn>}
         </div>
       </div>
@@ -312,10 +296,20 @@ export default function JobDetail() {
       {/* Status */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Job Status</div>
-        <select value={job.status} disabled={saving} onChange={e => updateStatus(e.target.value)}
-          style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-          {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={job.status} disabled={saving} onChange={e => updateStatus(e.target.value)}
+            style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            {JOB_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button onClick={() => navigate('/invoices/new', { state: { job: { ...job, line_items: lineItems } } })}
+            style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            🧾 Generate Invoice
+          </button>
+          <button onClick={() => setShowEmailCompose(true)}
+            style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            ✉ Send Email
+          </button>
+        </div>
       </div>
 
       {/* Main grid */}
@@ -325,34 +319,108 @@ export default function JobDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Job details */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Details</div>
-            <InfoRow label="Client"    value={client ? <button onClick={() => navigate(`/clients/${job.client_id}`)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', padding: 0, fontSize: 14 }}>{clientName(client)}</button> : null} />
-            <InfoRow label="Services"  value={job.service_types?.join(', ')} />
-            <InfoRow label="Scheduled" value={job.scheduled_date ? `${job.scheduled_date}${job.scheduled_slot ? ` · ${job.scheduled_slot}` : ''}` : null} />
-            <InfoRow label="Completed" value={job.completed_date} />
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:16 }}>Job Details</div>
 
-            {/* Engineer — editable */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}`, fontSize: 14 }}>
-              <span style={{ color: C.muted, minWidth: 130 }}>Engineer</span>
-              {editEngineer ? (
-                <div style={{ display: 'flex', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
-                  <select defaultValue={job.assigned_to || ''} onChange={e => updateEngineer(e.target.value)}
-                    style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 7, color: C.text, padding: '5px 10px', fontSize: 13, flex: 1, maxWidth: 200 }}>
-                    <option value="">— Unassigned —</option>
-                    {engineers.map(e => <option key={e.id} value={e.id}>{e.full_name} ({e.role})</option>)}
-                  </select>
-                  <button onClick={() => setEditEngineer(false)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer' }}>✕</button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ color: C.text }}>{job.profiles?.full_name || <span style={{ color: C.dim }}>Unassigned</span>}</span>
-                  <button onClick={() => setEditEngineer(true)}
-                    style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                    {job.profiles ? 'Change' : 'Assign'}
-                  </button>
-                </div>
-              )}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              {/* Title */}
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Job Title</label>
+                <input value={job.title || ''}
+                  onChange={e => setJob(p=>({...p, title: e.target.value}))}
+                  onBlur={e => saveField('title', e.target.value)}
+                  style={inp} />
+              </div>
+
+              {/* Client - with Change button */}
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Client</label>
+                {editingClient ? (
+                  <div style={{ display:'flex', gap:8 }}>
+                    <select value={job.client_id || ''} onChange={async e => {
+                      await saveField('client_id', e.target.value || null)
+                      setEditingClient(false)
+                      fetchJob()
+                    }} style={{...inp, flex:1}}>
+                      <option value="">— No client —</option>
+                      {allClients.map(c => <option key={c.id} value={c.id}>{c.company_name || (c.first_name + ' ' + (c.last_name||'')).trim()}</option>)}
+                    </select>
+                    <button onClick={() => setEditingClient(false)} style={{ background:'none', border:'none', color:'#9CA3AF', cursor:'pointer', fontSize:18 }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 0' }}>
+                    <span style={{ fontWeight:600, color:'#0093DB', cursor:'pointer' }}
+                      onClick={() => job.client_id && navigate('/clients/' + job.client_id)}>
+                      {job.clients?.company_name || (job.clients?.first_name + ' ' + (job.clients?.last_name||'')).trim() || '— No client —'}
+                    </span>
+                    <button onClick={() => setEditingClient(true)}
+                      style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'2px 10px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Services */}
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Services</label>
+                <input value={(job.service_types || []).join(', ')}
+                  onChange={e => setJob(p=>({...p, service_types: e.target.value.split(',').map(s=>s.trim()).filter(Boolean)}))}
+                  onBlur={e => saveField('service_types', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}
+                  placeholder="e.g. EICR, FRA, GSC"
+                  style={inp} />
+              </div>
+
+              {/* Detail of Service */}
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Detail of Service</label>
+                <input value={job.detail_of_service || ''}
+                  onChange={e => setJob(p=>({...p, detail_of_service: e.target.value}))}
+                  onBlur={e => saveField('detail_of_service', e.target.value)}
+                  style={inp} />
+              </div>
+
+              {/* Scheduled Date */}
+              <div>
+                <label style={lbl}>Scheduled Date</label>
+                <input type="date" value={job.scheduled_date || ''}
+                  onChange={e => { setJob(p=>({...p, scheduled_date: e.target.value})); saveField('scheduled_date', e.target.value || null) }}
+                  style={inp} />
+              </div>
+
+              {/* Time Slot */}
+              <div>
+                <label style={lbl}>Time Slot</label>
+                <select value={job.scheduled_slot || ''}
+                  onChange={e => { setJob(p=>({...p, scheduled_slot: e.target.value})); saveField('scheduled_slot', e.target.value) }}
+                  style={inp}>
+                  <option value="">—</option>
+                  <option>Morning (8am–12pm)</option>
+                  <option>Afternoon (12pm–6pm)</option>
+                </select>
+              </div>
+
+              {/* Assigned BDL - SEPARATE from Engineer */}
+              <div>
+                <label style={lbl}>Assigned BDL</label>
+                <select value={job.assigned_to || ''}
+                  onChange={e => { saveField('assigned_to', e.target.value || null); fetchJob() }}
+                  style={inp}>
+                  <option value="">— Unassigned —</option>
+                  {allProfiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                </select>
+              </div>
+
+              {/* Job Type */}
+              <div>
+                <label style={lbl}>Type</label>
+                <select value={job.job_source_type || 'inbound'}
+                  onChange={e => saveField('job_source_type', e.target.value)}
+                  style={inp}>
+                  <option value="inbound">Inbound</option>
+                  <option value="outbound">Outbound</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -361,9 +429,12 @@ export default function JobDetail() {
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Tracking</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Name</label>
-                <input defaultValue={job.engineer_name || job.profiles?.full_name || ''} onBlur={e => saveField('engineer_name', e.target.value)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
+                <label style={lbl}>Engineer Name</label>
+                <input value={job.engineer_name || ''}
+                  onChange={e => setJob(p=>({...p, engineer_name: e.target.value}))}
+                  onBlur={e => saveField('engineer_name', e.target.value)}
+                  placeholder="Name of the engineer who did the work"
+                  style={inp} />
               </div>
               <div>
                 <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Paid (£)</label>
@@ -500,33 +571,69 @@ export default function JobDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Line items */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Line Items</div>
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em' }}>Line Items</span>
+              <button onClick={() => setLineItems(p => [...p, { id: 'new_' + Date.now(), description:'', quantity:1, unit:'ea', unit_price:0, item_type:'certificate' }])}
+                style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                + Add Item
+              </button>
+            </div>
+
             {lineItems.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: C.dim, fontSize: 13 }}>No line items.</div>
+              <div style={{ color:'#9CA3AF', fontSize:13, padding:'16px 0', textAlign:'center' }}>No line items. Click + Add Item to start.</div>
             ) : (
               <>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead><tr>
-                    {['Description','Qty','Price','Total'].map((h, i) => (
-                      <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '8px 14px', color: C.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}`, background: C.surface }}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>{lineItems.map((item, i) => (
-                    <tr key={item.id || i}>
-                      <td style={{ padding: '9px 14px', borderBottom: `1px solid ${C.border}` }}>
-                        <div style={{ fontSize: 13, color: C.text }}>{item.description}</div>
-                        <div style={{ fontSize: 11, color: C.dim, textTransform: 'capitalize' }}>{item.item_type}</div>
-                      </td>
-                      <td style={{ padding: '9px 14px', textAlign: 'right', color: C.muted, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>{item.quantity} {item.unit}</td>
-                      <td style={{ padding: '9px 14px', textAlign: 'right', color: C.muted, fontSize: 13, borderBottom: `1px solid ${C.border}` }}>{fmt(item.unit_price)}</td>
-                      <td style={{ padding: '9px 14px', textAlign: 'right', color: C.accent, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>{fmt(item.total || item.quantity * item.unit_price)}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: C.muted, fontSize: 13 }}>Total (ex. VAT)</span>
-                  <span style={{ color: C.accent, fontWeight: 800, fontSize: 20 }}>{fmt(lineTotal)}</span>
+                {lineItems.map((item, idx) => (
+                  <div key={item.id} style={{ display:'grid', gridTemplateColumns:'2fr 60px 80px 28px', gap:6, marginBottom:8, alignItems:'center' }}>
+                    <input value={item.description || ''}
+                      onChange={e => setLineItems(p => p.map((li,i) => i===idx ? {...li, description:e.target.value} : li))}
+                      placeholder="Description"
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:12 }} />
+                    <input type="number" value={item.quantity || 1}
+                      onChange={e => setLineItems(p => p.map((li,i) => i===idx ? {...li, quantity:parseInt(e.target.value)||1} : li))}
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 8px', fontSize:12, textAlign:'center' }} />
+                    <input type="number" step="0.01" value={item.unit_price || ''}
+                      onChange={e => setLineItems(p => p.map((li,i) => i===idx ? {...li, unit_price:parseFloat(e.target.value)||0} : li))}
+                      placeholder="£"
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 8px', fontSize:12 }} />
+                    <button onClick={() => setLineItems(p => p.filter((_,i) => i!==idx))}
+                      style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:16 }}>✕</button>
+                  </div>
+                ))}
+
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, paddingTop:12, borderTop:'1px solid #E5E7EB' }}>
+                  <span style={{ fontSize:15, fontWeight:800, color:'#0093DB' }}>
+                    Total: £{lineItems.reduce((s,l) => s + (l.quantity||1) * (l.unit_price||0), 0).toFixed(2)}
+                  </span>
+                  <button onClick={async () => {
+                    setSavingItems(true)
+                    // Delete existing items for this job
+                    await supabase.from('job_line_items').delete().eq('job_id', id)
+                    // Insert all current items
+                    const validItems = lineItems.filter(l => l.description?.trim())
+                    if (validItems.length > 0) {
+                      await supabase.from('job_line_items').insert(
+                        validItems.map(l => ({
+                          job_id: id,
+                          description: l.description,
+                          item_type: l.item_type || 'certificate',
+                          quantity: l.quantity || 1,
+                          unit: l.unit || 'ea',
+                          unit_price: l.unit_price || 0,
+                        }))
+                      )
+                    }
+                    // Update job totals
+                    const total = validItems.reduce((s,l) => s + (l.quantity||1) * (l.unit_price||0), 0)
+                    await saveField('invoice_amount', total)
+                    setSavingItems(false)
+                    showToast('Line items saved ✓')
+                    fetchJob()
+                  }} disabled={savingItems}
+                    style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 20px', fontWeight:700, fontSize:13, cursor:'pointer', opacity:savingItems?0.7:1 }}>
+                    {savingItems ? 'Saving…' : '💾 Save Items'}
+                  </button>
                 </div>
               </>
             )}
