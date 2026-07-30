@@ -79,6 +79,7 @@ export default function JobDetail() {
   const [allClients, setAllClients]               = useState([])
   const [allProfiles, setAllProfiles]             = useState([])
   const [showEmailCompose, setShowEmailCompose]   = useState(false)
+  const [fileTab, setFileTab]                     = useState('certificates')
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -533,69 +534,115 @@ export default function JobDetail() {
 
           {/* Files & Certificates */}
           <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-              <span style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em' }}>
-                Files & Certificates ({files.length})
-              </span>
-              <div style={{ display:'flex', gap:6 }}>
-                <label style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
-                  📜 Certificate
+
+            {/* Tab headers */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ display:'flex', gap:4, background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:8, padding:4 }}>
+                {[
+                  { key:'certificates', label:'📜 Certificates', color:'#3d7a00' },
+                  { key:'photos', label:'📷 Photos', color:'#0093DB' },
+                  { key:'videos', label:'🎥 Videos', color:'#7C3AED' },
+                ].map(t => (
+                  <button key={t.key} type="button" onClick={() => setFileTab(t.key)}
+                    style={{ padding:'5px 14px', borderRadius:6, border:'none', cursor:'pointer', fontSize:12,
+                      fontWeight: fileTab === t.key ? 700 : 400,
+                      background: fileTab === t.key ? '#fff' : 'transparent',
+                      color: fileTab === t.key ? t.color : '#6B7280' }}>
+                    {t.label}
+                    <span style={{ marginLeft:6, background: fileTab===t.key ? t.color+'22' : 'transparent', color: t.color, borderRadius:20, padding:'1px 6px', fontSize:10 }}>
+                      {files.filter(f => f.file_type === t.key.slice(0, -1)).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Upload buttons — change based on active tab */}
+              {fileTab === 'certificates' && (
+                <label style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:6, padding:'5px 14px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  + Upload Certificate
                   <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden
                     onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'certificate')} />
                 </label>
-                <label style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
-                  📷 Photo
+              )}
+              {fileTab === 'photos' && (
+                <label style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'5px 14px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  + Upload Photos
                   <input type="file" accept="image/*" hidden multiple
                     onChange={e => Array.from(e.target.files).forEach(f => uploadFile(f, 'photo'))} />
                 </label>
-                <label style={{ background:'#EDE9FE', color:'#7C3AED', border:'1px solid #7C3AED44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
-                  🎥 Video
+              )}
+              {fileTab === 'videos' && (
+                <label style={{ background:'#EDE9FE', color:'#7C3AED', border:'1px solid #7C3AED44', borderRadius:6, padding:'5px 14px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  + Upload Video
                   <input type="file" accept="video/*" hidden
                     onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'video')} />
                 </label>
-              </div>
+              )}
             </div>
 
-            {files.length === 0 ? (
-              <div style={{ color:'#9CA3AF', fontSize:13, padding:'20px 0', textAlign:'center', border:'2px dashed #E5E7EB', borderRadius:8 }}>
-                No files attached yet. Upload certificates, photos or videos above.
-              </div>
-            ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:10 }}>
-                {files.map(f => {
-                  const url = getFileUrl(f.storage_path)
-                  return (
-                    <div key={f.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
-                      {f.file_type === 'photo' ? (
-                        <a href={url} target="_blank" rel="noreferrer">
-                          <img src={url} alt={f.file_name}
-                            style={{ width:'100%', height:100, objectFit:'cover' }} />
-                        </a>
-                      ) : f.file_type === 'video' ? (
-                        <video src={url} controls style={{ width:'100%', height:100 }} />
-                      ) : (
-                        <a href={url} target="_blank" rel="noreferrer"
-                          style={{ display:'flex', alignItems:'center', justifyContent:'center', height:80, color:'#0093DB', fontSize:28 }}>
-                          📄
-                        </a>
-                      )}
-                      <div style={{ padding:'6px 8px' }}>
-                        <div style={{ fontSize:11, color:'#1F2937', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {f.file_name}
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
-                          <span style={{ fontSize:10, color:'#9CA3AF' }}>
-                            {f.file_type === 'certificate' ? '📜' : f.file_type === 'photo' ? '📷' : '🎥'} {f.file_type}
-                          </span>
-                          <button onClick={() => deleteFile(f)}
-                            style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:12 }}>✕</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+            {/* Certificate link field — only show in certificates tab */}
+            {fileTab === 'certificates' && (
+              <div style={{ marginBottom:12 }}>
+                <input value={job.certificate_file_url || ''}
+                  onChange={e => setJob(p=>({...p, certificate_file_url:e.target.value}))}
+                  onBlur={e => saveField('certificate_file_url', e.target.value)}
+                  placeholder="Or paste external certificate link (Google Drive, Dropbox…)"
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#1F2937' }} />
+                {job.certificate_file_url && (
+                  <a href={job.certificate_file_url.startsWith('http') ? job.certificate_file_url : 'https://'+job.certificate_file_url}
+                    target="_blank" rel="noreferrer"
+                    style={{ fontSize:12, color:'#0093DB', marginTop:4, display:'inline-block' }}>
+                    Open certificate link →
+                  </a>
+                )}
               </div>
             )}
+
+            {/* File grid filtered by tab */}
+            {(() => {
+              const tabFiles = files.filter(f => f.file_type === fileTab.slice(0, -1))
+              if (tabFiles.length === 0) return (
+                <div style={{ color:'#9CA3AF', fontSize:13, padding:'24px 0', textAlign:'center', border:'2px dashed #E5E7EB', borderRadius:8 }}>
+                  No {fileTab} yet. Use the upload button above.
+                </div>
+              )
+              return (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:10 }}>
+                  {tabFiles.map(f => {
+                    const url = getFileUrl(f.storage_path)
+                    return (
+                      <div key={f.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
+                        {fileTab === 'photos' ? (
+                          <a href={url} target="_blank" rel="noreferrer">
+                            <img src={url} alt={f.file_name}
+                              style={{ width:'100%', height:110, objectFit:'cover', display:'block' }} />
+                          </a>
+                        ) : fileTab === 'videos' ? (
+                          <video src={url} controls style={{ width:'100%', height:110, display:'block' }} />
+                        ) : (
+                          <a href={url} target="_blank" rel="noreferrer"
+                            style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:90, color:'#3d7a00', textDecoration:'none' }}>
+                            <span style={{ fontSize:32 }}>📄</span>
+                            <span style={{ fontSize:10, color:'#9CA3AF', marginTop:4 }}>View PDF</span>
+                          </a>
+                        )}
+                        <div style={{ padding:'6px 8px', borderTop:'1px solid #E5E7EB' }}>
+                          <div style={{ fontSize:11, color:'#1F2937', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {f.file_name}
+                          </div>
+                          <div style={{ display:'flex', justifyContent:'flex-end', marginTop:4 }}>
+                            <button onClick={() => deleteFile(f)}
+                              style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:12, padding:0 }}>
+                              🗑 Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         </div>
 

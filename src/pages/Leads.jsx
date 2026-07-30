@@ -782,12 +782,10 @@ export default function Leads() {
                 Release
               </button>
             )}
-            {isAdmin && (
-              <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }}
-                style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
-                ✕
-              </button>
-            )}
+            <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }}
+              style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
+              ✕
+            </button>
           </div>
         </td>
       </tr>
@@ -838,7 +836,7 @@ export default function Leads() {
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{totalCount} found · page {page + 1} of {totalPages || 1}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {isAdmin && <Btn small variant="danger" onClick={deleteAllShown}>🗑 Delete Shown</Btn>}
+          <Btn small variant="danger" onClick={deleteAllShown}>🗑 Delete Shown</Btn>
           {isAdmin && <Btn small variant="ghost" onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>}
           <Btn small onClick={() => setShowAdd(true)}>+ Add Lead</Btn>
         </div>

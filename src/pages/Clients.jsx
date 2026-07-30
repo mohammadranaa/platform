@@ -146,6 +146,14 @@ export default function Clients() {
     showToast(newVal ? 'Client set to Active' : 'Client set to Inactive')
   }
 
+  async function deleteClient(clientId) {
+    if (!window.confirm('Delete this client? This cannot be undone.')) return
+    const { error } = await supabase.from('clients').delete().eq('id', clientId)
+    if (error) { showToast(error.message, 'error'); return }
+    setClients(p => p.filter(c => c.id !== clientId))
+    showToast('Client deleted')
+  }
+
   const clientName = c => c.company_name || `${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email || '—'
   const leadName = l => l.inbound_name || l.company_name || l.cold_company_name || `${l.contact_first || ''} ${l.contact_last || ''}`.trim() || '—'
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
@@ -289,6 +297,10 @@ export default function Clients() {
                         <button onClick={() => toggleActive(c)}
                           style={{ background: c.is_active !== false ? C.redSoft : C.greenSoft, color: c.is_active !== false ? C.red : C.greenDark, border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
                           {c.is_active !== false ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); deleteClient(c.id) }}
+                          style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          ✕
                         </button>
                       </div>
                     </td>

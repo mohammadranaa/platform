@@ -124,6 +124,14 @@ export default function Jobs() {
   const inp = {background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,color:C.text,padding:'8px 12px',fontSize:13,width:'100%'}
   const lbl = {color:C.muted,fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',display:'block',marginBottom:4}
 
+  async function deleteJob(jobId) {
+    if (!window.confirm('Delete this job? This cannot be undone.')) return
+    const { error } = await supabase.from('jobs').delete().eq('id', jobId)
+    if (error) { showToast(error.message, 'error'); return }
+    setJobs(p => p.filter(j => j.id !== jobId))
+    showToast('Job deleted')
+  }
+
   async function createJob() {
     if(!form.title){showToast('Title required','error');return}
     setSaving(true)
@@ -261,6 +269,7 @@ export default function Jobs() {
                       <th style={{padding:'8px 12px',textAlign:'left',fontSize:10,fontWeight:700,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,background:C.surface,color:C.muted}}>Engineer</th>
                       <Th label="Eng Paid" field="engineer_paid_amount"/>
                       <Th label="Profit" field="gross_profit"/>
+                      <th style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, textTransform:'uppercase', borderBottom:'1px solid #E5E7EB', background:'#F5F7FA', color:'#6B7280' }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -284,6 +293,12 @@ export default function Jobs() {
                         <Td><span style={{fontSize:11,color:C.muted}}>{j.engineer_name||'—'}</span></Td>
                         <Td><span style={{fontSize:11}}>{j.engineer_paid_amount>0?fmt(j.engineer_paid_amount):'—'}</span></Td>
                         <Td><span style={{fontWeight:700,color:Number(j.gross_profit)>0?C.greenDark:Number(j.gross_profit)<0?C.red:C.dim}}>{j.gross_profit!=null?fmt(j.gross_profit):'—'}</span></Td>
+                        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => deleteJob(j.id)}
+                            style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:6, padding:'4px 8px', fontSize:10, cursor:'pointer', fontWeight:600 }}>
+                            ✕
+                          </button>
+                        </td>
                       </tr>
                     })}
                   </tbody>
