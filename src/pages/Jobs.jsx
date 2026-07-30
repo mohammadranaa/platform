@@ -33,6 +33,26 @@ export default function Jobs() {
   const sf = (k,v) => setForm(p=>({...p,[k]:v}))
   const tog = s => sf('service_types', form.service_types.includes(s) ? form.service_types.filter(x=>x!==s) : [...form.service_types,s])
 
+  const [clientSearch, setClientSearch] = useState('')
+  const [showClientDrop, setShowClientDrop] = useState(false)
+  const [showAddClient, setShowAddClient] = useState(false)
+  const [nc, setNc] = useState({ first_name:'', last_name:'', company_name:'', email:'', phone:'', street_address:'', city:'', postcode:'', client_type:'Landlord' })
+
+  async function createQuickClient() {
+    if (!nc.first_name && !nc.company_name) { showToast('Name or company required', 'error'); return }
+    const { data: c, error } = await supabase.from('clients').insert({
+      ...nc, is_active: true, source: 'manual-from-job'
+    }).select().single()
+    if (error) { showToast(error.message, 'error'); return }
+    setClients(prev => [c, ...prev])
+    sf('client_id', c.id)
+    sf('site_address', [c.street_address, c.city, c.postcode].filter(Boolean).join(', '))
+    setShowAddClient(false)
+    setClientSearch(cName(c))
+    setNc({ first_name:'', last_name:'', company_name:'', email:'', phone:'', street_address:'', city:'', postcode:'', client_type:'Landlord' })
+    showToast('Client created ✓')
+  }
+
   useEffect(() => { load() }, [])
 
   async function load() {
@@ -275,14 +295,71 @@ export default function Jobs() {
       )}
 
       {showNew&&(
-        <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>setShowNew(false)}>
+        <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:200}} onClick={()=>{setShowNew(false);setShowClientDrop(false)}}>
           <div style={{background:'#fff',borderRadius:16,padding:32,width:640,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.15)'}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:18,fontWeight:700,color:C.text,marginBottom:20}}>New Job</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-              <div style={{gridColumn:'span 2'}}><label style={lbl}>Client</label>
-                <select value={form.client_id} onChange={e=>{sf('client_id',e.target.value);const c=clients.find(x=>x.id===e.target.value);if(c)sf('site_address',[c.street_address,c.city,c.postcode].filter(Boolean).join(', '))}} style={inp}>
-                  <option value="">— Select client —</option>{clients.map(c=><option key={c.id} value={c.id}>{cName(c)}</option>)}
-                </select></div>
+              <div style={{ gridColumn:'span 2', position:'relative' }}>
+                <label style={lbl}>Client</label>
+                <input
+                  value={clientSearch || (form.client_id ? cName(clients.find(c=>c.id===form.client_id)) : '')}
+                  onChange={e => { setClientSearch(e.target.value); setShowClientDrop(true); if(!e.target.value) sf('client_id','') }}
+                  onFocus={() => setShowClientDrop(true)}
+                  placeholder="Search or add new client…"
+                  style={inp}
+                />
+                {showClientDrop && (
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', zIndex:50, maxHeight:240, overflowY:'auto', marginTop:4 }}>
+                    <button type="button" onClick={() => { setShowAddClient(true); setShowClientDrop(false) }}
+                      style={{ display:'block', width:'100%', textAlign:'left', padding:'10px 14px', border:'none', borderBottom:'2px solid #E5E7EB', background:'#E6F4FC', cursor:'pointer', fontSize:13, fontWeight:700, color:'#0093DB' }}>
+                      + Add New Client
+                    </button>
+                    {clients
+                      .filter(c => { if(!clientSearch) return true; const q=clientSearch.toLowerCase(); return (c.company_name||'').toLowerCase().includes(q)||(c.first_name||'').toLowerCase().includes(q)||(c.last_name||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q) })
+                      .slice(0,20)
+                      .map(c => (
+                        <button key={c.id} type="button"
+                          onClick={() => { sf('client_id',c.id); sf('site_address',[c.street_address,c.city,c.postcode].filter(Boolean).join(', ')); setClientSearch(cName(c)); setShowClientDrop(false) }}
+                          style={{ display:'block', width:'100%', textAlign:'left', padding:'8px 14px', border:'none', borderBottom:'1px solid #F5F7FA', background:'none', cursor:'pointer', fontSize:13 }}
+                          onMouseEnter={e=>e.currentTarget.style.background='#F5F7FA'}
+                          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                          <div style={{ fontWeight:600, color:'#1F2937' }}>{cName(c)}</div>
+                          {c.email && <div style={{ fontSize:11, color:'#9CA3AF' }}>{c.email}</div>}
+                        </button>
+                      ))
+                    }
+                    {clients.filter(c => { if(!clientSearch) return true; const q=clientSearch.toLowerCase(); return (c.company_name||'').toLowerCase().includes(q)||(c.first_name||'').toLowerCase().includes(q) }).length === 0 && (
+                      <div style={{ padding:14, textAlign:'center', color:'#9CA3AF', fontSize:13 }}>
+                        No match — <button type="button" onClick={() => { setShowAddClient(true); setShowClientDrop(false) }}
+                          style={{ background:'none', border:'none', color:'#0093DB', cursor:'pointer', fontWeight:700, fontSize:13 }}>create new client</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {showAddClient && (
+                <div style={{ gridColumn:'span 2', background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:12, padding:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
+                    <span style={{ fontWeight:700, fontSize:14, color:'#1F2937' }}>Quick Add Client</span>
+                    <button type="button" onClick={() => setShowAddClient(false)} style={{ background:'none', border:'none', color:'#9CA3AF', cursor:'pointer', fontSize:18 }}>✕</button>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div><label style={lbl}>First Name *</label><input value={nc.first_name} onChange={e=>setNc(p=>({...p,first_name:e.target.value}))} style={inp}/></div>
+                    <div><label style={lbl}>Last Name</label><input value={nc.last_name} onChange={e=>setNc(p=>({...p,last_name:e.target.value}))} style={inp}/></div>
+                    <div style={{gridColumn:'span 2'}}><label style={lbl}>Company</label><input value={nc.company_name} onChange={e=>setNc(p=>({...p,company_name:e.target.value}))} style={inp}/></div>
+                    <div><label style={lbl}>Email</label><input value={nc.email} onChange={e=>setNc(p=>({...p,email:e.target.value}))} style={inp}/></div>
+                    <div><label style={lbl}>Phone</label><input value={nc.phone} onChange={e=>setNc(p=>({...p,phone:e.target.value}))} style={inp}/></div>
+                    <div style={{gridColumn:'span 2'}}><label style={lbl}>Address</label><input value={nc.street_address} onChange={e=>setNc(p=>({...p,street_address:e.target.value}))} style={inp}/></div>
+                    <div><label style={lbl}>City</label><input value={nc.city} onChange={e=>setNc(p=>({...p,city:e.target.value}))} style={inp}/></div>
+                    <div><label style={lbl}>Postcode</label><input value={nc.postcode} onChange={e=>setNc(p=>({...p,postcode:e.target.value}))} style={inp}/></div>
+                  </div>
+                  <button type="button" onClick={createQuickClient}
+                    style={{ marginTop:12, background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                    ✓ Create & Select
+                  </button>
+                </div>
+              )}
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Job Title *</label><input value={form.title} onChange={e=>sf('title',e.target.value)} placeholder="e.g. EICR + GSC — 2-bed flat" style={inp}/></div>
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Services</label>
                 <div style={{display:'flex',flexWrap:'wrap',gap:6}}>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
@@ -72,7 +72,6 @@ export default function JobDetail() {
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [lightbox, setLightbox]   = useState(null)
   const [editRemarks, setEditRemarks]   = useState(false)
   const [remarksText, setRemarksText]   = useState('')
   const [diaryInput, setDiaryInput]     = useState({ type: 'note', content: '' })
@@ -80,9 +79,6 @@ export default function JobDetail() {
   const [allClients, setAllClients]               = useState([])
   const [allProfiles, setAllProfiles]             = useState([])
   const [showEmailCompose, setShowEmailCompose]   = useState(false)
-
-  const certRef  = useRef()
-  const photoRef = useRef()
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -136,52 +132,38 @@ export default function JobDetail() {
     setFiles(data || [])
   }
 
-  // ── Upload certificates ──────────────────────────────────────
-  async function uploadCertificates(e) {
-    const selected = Array.from(e.target.files)
-    if (!selected.length) return
+  // ── Upload a file (certificate, photo, or video) ───────────────
+  async function uploadFile(file, fileType = 'certificate') {
     setUploading(true)
-    for (const file of selected) {
-      const path = `jobs/${id}/certificates/${Date.now()}_${file.name}`
-      const { error } = await supabase.storage.from('job-files').upload(path, file)
-      if (error) { showToast(`Failed: ${file.name}`, 'error'); continue }
-      await supabase.from('job_files').insert({
-        job_id: id, uploaded_by: profile.id, uploader_name: profile.full_name,
-        file_type: 'certificate', file_name: file.name,
-        storage_path: path, file_size: file.size, mime_type: file.type,
-      })
-    }
-    setUploading(false)
-    await fetchFiles()
-    showToast(`${selected.length} certificate(s) uploaded ✓`)
-    certRef.current.value = ''
-  }
+    const ext = file.name.split('.').pop()
+    const path = `${id}/${fileType}_${Date.now()}.${ext}`
 
-  // ── Upload photos ────────────────────────────────────────────
-  async function uploadPhotos(e) {
-    const selected = Array.from(e.target.files)
-    if (!selected.length) return
-    const currentPhotos = files.filter(f => f.file_type === 'photo').length
-    if (currentPhotos + selected.length > 50) {
-      showToast(`Max 50 photos. You have ${currentPhotos} already.`, 'error'); return
+    const { error } = await supabase.storage
+      .from('job-files')
+      .upload(path, file, { cacheControl: '3600', upsert: false })
+
+    if (error) {
+      console.error('Upload error:', error)
+      showToast('Upload failed: ' + error.message, 'error')
+      setUploading(false)
+      return
     }
-    setUploading(true)
-    let uploaded = 0
-    for (const file of selected) {
-      const path = `jobs/${id}/photos/${Date.now()}_${file.name}`
-      const { error } = await supabase.storage.from('job-files').upload(path, file)
-      if (error) { showToast(`Failed: ${file.name}`, 'error'); continue }
-      await supabase.from('job_files').insert({
-        job_id: id, uploaded_by: profile.id, uploader_name: profile.full_name,
-        file_type: 'photo', file_name: file.name,
-        storage_path: path, file_size: file.size, mime_type: file.type,
-      })
-      uploaded++
-    }
+
+    // job_files schema uses storage_path (not file_url) — URL is computed on read via getFileUrl()
+    await supabase.from('job_files').insert({
+      job_id: id,
+      file_name: file.name,
+      storage_path: path,
+      file_type: fileType,
+      file_size: file.size,
+      mime_type: file.type,
+      uploaded_by: profile?.id,
+      uploader_name: profile?.full_name,
+    })
+
     setUploading(false)
+    showToast('File uploaded ✓')
     await fetchFiles()
-    showToast(`${uploaded} photo(s) uploaded ✓`)
-    photoRef.current.value = ''
   }
 
   function getFileUrl(path) {
@@ -241,9 +223,6 @@ export default function JobDetail() {
 
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
   const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || '—'
-  const certificates = files.filter(f => f.file_type === 'certificate')
-  const photos       = files.filter(f => f.file_type === 'photo')
-  const fmtSize = b => b < 1048576 ? `${(b / 1024).toFixed(0)}KB` : `${(b / 1048576).toFixed(1)}MB`
 
   if (loading) return <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>Loading job…</div>
   if (!job)    return <div style={{ color: C.red,   padding: 40, textAlign: 'center' }}>Job not found.</div>
@@ -252,10 +231,6 @@ export default function JobDetail() {
 
   return (
     <div>
-      {/* Hidden inputs */}
-      <input ref={certRef}  type="file" multiple accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={uploadCertificates} />
-      <input ref={photoRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={uploadPhotos} />
-
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
@@ -495,6 +470,22 @@ export default function JobDetail() {
                 <input type="checkbox" checked={!!job.google_review_requested} onChange={e => saveField('google_review_requested', e.target.checked)} id="google_review_requested" />
                 <label htmlFor="google_review_requested" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Google Review Requested</label>
               </div>
+
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={lbl}>Certificate Link (external)</label>
+                <input value={job.certificate_file_url || ''}
+                  onChange={e => setJob(p=>({...p, certificate_file_url: e.target.value}))}
+                  onBlur={e => saveField('certificate_file_url', e.target.value)}
+                  placeholder="Paste Google Drive or external link…"
+                  style={inp} />
+                {job.certificate_file_url && (
+                  <a href={job.certificate_file_url.startsWith('http') ? job.certificate_file_url : 'https://' + job.certificate_file_url}
+                    target="_blank" rel="noreferrer"
+                    style={{ fontSize:12, color:'#0093DB', marginTop:4, display:'inline-block' }}>
+                    Open link →
+                  </a>
+                )}
+              </div>
             </div>
           </div>
 
@@ -540,44 +531,69 @@ export default function JobDetail() {
             )}
           </div>
 
-          {/* Certificates */}
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                Certificates ({certificates.length})
+          {/* Files & Certificates */}
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                Files & Certificates ({files.length})
+              </span>
+              <div style={{ display:'flex', gap:6 }}>
+                <label style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  📜 Certificate
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden
+                    onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'certificate')} />
+                </label>
+                <label style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  📷 Photo
+                  <input type="file" accept="image/*" hidden multiple
+                    onChange={e => Array.from(e.target.files).forEach(f => uploadFile(f, 'photo'))} />
+                </label>
+                <label style={{ background:'#EDE9FE', color:'#7C3AED', border:'1px solid #7C3AED44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  🎥 Video
+                  <input type="file" accept="video/*" hidden
+                    onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'video')} />
+                </label>
               </div>
-              <Btn small variant="success" onClick={() => certRef.current.click()} disabled={uploading}>
-                {uploading ? 'Uploading…' : '+ Attach'}
-              </Btn>
             </div>
-            {certificates.length === 0 ? (
-              <div onClick={() => certRef.current.click()} style={{ border: `2px dashed ${C.border}`, borderRadius: 10, padding: 24, textAlign: 'center', cursor: 'pointer', color: C.dim, fontSize: 13 }}>
-                <div style={{ fontSize: 28, marginBottom: 6 }}>📋</div>
-                Click to attach certificates (PDF, JPG, PNG)
+
+            {files.length === 0 ? (
+              <div style={{ color:'#9CA3AF', fontSize:13, padding:'20px 0', textAlign:'center', border:'2px dashed #E5E7EB', borderRadius:8 }}>
+                No files attached yet. Upload certificates, photos or videos above.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {certificates.map(cert => (
-                  <div key={cert.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 20 }}>{cert.mime_type === 'application/pdf' ? '📋' : '🖼'}</span>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{cert.file_name}</div>
-                        <div style={{ fontSize: 11, color: C.dim }}>{cert.uploader_name} · {fmtSize(cert.file_size || 0)}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:10 }}>
+                {files.map(f => {
+                  const url = getFileUrl(f.storage_path)
+                  return (
+                    <div key={f.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
+                      {f.file_type === 'photo' ? (
+                        <a href={url} target="_blank" rel="noreferrer">
+                          <img src={url} alt={f.file_name}
+                            style={{ width:'100%', height:100, objectFit:'cover' }} />
+                        </a>
+                      ) : f.file_type === 'video' ? (
+                        <video src={url} controls style={{ width:'100%', height:100 }} />
+                      ) : (
+                        <a href={url} target="_blank" rel="noreferrer"
+                          style={{ display:'flex', alignItems:'center', justifyContent:'center', height:80, color:'#0093DB', fontSize:28 }}>
+                          📄
+                        </a>
+                      )}
+                      <div style={{ padding:'6px 8px' }}>
+                        <div style={{ fontSize:11, color:'#1F2937', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {f.file_name}
+                        </div>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginTop:4 }}>
+                          <span style={{ fontSize:10, color:'#9CA3AF' }}>
+                            {f.file_type === 'certificate' ? '📜' : f.file_type === 'photo' ? '📷' : '🎥'} {f.file_type}
+                          </span>
+                          <button onClick={() => deleteFile(f)}
+                            style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:12 }}>✕</button>
+                        </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <a href={getFileUrl(cert.storage_path)} target="_blank" rel="noreferrer"
-                        style={{ background: C.accent, color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>Open</a>
-                      <button onClick={() => deleteFile(cert)}
-                        style={{ background: C.redSoft, color: C.red, border: `1px solid ${C.red}44`, borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>✕</button>
-                    </div>
-                  </div>
-                ))}
-                <button onClick={() => certRef.current.click()}
-                  style={{ background: 'none', border: `1px dashed ${C.border}`, borderRadius: 8, padding: '8px', color: C.dim, fontSize: 12, cursor: 'pointer' }}>
-                  + Add more certificates
-                </button>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -687,59 +703,6 @@ export default function JobDetail() {
           </div>
         </div>
       </div>
-
-      {/* Photo Gallery */}
-      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginTop: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Site Photos ({photos.length}/50)</div>
-            {photos.length >= 50 && <div style={{ color: C.red, fontSize: 12, marginTop: 2 }}>Maximum 50 photos reached</div>}
-          </div>
-          <Btn small variant="amber" onClick={() => photoRef.current.click()} disabled={uploading || photos.length >= 50}>
-            {uploading ? 'Uploading…' : '📷 Add Photos'}
-          </Btn>
-        </div>
-
-        {photos.length === 0 ? (
-          <div onClick={() => photoRef.current.click()}
-            style={{ border: `2px dashed ${C.border}`, borderRadius: 12, padding: 40, textAlign: 'center', cursor: 'pointer', color: C.dim }}>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>📷</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.muted, marginBottom: 4 }}>Add site photos</div>
-            <div style={{ fontSize: 12 }}>Up to 50 photos per job</div>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
-            {photos.map(photo => (
-              <div key={photo.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}`, cursor: 'pointer' }}>
-                <img src={getFileUrl(photo.storage_path)} alt={photo.file_name} onClick={() => setLightbox(getFileUrl(photo.storage_path))}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                <button onClick={e => { e.stopPropagation(); deleteFile(photo) }}
-                  style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(220,38,38,0.85)', color: '#fff', border: 'none', borderRadius: 4, width: 22, height: 22, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-              </div>
-            ))}
-            {photos.length < 50 && (
-              <div onClick={() => photoRef.current.click()}
-                style={{ aspectRatio: '1', borderRadius: 8, border: `2px dashed ${C.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.dim, fontSize: 12, gap: 4 }}>
-                <span style={{ fontSize: 24 }}>+</span><span>Add more</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Lightbox */}
-      {lightbox && (
-        <div style={{ position: 'fixed', inset: 0, background: '#000000EE', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}
-          onClick={() => setLightbox(null)}>
-          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#fff', fontSize: 18, cursor: 'pointer' }}>✕</button>
-          <a href={lightbox} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-            style={{ position: 'absolute', top: 16, left: 16, background: 'rgba(255,255,255,0.2)', borderRadius: 8, padding: '6px 12px', color: '#fff', fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
-            ↗ Full size
-          </a>
-          <img src={lightbox} alt="" onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }} />
-        </div>
-      )}
 
       {showEmailCompose && job.clients && (
         <EmailCompose

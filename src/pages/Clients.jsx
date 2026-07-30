@@ -70,20 +70,22 @@ export default function Clients() {
   const [form, setForm] = useState(blank)
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { fetchAll() }, [profile])
+  useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: c }, { data: l }, { data: p }] = await Promise.all([
-      (() => {
-        let q = supabase.from('clients').select('*, profiles(full_name)').order('created_at', { ascending: false })
-        if (!isAdmin) q = q.eq('assigned_to', profile?.id)
-        return q
-      })(),
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*, profiles!clients_assigned_to_fkey(full_name)')
+      .order('created_at', { ascending: false })
+
+    if (error) console.error('Clients error:', error)
+
+    const [{ data: l }, { data: p }] = await Promise.all([
       supabase.from('leads').select('id, lead_type, inbound_name, inbound_email, inbound_phone, company_name, contact_first, contact_last, email_address, job_telephone, street_address, city, postcode, cold_company_name, cold_contact_name, cold_email, cold_address').eq('status', 'Accepted').is('lead_id', null).order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name').eq('is_active', true),
     ])
-    setClients(c || [])
+    setClients(data || [])
     setLeads(l || [])
     setProfiles(p || [])
     setLoading(false)
