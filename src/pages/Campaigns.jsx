@@ -77,14 +77,6 @@ const Field = ({ label, value, onChange, type = 'text', placeholder, rows, optio
   </div>
 )
 
-function contactName(l) {
-  return l.cold_company_name || l.cold_contact_name || l.inbound_name ||
-         l.company_name || ((l.contact_first || '') + ' ' + (l.contact_last || '')).trim() || '—'
-}
-function contactEmail(l) {
-  return l.cold_email || l.inbound_email || l.email_address || ''
-}
-
 export default function Campaigns() {
   const { profile } = useAuth()
   const { toast, showToast } = useToast()
@@ -108,6 +100,7 @@ export default function Campaigns() {
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set())
   const [leadFilterTab, setLeadFilterTab]     = useState('all')
   const [leadSearch, setLeadSearch]           = useState('')
+  const [hideEmailed, setHideEmailed]         = useState(false)
 
   const blankCampaign = { name: '', from_name: '', target_type: 'cold_agent', daily_limit: 50, track_opens: true, track_clicks: true }
   const blankStep = { step_number: '', delay_days: '0', subject: '', body_html: '' }
@@ -239,12 +232,16 @@ export default function Campaigns() {
     setSelectedLeadIds(new Set())
     setLeadFilterTab('all')
     setLeadSearch('')
+    setHideEmailed(false)
     setImportLoading(true)
-    const { data } = await supabase
-      .from('leads')
-      .select('id, lead_type, inbound_name, inbound_email, company_name, cold_company_name, cold_email, cold_contact_name, email_address, contact_first, contact_last, status, assigned_to, profiles(full_name)')
+    const { data: contactData, error } = await supabase
+      .from('campaign_eligible_leads')
+      .select('id, lead_type, email, company, contact_name, contact_first, contact_last, status, assigned_to, in_campaign, email_send_count, last_email_sent_at')
       .order('created_at', { ascending: false })
-    setImportLeads((data || []).filter(l => contactEmail(l)))
+      .limit(2000)
+
+    if (error) console.error('Eligible leads error:', error)
+    setImportLeads(contactData || [])
     setImportLoading(false)
   }
 
@@ -252,36 +249,46 @@ export default function Campaigns() {
     let r = importLeads
     if (leadFilterTab === 'cold_agent') r = r.filter(l => l.lead_type === 'cold_agent')
     if (leadFilterTab === 'inbound') r = r.filter(l => l.lead_type === 'inbound')
+    if (hideEmailed) r = r.filter(l => !l.in_campaign && !l.email_send_count)
     if (leadSearch.trim()) {
       const q = leadSearch.trim().toLowerCase()
-      r = r.filter(l => contactName(l).toLowerCase().includes(q) || contactEmail(l).toLowerCase().includes(q))
+      r = r.filter(l => (l.company || '').toLowerCase().includes(q) || (l.contact_name || '').toLowerCase().includes(q) || (l.email || '').toLowerCase().includes(q))
     }
     return r
-  }, [importLeads, leadFilterTab, leadSearch])
+  }, [importLeads, leadFilterTab, leadSearch, hideEmailed])
 
   async function addSelectedLeadsToCampaign() {
     if (!selected || selectedLeadIds.size === 0) return
     const chosen = importLeads.filter(l => selectedLeadIds.has(l.id))
     setSaving(true)
-    const firstStep = steps[0]
-    const { error } = await supabase.from('campaign_contacts').insert(
-      chosen.map(l => ({
+    const selectedForInsert = chosen
+    const { error: insErr } = await supabase.from('campaign_contacts').insert(
+      selectedForInsert.map(l => ({
         campaign_id: selected.id,
-        email: contactEmail(l),
-        first_name: contactName(l),
-        company: l.cold_company_name || l.company_name || '',
-        status: 'active',
+        lead_id:     l.id,
+        email:       l.email,
+        first_name:  l.contact_first || (l.contact_name || '').split(' ')[0] || null,
+        last_name:   l.contact_last  || (l.contact_name || '').split(' ').slice(1).join(' ') || null,
+        company:     l.company || null,
+        status:      'active',
         current_step: 0,
-        next_send_at: firstStep ? new Date(Date.now() + (firstStep.delay_days || 0) * 86400000).toISOString() : null,
+        enrolled_at: new Date().toISOString(),
       }))
     )
     setSaving(false)
-    if (error) { showToast(error.message, 'error'); return }
+    if (insErr) {
+      if (insErr.message?.includes('duplicate key')) {
+        showToast('Some contacts were already in this campaign and were skipped.', 'error')
+      } else {
+        showToast('Import failed: ' + insErr.message, 'error')
+      }
+      return
+    }
     const { data } = await supabase.from('campaign_contacts').select('*').eq('campaign_id', selected.id).order('enrolled_at', { ascending: false })
     setContacts(data || [])
     setShowImportLeads(false)
     setSelectedLeadIds(new Set())
-    showToast(`${chosen.length} contact${chosen.length !== 1 ? 's' : ''} added ✓`)
+    showToast(selectedForInsert.length + ' contacts added ✓')
   }
 
   // Analytics
@@ -472,16 +479,25 @@ export default function Campaigns() {
           <div style={{ position: 'fixed', inset: 0, background: '#00000088', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowImportLeads(false)}>
             <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, padding: 32, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', width: 620, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Import from Leads</div>
-              <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Select leads with an email address to add to this campaign.</div>
+              <div style={{ color: C.muted, fontSize: 13, marginBottom: 12 }}>Select leads with an email address to add to this campaign.</div>
+
+              <div style={{ background:'#E6F4FC', border:'1px solid #0093DB44', borderRadius:8, padding:'10px 14px', marginBottom:12, fontSize:12, color:'#1F2937' }}>
+                Only leads with a <strong>Verified</strong> email address can be added to a campaign.
+                {' '}{importLeads.length} of your leads are currently eligible.
+              </div>
 
               {/* Filter tabs */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 {[['all', 'All'], ['cold_agent', 'Estate Agents'], ['inbound', 'Inbound']].map(([k, l]) => (
                   <button key={k} onClick={() => setLeadFilterTab(k)}
                     style={{ padding: '6px 14px', borderRadius: 20, border: `1px solid ${leadFilterTab === k ? C.accent : '#E5E7EB'}`, background: leadFilterTab === k ? C.accentSoft : '#fff', color: leadFilterTab === k ? C.accent : C.muted, cursor: 'pointer', fontSize: 12, fontWeight: leadFilterTab === k ? 700 : 400 }}>
                     {l}
                   </button>
                 ))}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.muted, cursor: 'pointer', marginLeft: 'auto' }}>
+                  <input type="checkbox" checked={hideEmailed} onChange={e => setHideEmailed(e.target.checked)} />
+                  Hide leads already emailed
+                </label>
               </div>
 
               {/* Search */}
@@ -523,11 +539,18 @@ export default function Campaigns() {
                         })
                       }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contactName(l)}</div>
-                      <div style={{ color: C.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contactEmail(l)}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {l.company || l.contact_name || '—'}
+                        {(l.in_campaign || l.email_send_count > 0) && (
+                          <span style={{ background:'#FEF3C7', color:'#D97706', borderRadius:5, padding:'1px 6px', fontSize:9, fontWeight:700, marginLeft:6 }}>
+                            ALREADY EMAILED
+                          </span>
+                        )}
+                      </div>
+                      {l.company && l.contact_name && <div style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.contact_name}</div>}
+                      <div style={{ color: C.dim, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.email}</div>
                     </div>
                     <span style={{ color: C.muted, fontSize: 11, whiteSpace: 'nowrap' }}>{l.status}</span>
-                    <span style={{ color: C.dim, fontSize: 12, minWidth: 90, textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.profiles?.full_name || 'Unassigned'}</span>
                   </label>
                 ))}
               </div>

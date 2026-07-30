@@ -54,7 +54,8 @@
       "Bash(find . -iname \"deno.json*\" -not -path \"*/node_modules/*\")",
       "Bash(cat .vscode/settings.json)",
       "Bash(unzip -o -q ~/Downloads/mlc-cold-inbox-v2.zip -d /private/tmp/claude-501/-Users-mohammadrana-Desktop-platform/0b21580d-ea1c-4205-aa37-45064ca98109/scratchpad/mlc-cold-inbox-v2)",
-      "mcp__claude_ai_Supabase__execute_sql"
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(grep -n \"Assigned rep bar\\\\|</div>$\" src/pages/LeadDetail.jsx)"
     ]
   }
 }

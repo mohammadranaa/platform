@@ -95,7 +95,7 @@ export default function Leads() {
   const [totalCount, setTotalCount] = useState(0)
   const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0 })
   const [page, setPage]           = useState(0)
-  const PAGE_SIZE = 50
+  const PAGE_SIZE = 100
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [tab, setTab]             = useState(searchParams.get('type') || 'all')
@@ -104,8 +104,9 @@ export default function Leads() {
   const searchTimer = useRef(null)
   const [filterStatus, setFilterStatus] = useState('All')
   const [renewalFilter, setRenewalFilter] = useState('All')
-  const [sortField, setSortField]       = useState('created_at')
+  const [sortField, setSortField]       = useState('last_contacted_at')
   const [sortDir, setSortDir]           = useState('desc')
+  const [filterVerified, setFilterVerified] = useState('All')
   const [selectedIds, setSelectedIds]   = useState(new Set())
   const [bulkAssignTo, setBulkAssignTo] = useState('')
   const [showBulkBar, setShowBulkBar]   = useState(false)
@@ -122,7 +123,7 @@ export default function Leads() {
   const [form, setForm]           = useState({ status: 'New', email_verified: 'Unknown' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir])
+  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
 
   async function fetchLeads(p = page) {
     setLoading(true)
@@ -131,12 +132,14 @@ export default function Leads() {
 
     // Build query with server-side filters
     let q = supabase.from('leads').select('*', { count: 'exact' })
-      .order(sortField, { ascending: sortDir === 'asc' })
+    const nullsFirst = sortDir === 'asc'
+    q = q.order(sortField, { ascending: sortDir === 'asc', nullsFirst })
       .range(from, to)
 
     if (tab !== 'all') q = q.eq('lead_type', tab)
     if (!isAdmin) q = q.eq('assigned_to', profile?.id)
     if (filterStatus !== 'All') q = q.eq('status', filterStatus)
+    if (filterVerified !== 'All') q = q.eq('email_verified', filterVerified)
 
     // Server-side search — search across key fields
     if (search.trim()) {
@@ -545,6 +548,17 @@ export default function Leads() {
     return 'job_telephone'
   }
 
+  function timeAgo(ts) {
+    if (!ts) return null
+    const mins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
+    if (mins < 60)    return mins + 'm ago'
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24)     return hrs + 'h ago'
+    const days = Math.floor(hrs / 24)
+    if (days < 30)    return days + 'd ago'
+    return Math.floor(days / 30) + 'mo ago'
+  }
+
   async function saveInlineEdit() {
     if (!editingField) return
     await supabase.from('leads').update({ [editingField.field]: editingValue }).eq('id', editingField.id)
@@ -710,6 +724,45 @@ export default function Leads() {
           </select>
         </td>
 
+        {/* Engagement */}
+        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB', whiteSpace:'nowrap' }}>
+          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+            {l.email_reply_count > 0 ? (
+              <span title={'Replied ' + new Date(l.last_email_replied_at).toLocaleDateString('en-GB')}
+                style={{ background:'#F0FAE0', color:'#3d7a00', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:700 }}>
+                ↩ Replied
+              </span>
+            ) : l.email_open_count > 0 ? (
+              <span title={'Opened ' + new Date(l.last_email_opened_at).toLocaleDateString('en-GB')}
+                style={{ background:'#FEF3C7', color:'#D97706', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:700 }}>
+                👁 Opened{l.email_open_count > 1 ? ' ×' + l.email_open_count : ''}
+              </span>
+            ) : l.email_send_count > 0 ? (
+              <span title={'Sent ' + new Date(l.last_email_sent_at).toLocaleDateString('en-GB')}
+                style={{ background:'#E6F4FC', color:'#0093DB', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:600 }}>
+                ✉ Sent{l.email_send_count > 1 ? ' ×' + l.email_send_count : ''}
+              </span>
+            ) : (
+              <span style={{ color:'#D1D5DB', fontSize:11 }}>—</span>
+            )}
+            {l.in_campaign && (
+              <span title="In an active campaign"
+                style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 5px', fontSize:9, fontWeight:700 }}>
+                CAMP
+              </span>
+            )}
+          </div>
+        </td>
+
+        {/* Last Contact */}
+        <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB', fontSize:11, whiteSpace:'nowrap' }}>
+          {l.last_contacted_at
+            ? <span style={{ color: (Date.now() - new Date(l.last_contacted_at)) > 2592000000 ? '#D97706' : '#6B7280' }}>
+                {timeAgo(l.last_contacted_at)}
+              </span>
+            : <span style={{ color:'#D1D5DB' }}>Never</span>}
+        </td>
+
         {/* Actions */}
         <td style={{ ...td, whiteSpace: 'nowrap' }}>
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -753,7 +806,9 @@ export default function Leads() {
       ...(tab === 'all' ? [{ label: 'Type' }] : []),
       { label: 'Email' }, { label: 'Phone' },
       ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
-      { label: 'Assigned To' }, { label: 'Status', field: 'status' }, { label: 'Change Status' },
+      { label: 'Assigned To' }, { label: 'Status', field: 'status' },
+      { label: 'Engagement' }, { label: 'Last Contact', field: 'last_contacted_at' },
+      { label: 'Change Status' },
     ]
     return (
       <>
@@ -811,6 +866,13 @@ export default function Leads() {
           style={{ ...inp, width: 'auto', padding: '8px 12px' }}>
           <option value="All">All Statuses</option>
           {LEAD_STATUSES.map(s => <option key={s}>{s}</option>)}
+        </select>
+        <select value={filterVerified} onChange={e => setFilterVerified(e.target.value)}
+          style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 10px', fontSize:13 }}>
+          <option value="All">All Emails</option>
+          <option value="Verified">✓ Verified only</option>
+          <option value="Unverified">Unverified</option>
+          <option value="Unknown">Unknown</option>
         </select>
         {(tab === 'verified' || tab === 'all') && (
           <select value={renewalFilter} onChange={e => setRenewalFilter(e.target.value)}

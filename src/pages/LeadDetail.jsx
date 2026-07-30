@@ -195,6 +195,27 @@ export default function LeadDetail() {
         </div>
       </div>
 
+      {(lead.email_send_count > 0 || lead.last_contacted_at) && (
+        <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+          {[
+            { label:'Emails Sent',  value: lead.email_send_count  || 0, color:'#0093DB' },
+            { label:'Opens',        value: lead.email_open_count  || 0, color:'#D97706' },
+            { label:'Replies',      value: lead.email_reply_count || 0, color:'#3d7a00' },
+          ].map(s => (
+            <div key={s.label} style={{ background:'#fff', border:'1px solid #E5E7EB', borderTop:'3px solid ' + s.color, borderRadius:10, padding:'8px 16px', minWidth:90 }}>
+              <div style={{ color:'#6B7280', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>{s.label}</div>
+              <div style={{ color:s.color, fontSize:18, fontWeight:800 }}>{s.value}</div>
+            </div>
+          ))}
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderTop:'3px solid #6B7280', borderRadius:10, padding:'8px 16px', minWidth:130 }}>
+            <div style={{ color:'#6B7280', fontSize:10, textTransform:'uppercase', letterSpacing:'0.06em' }}>Last Contact</div>
+            <div style={{ color:'#1F2937', fontSize:13, fontWeight:700 }}>
+              {lead.last_contacted_at ? new Date(lead.last_contacted_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'2-digit' }) : 'Never'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Assigned rep bar */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
