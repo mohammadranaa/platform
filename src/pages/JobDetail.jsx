@@ -305,6 +305,22 @@ export default function JobDetail() {
             style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             🧾 Generate Invoice
           </button>
+          <button onClick={() => {
+            const clientEmail = job.clients?.email || ''
+            const clientNameVal = job.clients?.company_name || (job.clients?.first_name + ' ' + (job.clients?.last_name||'')).trim() || 'Customer'
+            const total = lineItems.reduce((s,l) => s + (l.quantity||1) * (l.unit_price||0), 0).toFixed(2)
+
+            navigate('/invoices/new', { state: {
+              job: { ...job, line_items: lineItems },
+              autoSend: true,
+              prefillEmail: clientEmail,
+              prefillName: clientNameVal,
+              prefillTotal: total,
+            }})
+          }}
+            style={{ background: '#0093DB', color: '#fff', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            📧 Send Invoice
+          </button>
           <button onClick={() => setShowEmailCompose(true)}
             style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ✉ Send Email
