@@ -132,19 +132,17 @@ export default function Leads() {
 
     // Build query with server-side filters
     let q = supabase.from('leads').select('*', { count: 'exact' })
-    const nullsFirst = sortDir === 'asc'
-    q = q.order(sortField, { ascending: sortDir === 'asc', nullsFirst })
+      .order(sortField || 'created_at', { ascending: sortDir === 'asc' })
       .range(from, to)
 
     if (tab !== 'all') q = q.eq('lead_type', tab)
-    if (!isAdmin) q = q.eq('assigned_to', profile?.id)
     if (filterStatus !== 'All') q = q.eq('status', filterStatus)
     if (filterVerified !== 'All') q = q.eq('email_verified', filterVerified)
 
     // Server-side search — search across key fields
     if (search.trim()) {
-      const s = `%${search.trim()}%`
-      q = q.or(`inbound_name.ilike.${s},inbound_email.ilike.${s},company_name.ilike.${s},contact_first.ilike.${s},contact_last.ilike.${s},email_address.ilike.${s},cold_company_name.ilike.${s},cold_contact_name.ilike.${s},cold_email.ilike.${s}`)
+      const s = '%' + search.trim() + '%'
+      q = q.or('inbound_name.ilike.' + s + ',inbound_email.ilike.' + s + ',company_name.ilike.' + s + ',cold_company_name.ilike.' + s + ',cold_contact_name.ilike.' + s + ',cold_email.ilike.' + s + ',email_address.ilike.' + s)
     }
 
     // Renewal filter
