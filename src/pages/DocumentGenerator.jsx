@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { MLC_LOGO } from '../lib/logo.js'
+import SendEmailModal from '../components/SendEmailModal'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -184,11 +185,7 @@ export default function DocumentGenerator() {
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [showPreview, setShowPreview] = useState(false)
-  const [showSendModal, setShowSendModal] = useState(false)
-  const [sendTo, setSendTo]           = useState('')
-  const [sendSubject, setSendSubject] = useState('')
-  const [sendBody, setSendBody]       = useState('')
-  const [sending, setSending]         = useState(false)
+  const [showSend, setShowSend]       = useState(false)
 
   const [data, setData] = useState({
     client_name: '', client_address: '', client_email: '',
@@ -231,7 +228,7 @@ export default function DocumentGenerator() {
       if (isRemedial) setCompany('remedials')
     }
     if (location.state?.autoSend) {
-      setTimeout(() => setShowSendModal(true), 500)
+      setTimeout(() => setShowSend(true), 500)
     }
   }, [location.state])
 
@@ -321,34 +318,16 @@ export default function DocumentGenerator() {
   const inputStyle = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
   const labelStyle = { color: C.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
-  // Pre-fill the Send Invoice email fields whenever the relevant invoice data changes
-  useEffect(() => {
-    const invoiceNum = data.doc_number || 'INV-001'
-    const clientNameVal = data.client_name || 'Customer'
-    const totalVal = (subtotal - Number(data.discount || 0)).toFixed(2)
+  // Builds the Send Invoice email body — keeps the Standard/Remedials bank-details
+  // toggle correct (COMPANIES[company]) rather than always using Standard details.
+  function buildEmailBody(d) {
+    const name = d.client_name || 'Customer'
+    const invoiceNum = d.doc_number || ''
+    const total = (subtotal - Number(d.discount || 0)).toFixed(2)
+    const date = new Date().toLocaleDateString('en-GB')
     const co = COMPANIES[company] || COMPANIES.standard
-
-    setSendTo(data.client_email || '')
-    setSendSubject('Invoice ' + invoiceNum + ' — My Landlord Certificate')
-    setSendBody(
-      'Dear ' + clientNameVal + ',\n\n' +
-      'Please find attached your invoice ' + invoiceNum + ' for the services provided.\n\n' +
-      'Invoice Details:\n' +
-      'Invoice Number: ' + invoiceNum + '\n' +
-      'Date: ' + new Date().toLocaleDateString('en-GB') + '\n' +
-      'Amount Due: £' + totalVal + '\n\n' +
-      'Payment can be made by bank transfer to:\n' +
-      'Bank: ' + co.name + '\n' +
-      'Sort Code: ' + co.sort + '\n' +
-      'Account: ' + co.account + '\n' +
-      'Reference: ' + invoiceNum + '\n\n' +
-      'If you have any questions regarding this invoice, please do not hesitate to contact us.\n\n' +
-      'Kind Regards,\n' +
-      'My Landlord Certificate\n' +
-      '020 3996 1070\n' +
-      'info@mylandlordcertificate.co.uk'
-    )
-  }, [data.client_email, data.client_name, data.doc_number, data.discount, company, subtotal])
+    return `Dear ${name},\n\nPlease find attached your invoice ${invoiceNum} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoiceNum}\nDate: ${date}\nAmount Due: GBP${total}\n\nPayment can be made by bank transfer to:\nBank: ${co.name}\nSort Code: ${co.sort}\nAccount: ${co.account}\nReference: ${invoiceNum}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`
+  }
 
   if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading…</div>
 
@@ -365,7 +344,7 @@ export default function DocumentGenerator() {
             📄 All Invoices
           </button>
           <Btn variant="success" onClick={saveInvoice} disabled={saving}>{saving ? 'Saving…' : '💾 Save'}</Btn>
-          <button onClick={() => setShowSendModal(true)}
+          <button onClick={() => setShowSend(true)}
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8,
               padding:'10px 20px', fontWeight:700, fontSize:14, cursor:'pointer',
               display:'flex', alignItems:'center', gap:6 }}>
@@ -526,137 +505,15 @@ export default function DocumentGenerator() {
         </div>
       )}
 
-      {/* Send Invoice Modal */}
-      {showSendModal && (
-        <div style={{ position:'fixed', inset:0, background:'#00000066', display:'flex',
-          alignItems:'center', justifyContent:'center', zIndex:300 }}
-          onClick={() => setShowSendModal(false)}>
-          <div style={{ background:'#fff', borderRadius:16, padding:32, width:560,
-            maxHeight:'85vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
-            onClick={e => e.stopPropagation()}>
-
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
-              <h3 style={{ fontSize:18, fontWeight:700, color:'#1F2937', margin:0 }}>📧 Send Invoice</h3>
-              <button onClick={() => setShowSendModal(false)}
-                style={{ background:'none', border:'none', color:'#9CA3AF', cursor:'pointer', fontSize:20 }}>✕</button>
-            </div>
-
-            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-              <div>
-                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase',
-                  letterSpacing:'0.05em', display:'block', marginBottom:4 }}>To</label>
-                <input value={sendTo} onChange={e => setSendTo(e.target.value)}
-                  placeholder="client@email.com"
-                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8,
-                    color:'#1F2937', padding:'9px 12px', fontSize:14 }} />
-              </div>
-
-              <div>
-                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase',
-                  letterSpacing:'0.05em', display:'block', marginBottom:4 }}>Subject</label>
-                <input value={sendSubject} onChange={e => setSendSubject(e.target.value)}
-                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8,
-                    color:'#1F2937', padding:'9px 12px', fontSize:14 }} />
-              </div>
-
-              <div>
-                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase',
-                  letterSpacing:'0.05em', display:'block', marginBottom:4 }}>Message</label>
-                <textarea value={sendBody} onChange={e => setSendBody(e.target.value)}
-                  rows={14}
-                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8,
-                    color:'#1F2937', padding:'10px 12px', fontSize:13, fontFamily:'inherit',
-                    lineHeight:1.6, resize:'vertical' }} />
-              </div>
-
-              <div style={{ background:'#FEF3C7', border:'1px solid #D9770644', borderRadius:8,
-                padding:'10px 14px', fontSize:12, color:'#92400E' }}>
-                💡 The invoice will be referenced in the email. For a PDF attachment,
-                download the invoice first and attach it manually from your email client.
-              </div>
-
-              <div style={{ display:'flex', gap:10, marginTop:8 }}>
-                <button onClick={async () => {
-                  if (!sendTo || !sendBody) { showToast('Email and message required', 'error'); return }
-                  setSending(true)
-
-                  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
-                  const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
-                  const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
-
-                  const { data: personalAccounts } = await supabase
-                    .from('user_email_accounts')
-                    .select('id')
-                    .eq('account_type', 'personal')
-                    .eq('is_active', true)
-                    .limit(1)
-
-                  let accounts = personalAccounts || []
-                  if (!accounts.length) {
-                    const { data: coldAccounts } = await supabase
-                      .from('user_email_accounts')
-                      .select('id')
-                      .eq('account_type', 'cold')
-                      .eq('is_active', true)
-                      .limit(1)
-
-                    if (!coldAccounts?.length) {
-                      showToast('No Gmail account connected. Connect one in Email Inbox first.', 'error')
-                      setSending(false)
-                      return
-                    }
-                    accounts = [coldAccounts[0]]
-                  }
-
-                  try {
-                    const res = await fetch(SUPABASE_URL + '/functions/v1/gmail-reply', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        account_id: accounts[0].id,
-                        to: sendTo,
-                        subject: sendSubject,
-                        message: sendBody,
-                        client_id: CLIENT_ID,
-                        client_secret: CLIENT_SECRET,
-                      }),
-                    })
-                    const resData = await res.json()
-                    if (resData.ok) {
-                      showToast('✅ Invoice email sent to ' + sendTo)
-                      setShowSendModal(false)
-
-                      await supabase.from('email_log').insert({
-                        to_email: sendTo,
-                        subject: sendSubject,
-                        body: sendBody,
-                        sent_by: profile?.id,
-                        sent_at: new Date().toISOString(),
-                        status: 'sent',
-                      })
-                    } else {
-                      showToast('Failed: ' + (resData.error || 'Unknown error'), 'error')
-                    }
-                  } catch (err) {
-                    showToast('Send failed: ' + err.message, 'error')
-                  }
-                  setSending(false)
-                }} disabled={sending || !sendTo}
-                  style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8,
-                    padding:'10px 24px', fontWeight:700, fontSize:14, cursor:'pointer',
-                    opacity: sending ? 0.7 : 1, flex:1 }}>
-                  {sending ? '⏳ Sending…' : '📤 Send Email'}
-                </button>
-
-                <button onClick={() => setShowSendModal(false)}
-                  style={{ background:'#fff', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:8,
-                    padding:'10px 18px', fontWeight:600, fontSize:14, cursor:'pointer' }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {showSend && (
+        <SendEmailModal
+          title="Send Invoice"
+          to={data.client_email || ''}
+          subject={`Invoice ${data.doc_number || ''} -- My Landlord Certificate`}
+          body={buildEmailBody(data)}
+          onClose={() => setShowSend(false)}
+          onSent={() => { showToast('Invoice sent'); setShowSend(false) }}
+        />
       )}
 
       <Toast toast={toast} />

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import EmailCompose from '../components/EmailCompose'
+import SendEmailModal from '../components/SendEmailModal'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -80,6 +81,8 @@ export default function JobDetail() {
   const [allProfiles, setAllProfiles]             = useState([])
   const [showEmailCompose, setShowEmailCompose]   = useState(false)
   const [fileTab, setFileTab]                     = useState('certificates')
+  const [showSendInvoice, setShowSendInvoice]     = useState(false)
+  const [showSendCert, setShowSendCert]           = useState(false)
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -281,21 +284,13 @@ export default function JobDetail() {
             style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             🧾 Generate Invoice
           </button>
-          <button onClick={() => {
-            const clientEmail = job.clients?.email || ''
-            const clientNameVal = job.clients?.company_name || (job.clients?.first_name + ' ' + (job.clients?.last_name||'')).trim() || 'Customer'
-            const total = lineItems.reduce((s,l) => s + (l.quantity||1) * (l.unit_price||0), 0).toFixed(2)
-
-            navigate('/invoices/new', { state: {
-              job: { ...job, line_items: lineItems },
-              autoSend: true,
-              prefillEmail: clientEmail,
-              prefillName: clientNameVal,
-              prefillTotal: total,
-            }})
-          }}
-            style={{ background: '#0093DB', color: '#fff', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={() => setShowSendInvoice(true)}
+            style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📧 Send Invoice
+          </button>
+          <button onClick={() => setShowSendCert(true)}
+            style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+            📜 Send Certificate
           </button>
           <button onClick={() => setShowEmailCompose(true)}
             style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -765,6 +760,28 @@ export default function JobDetail() {
             scheduledDate: job.scheduled_date,
           }}
           onClose={() => setShowEmailCompose(false)}
+        />
+      )}
+
+      {showSendInvoice && (
+        <SendEmailModal
+          title="Send Invoice"
+          to={job.clients?.email || ''}
+          subject={`Invoice ${job.job_number} -- My Landlord Certificate`}
+          body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\nPlease find attached your invoice ${job.job_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${job.job_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${lineItems.reduce((s,l) => s + (l.quantity||1)*(l.unit_price||0), 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${job.job_number}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          onClose={() => setShowSendInvoice(false)}
+          onSent={() => { showToast('Invoice email sent'); setShowSendInvoice(false) }}
+        />
+      )}
+
+      {showSendCert && (
+        <SendEmailModal
+          title="Send Certificate"
+          to={job.clients?.email || ''}
+          subject={`Your Certificate -- ${(job.service_types || []).join(', ')} -- My Landlord Certificate`}
+          body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nIf you have any questions, please do not hesitate to contact us.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          onClose={() => setShowSendCert(false)}
+          onSent={() => { showToast('Certificate email sent'); setShowSendCert(false) }}
         />
       )}
 
