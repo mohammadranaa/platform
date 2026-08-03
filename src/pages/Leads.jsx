@@ -104,7 +104,7 @@ export default function Leads() {
   const searchTimer = useRef(null)
   const [filterStatus, setFilterStatus] = useState('All')
   const [renewalFilter, setRenewalFilter] = useState('All')
-  const [sortField, setSortField]       = useState('last_contacted_at')
+  const [sortField, setSortField]       = useState('created_at')
   const [sortDir, setSortDir]           = useState('desc')
   const [filterVerified, setFilterVerified] = useState('All')
   const [selectedIds, setSelectedIds]   = useState(new Set())

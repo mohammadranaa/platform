@@ -23,7 +23,10 @@ export default function Jobs() {
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState('list')
   const [filterStatus, setFilterStatus] = useState('All')
-  const [filterMonth, setFilterMonth] = useState('all')
+  const [filterMonth, setFilterMonth] = useState(() => {
+    const now = new Date()
+    return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+  })
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
