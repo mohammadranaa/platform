@@ -58,6 +58,33 @@ const InfoRow = ({ label, value }) => (
   </div>
 )
 
+function SiteField({ label, field, value, type = 'text', save }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value || '')
+  useEffect(() => setVal(value || ''), [value])
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom:'1px solid #F5F7FA' }}>
+      <span style={{ color:'#6B7280', fontSize:13, minWidth:140 }}>{label}</span>
+      {editing ? (
+        <input autoFocus type={type} value={val}
+          onChange={e => setVal(e.target.value)}
+          onBlur={() => { save(field, val); setEditing(false) }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { save(field, val); setEditing(false) }
+            if (e.key === 'Escape') { setVal(value || ''); setEditing(false) }
+          }}
+          style={{ flex:1, background:'#fff', border:'1px solid #0093DB', borderRadius:6, padding:'5px 10px', fontSize:13, textAlign:'right' }} />
+      ) : (
+        <span onClick={() => setEditing(true)}
+          style={{ color: val ? '#1F2937' : '#D1D5DB', fontSize:13, cursor:'text', textAlign:'right', flex:1, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:6 }}>
+          {val || 'Click to add...'}
+          <span style={{ color:'#D1D5DB', fontSize:11 }}>✏</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 export default function JobDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -542,10 +569,10 @@ export default function JobDetail() {
           {/* Site & Access */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Site & Access</div>
-            <InfoRow label="Site Address" value={job.site_address} />
-            <InfoRow label="Postcode"     value={job.site_postcode} />
-            <InfoRow label="Tenant Name"  value={job.tenant_name} />
-            <InfoRow label="Tenant Phone" value={job.tenant_phone} />
+            <SiteField label="Site Address" field="site_address"  value={job.site_address}  save={saveField} />
+            <SiteField label="Postcode"     field="site_postcode" value={job.site_postcode} save={saveField} />
+            <SiteField label="Tenant Name"  field="tenant_name"   value={job.tenant_name}   save={saveField} />
+            <SiteField label="Tenant Phone" field="tenant_phone"  value={job.tenant_phone}  type="tel" save={saveField} />
             {job.access_notes && (
               <div style={{ marginTop: 10, padding: '10px 14px', background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 8, fontSize: 13, color: C.amber, fontWeight: 600 }}>
                 ⚠ {job.access_notes}
