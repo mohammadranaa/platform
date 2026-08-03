@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { to: '/inbox',      icon: '✉️', label: 'Email Inbox'               },
   { to: '/templates',  icon: '📝', label: 'Templates'                 },
   { to: '/invoices',   icon: '🧾', label: 'Invoices'                  },
-  { to: '/campaigns',  icon: '⚡', label: 'Cold Email',  adminOnly: true },
+  { to: '/campaigns',  icon: '⚡', label: 'Cold Email' },
   { to: '/cold-inbox', icon: '📨', label: 'Cold Inbox',  adminOnly: false },
   { to: '/inboxes',    icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
 ]

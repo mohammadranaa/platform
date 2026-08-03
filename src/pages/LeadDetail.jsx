@@ -50,12 +50,58 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
-const Field = ({ label, value }) => (
+// Read-only row — used where no direct single-column edit applies (verified type, computed/meta values).
+const StaticField = ({ label, value }) => (
   <div style={{ padding: '8px 0', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', gap: 16 }}>
     <span style={{ color: C.muted, fontSize: 13, minWidth: 140, flexShrink: 0 }}>{label}</span>
     <span style={{ color: C.text, fontSize: 13, textAlign: 'right', wordBreak: 'break-word' }}>{value || '—'}</span>
   </div>
 )
+
+// Click-to-edit, auto-save on blur/Enter, Escape to cancel.
+function Field({ label, field, value, type = 'text', options = null, save }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value || '')
+  useEffect(() => setVal(value || ''), [value])
+
+  if (options) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
+        <select value={val} onChange={e => { setVal(e.target.value); save(field, e.target.value) }}
+          style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#1F2937' }}>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{label}</div>
+      {editing ? (
+        type === 'textarea' ? (
+          <textarea autoFocus value={val} onChange={e => setVal(e.target.value)}
+            onBlur={() => { save(field, val); setEditing(false) }}
+            rows={3}
+            style={{ width:'100%', background:'#fff', border:'1px solid #0093DB', borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', resize:'vertical' }} />
+        ) : (
+          <input autoFocus type={type} value={val} onChange={e => setVal(e.target.value)}
+            onBlur={() => { save(field, val); setEditing(false) }}
+            onKeyDown={e => { if(e.key==='Enter'){save(field,val);setEditing(false)} if(e.key==='Escape')setEditing(false) }}
+            style={{ width:'100%', background:'#fff', border:'1px solid #0093DB', borderRadius:8, padding:'8px 12px', fontSize:13 }} />
+        )
+      ) : (
+        <div onClick={() => setEditing(true)}
+          style={{ padding:'8px 12px', background:'#F5F7FA', borderRadius:8, cursor:'text', fontSize:13, color: val ? '#1F2937' : '#9CA3AF', minHeight:38, display:'flex', alignItems:'center', border:'1px solid transparent' }}
+          title="Click to edit">
+          {val || <span style={{ color:'#D1D5DB' }}>Click to edit...</span>}
+          <span style={{ marginLeft:'auto', color:'#9CA3AF', fontSize:10 }}>✏</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function LeadDetail() {
   const { id } = useParams()
@@ -82,6 +128,13 @@ export default function LeadDetail() {
     setLead(l)
     setProfiles(p || [])
     setLoading(false)
+  }
+
+  async function save(field, value) {
+    const { error } = await supabase.from('leads').update({ [field]: value }).eq('id', id)
+    if (error) { showToast(error.message, 'error'); return }
+    setLead(prev => ({ ...prev, [field]: value }))
+    showToast('Saved')
   }
 
   async function updateStatus(status) {
@@ -138,6 +191,13 @@ export default function LeadDetail() {
     if (!error && client) showToast(`✓ ${name} added to Clients`)
   }
 
+  async function deleteLead() {
+    if (!window.confirm('Delete this lead permanently?')) return
+    await supabase.from('leads').delete().eq('id', id)
+    navigate('/leads')
+    showToast('Lead deleted')
+  }
+
   const displayName = () => {
     if (!lead) return ''
     if (lead.lead_type === 'inbound')    return lead.inbound_name || lead.inbound_email
@@ -192,6 +252,12 @@ export default function LeadDetail() {
             style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 8, padding: '6px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
+          {isAdmin && (
+            <button onClick={deleteLead}
+              style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+              Delete Lead
+            </button>
+          )}
         </div>
       </div>
 
@@ -257,38 +323,37 @@ export default function LeadDetail() {
             <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
               {lead.lead_type === 'inbound' && <>
-                <Field label="Full Name"      value={lead.inbound_name} />
-                <Field label="Email"          value={lead.inbound_email} />
-                <Field label="Phone"          value={lead.inbound_phone} />
-                <Field label="Tenant Phone"   value={lead.tenant_phone} />
-                <Field label="Address"        value={[lead.street_address, lead.city, lead.postcode].filter(Boolean).join(', ')} />
-                <Field label="Property Type"  value={`${lead.property_type || ''} ${lead.property_subtype || ''}`.trim()} />
+                <Field label="Name"           field="inbound_name"    value={lead.inbound_name}    save={save} />
+                <Field label="Email"          field="inbound_email"   value={lead.inbound_email}   type="email" save={save} />
+                <Field label="Phone"          field="inbound_phone"   value={lead.inbound_phone}   save={save} />
+                <Field label="Tenant Phone"   field="tenant_phone"    value={lead.tenant_phone}    save={save} />
+                <Field label="Address"        field="street_address"  value={lead.street_address}  save={save} />
+                <Field label="City"           field="city"            value={lead.city}            save={save} />
+                <Field label="Postcode"       field="postcode"        value={lead.postcode}        save={save} />
+                <Field label="Property Type"    field="property_type"    value={lead.property_type}    save={save} />
+                <Field label="Property Subtype" field="property_subtype" value={lead.property_subtype} save={save} />
               </>}
               {lead.lead_type === 'verified' && <>
-                <Field label="Company"        value={lead.company_name} />
-                <Field label="Contact"        value={`${lead.contact_first || ''} ${lead.contact_last || ''}`.trim()} />
-                <Field label="Email"          value={lead.email_address} />
-                <Field label="Telephone"      value={lead.job_telephone} />
-                <Field label="Mobile"         value={lead.job_mobile} />
-                <Field label="Address"        value={lead.address} />
-                <Field label="Billing"        value={lead.billing_address} />
+                <StaticField label="Company"        value={lead.company_name} />
+                <StaticField label="Contact"        value={`${lead.contact_first || ''} ${lead.contact_last || ''}`.trim()} />
+                <StaticField label="Email"          value={lead.email_address} />
+                <StaticField label="Telephone"      value={lead.job_telephone} />
+                <StaticField label="Mobile"         value={lead.job_mobile} />
+                <StaticField label="Address"        value={lead.address} />
+                <StaticField label="Billing"        value={lead.billing_address} />
               </>}
               {lead.lead_type === 'cold_agent' && <>
-                <Field label="Company"        value={lead.cold_company_name} />
-                <Field label="Contact"        value={lead.cold_contact_name} />
-                <Field label="Email"          value={lead.cold_email} />
-                <Field label="Direct"         value={lead.direct_number} />
-                <Field label="Landline"       value={lead.landline_number} />
-                <Field label="Zoopla #"       value={lead.zoopla_number} />
-                <Field label="Address"        value={lead.cold_address} />
-                <Field label="Website"        value={lead.website ? <a href={fixUrl(lead.website)} target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>{lead.website}</a> : null} />
-                <Field label="Email Verified" value={lead.email_verified} />
+                <Field label="Company"       field="cold_company_name" value={lead.cold_company_name} save={save} />
+                <Field label="Contact Name"  field="cold_contact_name" value={lead.cold_contact_name} save={save} />
+                <Field label="Email"         field="cold_email"        value={lead.cold_email}        type="email" save={save} />
+                <Field label="Phone"         field="landline_number"   value={lead.landline_number}   save={save} />
+                <Field label="Direct"        field="direct_number"     value={lead.direct_number}     save={save} />
+                <Field label="Zoopla #"      field="zoopla_number"     value={lead.zoopla_number}     save={save} />
+                <Field label="Website"       field="website"           value={lead.website}           save={save} />
+                <Field label="Address"       field="cold_address"      value={lead.cold_address}       save={save} />
+                <StaticField label="Email Verified" value={lead.email_verified ? 'Yes' : 'No'} />
               </>}
-              {lead.notes && (
-                <div style={{ marginTop: 10, padding: '10px 12px', background: C.surface, borderRadius: 8, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-                  {lead.notes}
-                </div>
-              )}
+              <Field label="Notes" field="notes" value={lead.notes} type="textarea" save={save} />
             </div>
           </div>
 
@@ -297,23 +362,25 @@ export default function LeadDetail() {
             {lead.lead_type === 'inbound' && (
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Booking Details</div>
-                <Field label="Appointment"    value={lead.appointment_date} />
-                <Field label="Time Slot"      value={lead.time_slot} />
-                <Field label="Services"       value={lead.services_requested} />
-                <Field label="Total Price"    value={lead.total_price ? `£${lead.total_price}` : null} />
-                <Field label="Payment Status" value={lead.payment_status} />
-                <Field label="Additional"     value={lead.additional_charges} />
-                <Field label="Timestamp"      value={lead.form_timestamp ? new Date(lead.form_timestamp).toLocaleString('en-GB') : null} />
+                <Field label="Appointment Date" field="appointment_date" value={lead.appointment_date} type="date" save={save} />
+                <Field label="Time Slot"        field="time_slot"        value={lead.time_slot}
+                  options={['Morning (8am-12pm)', 'Afternoon (12pm-6pm)']} save={save} />
+                <Field label="Services"         field="services_requested" value={lead.services_requested} type="textarea" save={save} />
+                <Field label="Total Price"      field="total_price"      value={lead.total_price}      type="number" save={save} />
+                <Field label="Payment Status"   field="payment_status"   value={lead.payment_status}
+                  options={['Unpaid', 'Paid', 'Partial']} save={save} />
+                <Field label="Additional Charges" field="additional_charges" value={lead.additional_charges} type="number" save={save} />
+                <StaticField label="Timestamp" value={lead.form_timestamp ? new Date(lead.form_timestamp).toLocaleString('en-GB') : null} />
               </div>
             )}
 
             {lead.lead_type === 'verified' && (
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Previous Job & Renewal</div>
-                <Field label="Job Date"       value={lead.previous_job_date} />
-                <Field label="Work Done"      value={lead.work_done} />
-                <Field label="Last Payment"   value={lead.last_payment_amount ? `£${lead.last_payment_amount}` : null} />
-                <Field label="Last Invoice"   value={lead.last_invoice_amount ? `£${lead.last_invoice_amount}` : null} />
+                <StaticField label="Job Date"       value={lead.previous_job_date} />
+                <StaticField label="Work Done"      value={lead.work_done} />
+                <StaticField label="Last Payment"   value={lead.last_payment_amount ? `£${lead.last_payment_amount}` : null} />
+                <StaticField label="Last Invoice"   value={lead.last_invoice_amount ? `£${lead.last_invoice_amount}` : null} />
                 {lead.renewal_due_date && (
                   <div style={{ marginTop: 12, padding: '12px 14px', background: renewalDays < 0 ? C.redSoft : renewalDays <= 14 ? C.amberSoft : C.greenSoft, borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -333,10 +400,10 @@ export default function LeadDetail() {
             {/* Meta */}
             <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Record Info</div>
-              <Field label="Created"       value={new Date(lead.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} />
-              <Field label="Lead Type"     value={TYPE_META[lead.lead_type]?.label} />
-              <Field label="Assigned To"   value={assignedRep?.full_name || 'Unassigned'} />
-              <Field label="Source"        value={lead.source} />
+              <StaticField label="Created"       value={new Date(lead.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} />
+              <StaticField label="Lead Type"     value={TYPE_META[lead.lead_type]?.label} />
+              <StaticField label="Assigned To"   value={assignedRep?.full_name || 'Unassigned'} />
+              <StaticField label="Source"        value={lead.source} />
             </div>
           </div>
         </div>
