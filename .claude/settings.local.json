@@ -61,7 +61,8 @@
       "Bash(mkdir stripe-zip *)",
       "Bash(unzip -o -q ~/Downloads/stripe-webhook-deploy.zip -d stripe-zip)",
       "mcp__claude_ai_Supabase__list_tables",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(awk -F= '{print length\\($2\\), substr\\($2,1,10\\)\"...\", substr\\($2,length\\($2\\)-15\\)}')"
     ]
   }
 }

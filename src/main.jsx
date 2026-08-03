@@ -64,7 +64,7 @@ function App() {
             <Route path="cold-inbox" element={<ColdInbox />} />
             <Route path="calendar" element={<CalendarView />} />
             <Route path="calls" element={<NuacomDialer />} />
-            <Route path="campaigns" element={<AdminRoute><Campaigns /></AdminRoute>} />
+            <Route path="campaigns" element={<Campaigns />} />
             <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

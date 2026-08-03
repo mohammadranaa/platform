@@ -285,8 +285,34 @@ export default function Clients() {
                         {c.is_active !== false ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.email || '—'}</span></td>
-                    <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.phone || '—'}</span></td>
+                    <td style={td} onClick={e => e.stopPropagation()}>
+                      <span
+                        onDoubleClick={() => {
+                          const val = window.prompt('Edit email:', c.email || '')
+                          if (val !== null) {
+                            supabase.from('clients').update({ email: val }).eq('id', c.id)
+                            setClients(p => p.map(x => x.id === c.id ? { ...x, email: val } : x))
+                          }
+                        }}
+                        title="Double-click to edit"
+                        style={{ color: C.muted, fontSize: 13, cursor: 'text' }}>
+                        {c.email || <span style={{ color: '#D1D5DB' }}>—</span>}
+                      </span>
+                    </td>
+                    <td style={td} onClick={e => e.stopPropagation()}>
+                      <span
+                        onDoubleClick={() => {
+                          const val = window.prompt('Edit phone:', c.phone || '')
+                          if (val !== null) {
+                            supabase.from('clients').update({ phone: val }).eq('id', c.id)
+                            setClients(p => p.map(x => x.id === c.id ? { ...x, phone: val } : x))
+                          }
+                        }}
+                        title="Double-click to edit"
+                        style={{ color: C.muted, fontSize: 13, cursor: 'text' }}>
+                        {c.phone || <span style={{ color: '#D1D5DB' }}>—</span>}
+                      </span>
+                    </td>
                     <td style={td}><span style={{ color: C.accent, fontWeight: 700 }}>{c.total_jobs || 0}</span></td>
                     <td style={td}><span style={{ color: C.greenDark, fontWeight: 600 }}>{fmt(c.total_revenue)}</span></td>
                     <td style={td}><span style={{ color: C.muted, fontSize: 13 }}>{c.profiles?.full_name || '—'}</span></td>

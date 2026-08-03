@@ -41,22 +41,58 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
   )
 }
 
-const Field = ({ label, value, editable, onChange }) => (
-  <div style={{ padding: '8px 0', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-    <span style={{ color: C.muted, fontSize: 13, minWidth: 130, flexShrink: 0 }}>{label}</span>
-    {editable ? (
-      <input value={value || ''} onChange={e => onChange(e.target.value)}
-        style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '4px 8px', fontSize: 13, textAlign: 'right', flex: 1 }} />
-    ) : (
-      <span style={{ color: C.text, fontSize: 13, textAlign: 'right', wordBreak: 'break-word' }}>{value || '—'}</span>
-    )}
-  </div>
-)
+function Field({ label, field, value, type = 'text', options = null, wide = false, save }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(value || '')
+  useEffect(() => setVal(value || ''), [value])
+
+  if (options) {
+    return (
+      <div style={{ marginBottom:14, gridColumn: wide ? 'span 2' : undefined }}>
+        <div style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>{label}</div>
+        <select value={val} onChange={e => { setVal(e.target.value); save(field, e.target.value) }}
+          style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14, color:'#1F2937' }}>
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom:14, gridColumn: wide ? 'span 2' : undefined }}>
+      <div style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4 }}>{label}</div>
+      {editing ? (
+        type === 'textarea' ? (
+          <textarea autoFocus value={val} onChange={e => setVal(e.target.value)}
+            onBlur={() => { save(field, val); setEditing(false) }}
+            rows={4}
+            style={{ width:'100%', background:'#fff', border:'1px solid #0093DB', borderRadius:8, padding:'8px 12px', fontSize:14, color:'#1F2937', fontFamily:'inherit', resize:'vertical' }} />
+        ) : (
+          <input autoFocus type={type} value={val}
+            onChange={e => setVal(e.target.value)}
+            onBlur={() => { save(field, val); setEditing(false) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { save(field, val); setEditing(false) }
+              if (e.key === 'Escape') { setVal(value || ''); setEditing(false) }
+            }}
+            style={{ width:'100%', background:'#fff', border:'1px solid #0093DB', borderRadius:8, padding:'8px 12px', fontSize:14, color:'#1F2937' }} />
+        )
+      ) : (
+        <div onClick={() => setEditing(true)}
+          style={{ padding:'8px 12px', background:'#F5F7FA', borderRadius:8, cursor:'text', fontSize:14, color: val ? '#1F2937' : '#9CA3AF', minHeight:40, display:'flex', alignItems:'center', justifyContent:'space-between', border:'1px solid transparent' }}
+          title="Click to edit">
+          <span>{val || 'Click to add...'}</span>
+          <span style={{ color:'#D1D5DB', fontSize:12, flexShrink:0, marginLeft:8 }}>✏</span>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, isAdmin } = useAuth()
+  const { profile } = useAuth()
   const { toast, showToast } = useToast()
 
   const [client, setClient]   = useState(null)
@@ -64,9 +100,6 @@ export default function ClientDetail() {
   const [invoices, setInvoices] = useState([])
   const [profiles, setProfiles] = useState([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving]   = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState({})
   const [showEmail, setShowEmail] = useState(false)
   const [editAssign, setEditAssign] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
@@ -85,26 +118,17 @@ export default function ClientDetail() {
     setClientJobs(j || [])
     setInvoices(inv || [])
     setProfiles(p || [])
-    if (c) setEditForm(c)
     setLoading(false)
   }
 
-  async function saveEdit() {
-    setSaving(true)
-    const { error } = await supabase.from('clients').update({
-      company_name: editForm.company_name, first_name: editForm.first_name,
-      last_name: editForm.last_name, email: editForm.email, phone: editForm.phone,
-      phone_2: editForm.phone_2, whatsapp: editForm.whatsapp,
-      street_address: editForm.street_address, city: editForm.city, postcode: editForm.postcode,
-      billing_name: editForm.billing_name, billing_email: editForm.billing_email,
-      billing_address: editForm.billing_address, notes: editForm.notes,
-    }).eq('id', id)
-    setSaving(false)
+  async function saveField(field, value) {
+    const { error } = await supabase
+      .from('clients')
+      .update({ [field]: value })
+      .eq('id', id)
     if (error) { showToast(error.message, 'error'); return }
-    setClient(p => ({ ...p, ...editForm }))
-    setEditing(false)
-    await logActivity({ clientId: id, repId: profile.id, repName: profile.full_name, type: 'note', title: 'Client details updated', body: 'Client information was updated' })
-    showToast('Client updated ✓')
+    setClient(prev => ({ ...prev, [field]: value }))
+    showToast('Saved')
   }
 
   async function updateAssignment(repId) {
@@ -125,7 +149,6 @@ export default function ClientDetail() {
 
   const clientName = () => client?.company_name || `${client?.first_name || ''} ${client?.last_name || ''}`.trim() || client?.email
   const fmt = v => '£' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2 })
-  const ef = (k, v) => setEditForm(p => ({ ...p, [k]: v }))
   const tm = TYPE_COLORS[client?.client_type] || { color: C.muted, bg: C.surface }
 
   if (loading) return <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>Loading…</div>
@@ -139,18 +162,6 @@ export default function ClientDetail() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <Btn variant="ghost" small onClick={() => navigate('/clients')}>← Clients</Btn>
             <span style={{ background: tm.bg, color: tm.color, border: `1px solid ${tm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{client.client_type}</span>
-            {isAdmin && (
-              <select value={client.client_type || 'Landlord'}
-                onChange={async e => {
-                  await supabase.from('clients').update({ client_type: e.target.value }).eq('id', id)
-                  setClient(p => ({ ...p, client_type: e.target.value }))
-                }}
-                style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer' }}>
-                <option value="Landlord">Landlord</option>
-                <option value="Estate Agent">Estate Agent</option>
-                <option value="Other">Other</option>
-              </select>
-            )}
             <span style={{ background: client.is_active !== false ? C.greenSoft : C.redSoft, color: client.is_active !== false ? C.greenDark : C.red, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600 }}>
               {client.is_active !== false ? 'Active' : 'Inactive'}
             </span>
@@ -169,10 +180,6 @@ export default function ClientDetail() {
           )}
           <Btn small variant="ghost" onClick={() => setShowEmail(true)}>✉ Send Email</Btn>
           <Btn small onClick={() => navigate(`/jobs?client=${id}`)}>+ New Job</Btn>
-          {isAdmin && <Btn small variant={editing ? 'success' : 'ghost'} onClick={() => editing ? saveEdit() : setEditing(true)} disabled={saving}>
-            {saving ? 'Saving…' : editing ? '✓ Save' : '✏ Edit'}
-          </Btn>}
-          {editing && <Btn small variant="ghost" onClick={() => { setEditing(false); setEditForm(client) }}>Cancel</Btn>}
           <Btn small variant={client.is_active !== false ? 'danger' : 'success'} onClick={toggleActive}>
             {client.is_active !== false ? 'Deactivate' : 'Activate'}
           </Btn>
@@ -231,60 +238,24 @@ export default function ClientDetail() {
 
       {/* Overview tab */}
       {activeTab === 'overview' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
-            {editing ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[['First Name','first_name'],['Last Name','last_name'],['Company','company_name'],['Email','email'],['Phone','phone'],['Phone 2','phone_2'],['WhatsApp','whatsapp']].map(([l,k]) => (
-                  <div key={k}><label style={{ color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 3 }}>{l}</label>
-                    <input value={editForm[k] || ''} onChange={e => ef(k, e.target.value)} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                <Field label="Company"    value={client.company_name} />
-                <Field label="First Name" value={client.first_name} />
-                <Field label="Last Name"  value={client.last_name} />
-                <Field label="Email"      value={client.email} />
-                <Field label="Phone"      value={client.phone} />
-                <Field label="Phone 2"    value={client.phone_2} />
-                <Field label="WhatsApp"   value={client.whatsapp} />
-              </>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Address & Billing</div>
-              {editing ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {[['Street Address','street_address'],['City','city'],['Postcode','postcode'],['Billing Name','billing_name'],['Billing Email','billing_email'],['Billing Address','billing_address']].map(([l,k]) => (
-                    <div key={k}><label style={{ color: C.muted, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 3 }}>{l}</label>
-                      <input value={editForm[k] || ''} onChange={e => ef(k, e.target.value)} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <Field label="Address"     value={[client.street_address, client.city, client.postcode].filter(Boolean).join(', ')} />
-                  <Field label="Billing Name"  value={client.billing_name} />
-                  <Field label="Billing Email" value={client.billing_email} />
-                  <Field label="Billing Addr"  value={client.billing_address} />
-                </>
-              )}
-            </div>
-
-            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Notes</div>
-              {editing ? (
-                <textarea value={editForm.notes || ''} onChange={e => ef('notes', e.target.value)} rows={4}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, padding: '8px 10px', fontSize: 13, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
-              ) : (
-                <div style={{ color: client.notes ? C.text : C.dim, fontSize: 13, lineHeight: 1.7 }}>{client.notes || 'No notes.'}</div>
-              )}
-            </div>
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="First Name" field="first_name" value={client.first_name} save={saveField} />
+            <Field label="Last Name" field="last_name" value={client.last_name} save={saveField} />
+            <Field label="Company / Estate Agency" field="company_name" value={client.company_name} wide={false} save={saveField} />
+            <Field label="Client Type" field="client_type" value={client.client_type} options={['Landlord','Estate Agent','Other']} save={saveField} />
+            <Field label="Email" field="email" value={client.email} type="email" save={saveField} />
+            <Field label="Phone" field="phone" value={client.phone} type="tel" save={saveField} />
+            <Field label="Phone 2 (Mobile/Alt)" field="phone_2" value={client.phone_2} type="tel" save={saveField} />
+            <Field label="WhatsApp" field="whatsapp" value={client.whatsapp} type="tel" save={saveField} />
+            <Field label="Street Address" field="street_address" value={client.street_address} wide={true} save={saveField} />
+            <Field label="City" field="city" value={client.city} save={saveField} />
+            <Field label="Postcode" field="postcode" value={client.postcode} save={saveField} />
+            <Field label="Billing Name" field="billing_name" value={client.billing_name} save={saveField} />
+            <Field label="Billing Email" field="billing_email" value={client.billing_email} type="email" save={saveField} />
+            <Field label="Billing Address" field="billing_address" value={client.billing_address} wide={true} save={saveField} />
+            <Field label="Notes" field="notes" value={client.notes} type="textarea" wide={true} save={saveField} />
           </div>
         </div>
       )}
