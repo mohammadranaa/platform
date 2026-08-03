@@ -102,9 +102,11 @@ export default function Campaigns() {
   const [leadSearch, setLeadSearch]           = useState('')
   const [hideEmailed, setHideEmailed]         = useState(false)
 
-  const [myAccount, setMyAccount] = useState(null)
+  const [coldAccounts, setColdAccounts] = useState([])
+  const [selectedInboxIds, setSelectedInboxIds] = useState([])
+  const [rotateInboxes, setRotateInboxes] = useState(true)
 
-  const blankCampaign = { name: '', from_name: '', target_type: 'cold_agent', daily_limit: 50, track_opens: true, track_clicks: true }
+  const blankCampaign = { name: '', target_type: 'cold_agent', daily_limit: 50, track_opens: true, track_clicks: true }
   const blankStep = { step_number: '', delay_days: '0', subject: '', body_html: '' }
   const blankContact = { email: '', first_name: '', last_name: '', company: '' }
   const [newCampaign, setNewCampaign] = useState(blankCampaign)
@@ -116,12 +118,16 @@ export default function Campaigns() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: c }, { data: i }] = await Promise.all([
+    const [{ data: c }, { data: i }, { data: accounts }] = await Promise.all([
       supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
       supabase.from('inboxes').select('id, label, email, is_active').eq('is_active', true),
+      supabase.from('user_email_accounts').select('id, gmail_address, display_name').eq('account_type', 'cold').eq('is_active', true).order('gmail_address'),
     ])
     setCampaigns(c || [])
     setInboxes(i || [])
+    setColdAccounts(accounts || [])
+    // Default: select ALL accounts so rotation starts immediately (only on first load)
+    setSelectedInboxIds(prev => prev.length === 0 ? (accounts || []).map(a => a.id) : prev)
     setLoading(false)
   }
 
@@ -138,25 +144,25 @@ export default function Campaigns() {
     setView('detail')
   }
 
-  // Default the sender name to the rep's own connected Gmail account, still editable.
-  async function openNewCampaign() {
-    const { data: account } = await supabase
-      .from('user_email_accounts')
-      .select('id, gmail_address, display_name')
-      .eq('user_id', profile.id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-    const senderName = account ? (account.display_name || account.gmail_address?.split('@')[0] || '') : ''
-    setMyAccount(account || null)
-    setNewCampaign({ ...blankCampaign, from_name: senderName })
+  function openNewCampaign() {
+    setNewCampaign(blankCampaign)
     setShowNewCampaign(true)
   }
 
   async function createCampaign() {
-    if (!newCampaign.name || !newCampaign.from_name) { showToast('Name and From Name are required', 'error'); return }
+    if (!newCampaign.name) { showToast('Campaign name is required', 'error'); return }
+    if (selectedInboxIds.length === 0) { showToast('Select at least one sending account', 'error'); return }
     setSaving(true)
-    const { error } = await supabase.from('campaigns').insert({ ...newCampaign, owner_id: profile.id })
+    const fromAccount = coldAccounts.find(a => a.id === selectedInboxIds[0])
+    const { error } = await supabase.from('campaigns').insert({
+      ...newCampaign,
+      owner_id: profile.id,
+      rotate_inboxes: rotateInboxes,
+      inbox_ids: selectedInboxIds,
+      from_inbox_id: selectedInboxIds[0] || null,
+      from_name: fromAccount?.display_name || 'My Landlord Certificate',
+      from_email: fromAccount?.gmail_address || '',
+    })
     setSaving(false)
     if (error) { showToast(error.message, 'error'); return }
     await fetchAll()
@@ -612,7 +618,27 @@ export default function Campaigns() {
             <tbody>
               {campaigns.map(c => (
                 <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => openCampaign(c)}>
-                  <td style={td}><div style={{ fontWeight: 600 }}>{c.name}</div><div style={{ color: C.dim, fontSize: 12 }}>From: {c.from_name}</div></td>
+                  <td style={td}>
+                    <div style={{ fontWeight: 600 }}>{c.name}</div>
+                    <div style={{ color: C.dim, fontSize: 12 }}>From: {c.from_name}</div>
+                    {c.inbox_ids?.length > 0 && (
+                      <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>
+                        {c.inbox_ids.map(id => {
+                          const acc = coldAccounts.find(a => a.id === id)
+                          return acc ? (
+                            <span key={id} style={{ background:'#E6F4FC', color:'#0093DB', borderRadius:4, padding:'1px 6px', fontSize:10, fontWeight:600 }}>
+                              {acc.gmail_address.split('@')[0]}
+                            </span>
+                          ) : null
+                        })}
+                        {c.rotate_inboxes && c.inbox_ids?.length > 1 && (
+                          <span style={{ background:'#F0FAE0', color:'#3d7a00', borderRadius:4, padding:'1px 6px', fontSize:10, fontWeight:600 }}>
+                            rotating
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td style={td}><span style={{ color: C.amber, fontSize: 13 }}>{c.target_type}</span></td>
                   <td style={td}><Badge status={c.status} /></td>
                   <td style={td}><span style={{ color: C.accent }}>{c.daily_limit}/day</span></td>
@@ -638,8 +664,72 @@ export default function Campaigns() {
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>New Campaign</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <Field label="Campaign Name" value={newCampaign.name} onChange={v => setNewCampaign(p => ({ ...p, name: v }))} placeholder="Q3 Estate Agent Outreach — London" />
-              <Field label="From Name" value={newCampaign.from_name} onChange={v => setNewCampaign(p => ({ ...p, from_name: v }))} placeholder="James from MLC Services"
-                hint={myAccount ? `Sending from: ${myAccount.gmail_address} as ${newCampaign.from_name || '—'}` : 'Recipients see this as the sender name.'} />
+
+              <div style={{ marginBottom:16 }}>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.05em', display:'block', marginBottom:8 }}>
+                  Sending Accounts
+                </label>
+
+                {/* Rotation toggle */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, padding:'10px 14px', background:'#E6F4FC', borderRadius:8, border:'1px solid #0093DB44' }}>
+                  <input type="checkbox" id="rotateToggle" checked={rotateInboxes}
+                    onChange={e => setRotateInboxes(e.target.checked)}
+                    style={{ width:16, height:16, cursor:'pointer' }} />
+                  <label htmlFor="rotateToggle" style={{ fontSize:13, color:'#0093DB', fontWeight:600, cursor:'pointer' }}>
+                    Rotate across multiple inboxes (recommended)
+                  </label>
+                  <span style={{ fontSize:11, color:'#0093DB', marginLeft:'auto' }}>
+                    Spreads sends across accounts to protect deliverability
+                  </span>
+                </div>
+
+                {/* Account checkboxes */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                  {coldAccounts.map(acc => {
+                    const isSelected = selectedInboxIds.includes(acc.id)
+                    return (
+                      <div key={acc.id}
+                        onClick={() => {
+                          if (isSelected && selectedInboxIds.length === 1) return // keep at least 1
+                          setSelectedInboxIds(prev =>
+                            isSelected ? prev.filter(id => id !== acc.id) : [...prev, acc.id]
+                          )
+                        }}
+                        style={{
+                          display:'flex', alignItems:'center', gap:10, padding:'8px 12px',
+                          border: `1px solid ${isSelected ? '#0093DB' : '#E5E7EB'}`,
+                          borderRadius:8, cursor:'pointer',
+                          background: isSelected ? '#E6F4FC' : '#fff',
+                          transition:'all 0.15s'
+                        }}>
+                        <div style={{
+                          width:18, height:18, borderRadius:4, border:`2px solid ${isSelected ? '#0093DB' : '#D1D5DB'}`,
+                          background: isSelected ? '#0093DB' : '#fff',
+                          display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+                        }}>
+                          {isSelected && <span style={{ color:'#fff', fontSize:12, fontWeight:700 }}>✓</span>}
+                        </div>
+                        <div>
+                          <div style={{ fontSize:12, fontWeight:600, color: isSelected ? '#0093DB' : '#1F2937' }}>
+                            {acc.gmail_address.split('@')[0]}
+                          </div>
+                          <div style={{ fontSize:10, color:'#9CA3AF' }}>{acc.gmail_address}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {selectedInboxIds.length > 0 && (
+                  <div style={{ marginTop:8, fontSize:12, color:'#6B7280' }}>
+                    {selectedInboxIds.length} of {coldAccounts.length} accounts selected
+                    {rotateInboxes && selectedInboxIds.length > 1
+                      ? ` -- emails will rotate across all ${selectedInboxIds.length} inboxes`
+                      : ' -- all emails sent from this account'}
+                  </div>
+                )}
+              </div>
+
               <Field label="Target Audience" value={newCampaign.target_type} onChange={v => setNewCampaign(p => ({ ...p, target_type: v }))}
                 options={[{ value: 'cold_agent', label: 'Cold Estate Agents' }, { value: 'verified', label: 'Verified Customers' }, { value: 'inbound', label: 'Inbound Leads' }, { value: 'mixed', label: 'Mixed' }]} />
               <Field label="Daily Send Limit (all inboxes combined)" value={String(newCampaign.daily_limit)} onChange={v => setNewCampaign(p => ({ ...p, daily_limit: Number(v) }))} type="number" />
