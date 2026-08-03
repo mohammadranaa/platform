@@ -56,7 +56,12 @@
       "Bash(unzip -o -q ~/Downloads/mlc-cold-inbox-v2.zip -d /private/tmp/claude-501/-Users-mohammadrana-Desktop-platform/0b21580d-ea1c-4205-aa37-45064ca98109/scratchpad/mlc-cold-inbox-v2)",
       "mcp__claude_ai_Supabase__execute_sql",
       "Bash(grep -n \"Assigned rep bar\\\\|</div>$\" src/pages/LeadDetail.jsx)",
-      "mcp__claude_ai_Supabase__apply_migration"
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(rm -rf stripe-zip)",
+      "Bash(mkdir stripe-zip *)",
+      "Bash(unzip -o -q ~/Downloads/stripe-webhook-deploy.zip -d stripe-zip)",
+      "mcp__claude_ai_Supabase__list_tables",
+      "Bash(python3 *)"
     ]
   }
 }

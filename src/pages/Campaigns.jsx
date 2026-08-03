@@ -102,6 +102,8 @@ export default function Campaigns() {
   const [leadSearch, setLeadSearch]           = useState('')
   const [hideEmailed, setHideEmailed]         = useState(false)
 
+  const [myAccount, setMyAccount] = useState(null)
+
   const blankCampaign = { name: '', from_name: '', target_type: 'cold_agent', daily_limit: 50, track_opens: true, track_clicks: true }
   const blankStep = { step_number: '', delay_days: '0', subject: '', body_html: '' }
   const blankContact = { email: '', first_name: '', last_name: '', company: '' }
@@ -134,6 +136,21 @@ export default function Campaigns() {
     setSteps(st || [])
     setSends(sn || [])
     setView('detail')
+  }
+
+  // Default the sender name to the rep's own connected Gmail account, still editable.
+  async function openNewCampaign() {
+    const { data: account } = await supabase
+      .from('user_email_accounts')
+      .select('id, gmail_address, display_name')
+      .eq('user_id', profile.id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    const senderName = account ? (account.display_name || account.gmail_address?.split('@')[0] || '') : ''
+    setMyAccount(account || null)
+    setNewCampaign({ ...blankCampaign, from_name: senderName })
+    setShowNewCampaign(true)
   }
 
   async function createCampaign() {
@@ -578,7 +595,7 @@ export default function Campaigns() {
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cold Email Campaigns</h1>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{campaigns.length} campaigns · {inboxes.length} active inboxes</div>
         </div>
-        <Btn onClick={() => setShowNewCampaign(true)}>+ New Campaign</Btn>
+        <Btn onClick={openNewCampaign}>+ New Campaign</Btn>
       </div>
 
       {campaigns.length === 0 ? (
@@ -586,7 +603,7 @@ export default function Campaigns() {
           <div style={{ fontSize: 40, marginBottom: 12 }}>📧</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No campaigns yet</div>
           <div style={{ color: C.muted, fontSize: 14, marginBottom: 20 }}>Create your first cold email campaign to start reaching estate agents.</div>
-          <Btn onClick={() => setShowNewCampaign(true)}>Create Campaign</Btn>
+          <Btn onClick={openNewCampaign}>Create Campaign</Btn>
         </div>
       ) : (
         <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -621,7 +638,8 @@ export default function Campaigns() {
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>New Campaign</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <Field label="Campaign Name" value={newCampaign.name} onChange={v => setNewCampaign(p => ({ ...p, name: v }))} placeholder="Q3 Estate Agent Outreach — London" />
-              <Field label="From Name" value={newCampaign.from_name} onChange={v => setNewCampaign(p => ({ ...p, from_name: v }))} placeholder="James from MLC Services" hint="Recipients see this as the sender name." />
+              <Field label="From Name" value={newCampaign.from_name} onChange={v => setNewCampaign(p => ({ ...p, from_name: v }))} placeholder="James from MLC Services"
+                hint={myAccount ? `Sending from: ${myAccount.gmail_address} as ${newCampaign.from_name || '—'}` : 'Recipients see this as the sender name.'} />
               <Field label="Target Audience" value={newCampaign.target_type} onChange={v => setNewCampaign(p => ({ ...p, target_type: v }))}
                 options={[{ value: 'cold_agent', label: 'Cold Estate Agents' }, { value: 'verified', label: 'Verified Customers' }, { value: 'inbound', label: 'Inbound Leads' }, { value: 'mixed', label: 'Mixed' }]} />
               <Field label="Daily Send Limit (all inboxes combined)" value={String(newCampaign.daily_limit)} onChange={v => setNewCampaign(p => ({ ...p, daily_limit: Number(v) }))} type="number" />

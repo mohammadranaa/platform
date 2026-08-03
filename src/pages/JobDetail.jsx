@@ -83,6 +83,14 @@ export default function JobDetail() {
   const [fileTab, setFileTab]                     = useState('certificates')
   const [showSendInvoice, setShowSendInvoice]     = useState(false)
   const [showSendCert, setShowSendCert]           = useState(false)
+  const [quotes, setQuotes]             = useState([])
+  const [showNewQuote, setShowNewQuote] = useState(false)
+  const [quoteItems, setQuoteItems]     = useState([{ description:'', quantity:1, unit_price:0 }])
+  const [quoteNotes, setQuoteNotes]     = useState('')
+  const [quoteValidDays, setQuoteValidDays] = useState(30)
+  const [savingQuote, setSavingQuote]   = useState(false)
+  const [showSendQuote, setShowSendQuote] = useState(false)
+  const [selectedQuote, setSelectedQuote] = useState(null)
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -117,6 +125,52 @@ export default function JobDetail() {
 
     const { data: items } = await supabase.from('job_line_items').select('*').eq('job_id', id).order('created_at')
     setLineItems(items || [])
+
+    const { data: quotesData } = await supabase
+      .from('quotes')
+      .select('*, quote_line_items(*)')
+      .eq('job_id', id)
+      .order('created_at', { ascending: false })
+    setQuotes(quotesData || [])
+  }
+
+  async function createQuote() {
+    setSavingQuote(true)
+    const validItems = quoteItems.filter(i => i.description?.trim())
+    const subtotal = validItems.reduce((s, i) => s + (i.quantity || 1) * (i.unit_price || 0), 0)
+    const validUntil = new Date()
+    validUntil.setDate(validUntil.getDate() + quoteValidDays)
+
+    const { data: quote, error } = await supabase.from('quotes').insert({
+      job_id: id,
+      client_id: job.client_id,
+      created_by: profile.id,
+      status: 'Draft',
+      site_address: job.site_address,
+      notes: quoteNotes,
+      subtotal,
+      valid_until: validUntil.toISOString().slice(0, 10),
+    }).select().single()
+
+    if (error) { showToast(error.message, 'error'); setSavingQuote(false); return }
+
+    if (validItems.length > 0) {
+      await supabase.from('quote_line_items').insert(
+        validItems.map(i => ({
+          quote_id: quote.id,
+          description: i.description,
+          quantity: i.quantity || 1,
+          unit_price: i.unit_price || 0,
+          item_type: 'service',
+        }))
+      )
+    }
+    setSavingQuote(false)
+    setShowNewQuote(false)
+    setQuoteItems([{ description:'', quantity:1, unit_price:0 }])
+    setQuoteNotes('')
+    showToast('Quote ' + quote.quote_number + ' created')
+    fetchJob()
   }
 
   async function saveField(field, value) {
@@ -713,6 +767,126 @@ export default function JobDetail() {
             )}
           </div>
 
+          {/* Quotes */}
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                Quotes ({quotes.length})
+              </span>
+              <button onClick={() => setShowNewQuote(true)}
+                style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                + New Quote
+              </button>
+            </div>
+
+            {quotes.length === 0 && !showNewQuote && (
+              <div style={{ color:'#9CA3AF', fontSize:13, textAlign:'center', padding:'16px 0', border:'2px dashed #E5E7EB', borderRadius:8 }}>
+                No quotes yet. Create one to send to the client.
+              </div>
+            )}
+
+            {/* Existing quotes list */}
+            {quotes.map(q => {
+              const statusColors = { Draft:'#6B7280', Sent:'#0093DB', Accepted:'#3d7a00', Declined:'#DC2626', Expired:'#D97706' }
+              const sc = statusColors[q.status] || '#6B7280'
+              return (
+                <div key={q.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, padding:'12px 14px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <div style={{ fontWeight:700, color:'#0093DB', fontSize:13 }}>{q.quote_number}</div>
+                    <div style={{ fontSize:11, color:'#6B7280', marginTop:2 }}>
+                      {q.quote_line_items?.length || 0} items &middot; Total: £{Number(q.total || 0).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize:11, color:'#9CA3AF' }}>
+                      Valid until: {q.valid_until || 'N/A'}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <span style={{ background: sc + '22', color: sc, borderRadius:5, padding:'2px 8px', fontSize:11, fontWeight:600 }}>
+                      {q.status}
+                    </span>
+                    <button onClick={() => { setSelectedQuote(q); setShowSendQuote(true) }}
+                      style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:6, padding:'5px 12px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
+                      Send
+                    </button>
+                    <select value={q.status}
+                      onChange={async e => {
+                        await supabase.from('quotes').update({ status: e.target.value }).eq('id', q.id)
+                        fetchJob()
+                      }}
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'4px 8px', fontSize:11, cursor:'pointer' }}>
+                      {['Draft','Sent','Accepted','Declined','Expired'].map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* New quote form */}
+            {showNewQuote && (
+              <div style={{ background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:12, padding:16, marginTop:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
+                  <span style={{ fontWeight:700, fontSize:14, color:'#1F2937' }}>New Quote</span>
+                  <button onClick={() => setShowNewQuote(false)} style={{ background:'none', border:'none', color:'#9CA3AF', cursor:'pointer', fontSize:18 }}>x</button>
+                </div>
+
+                {/* Line items */}
+                {quoteItems.map((item, idx) => (
+                  <div key={idx} style={{ display:'grid', gridTemplateColumns:'2fr 60px 90px 28px', gap:6, marginBottom:6 }}>
+                    <input value={item.description} placeholder="Service description"
+                      onChange={e => setQuoteItems(p => p.map((x,i) => i===idx ? {...x, description:e.target.value} : x))}
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:12 }} />
+                    <input type="number" value={item.quantity} min="1"
+                      onChange={e => setQuoteItems(p => p.map((x,i) => i===idx ? {...x, quantity:parseInt(e.target.value)||1} : x))}
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 8px', fontSize:12, textAlign:'center' }} />
+                    <input type="number" step="0.01" value={item.unit_price} placeholder="Price"
+                      onChange={e => setQuoteItems(p => p.map((x,i) => i===idx ? {...x, unit_price:parseFloat(e.target.value)||0} : x))}
+                      style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 8px', fontSize:12 }} />
+                    <button onClick={() => setQuoteItems(p => p.filter((_,i) => i!==idx))}
+                      style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:16 }}>x</button>
+                  </div>
+                ))}
+
+                <button onClick={() => setQuoteItems(p => [...p, { description:'', quantity:1, unit_price:0 }])}
+                  style={{ background:'none', border:'1px dashed #E5E7EB', borderRadius:6, padding:'5px 12px', fontSize:12, color:'#6B7280', cursor:'pointer', marginBottom:10 }}>
+                  + Add Item
+                </button>
+
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:'1px solid #E5E7EB', marginBottom:10 }}>
+                  <span style={{ fontWeight:700, color:'#1F2937' }}>Total</span>
+                  <span style={{ fontWeight:800, color:'#0093DB', fontSize:15 }}>
+                    £{quoteItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0).toFixed(2)}
+                  </span>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                  <div>
+                    <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, display:'block', marginBottom:4 }}>Valid for (days)</label>
+                    <input type="number" value={quoteValidDays} onChange={e => setQuoteValidDays(parseInt(e.target.value)||30)}
+                      style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }} />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, display:'block', marginBottom:4 }}>Notes</label>
+                  <textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)} rows={2}
+                    placeholder="Any additional notes for the client..."
+                    style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', resize:'vertical' }} />
+                </div>
+
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={createQuote} disabled={savingQuote}
+                    style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontWeight:700, fontSize:13, cursor:'pointer', opacity:savingQuote?0.7:1 }}>
+                    {savingQuote ? 'Creating...' : 'Create Quote'}
+                  </button>
+                  <button onClick={() => setShowNewQuote(false)}
+                    style={{ background:'#fff', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:8, padding:'9px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Job Diary */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Diary</div>
@@ -782,6 +956,23 @@ export default function JobDetail() {
           body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nIf you have any questions, please do not hesitate to contact us.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
           onClose={() => setShowSendCert(false)}
           onSent={() => { showToast('Certificate email sent'); setShowSendCert(false) }}
+        />
+      )}
+
+      {showSendQuote && selectedQuote && (
+        <SendEmailModal
+          title="Send Quote"
+          to={job.clients?.email || ''}
+          subject={'Quote ' + selectedQuote.quote_number + ' -- My Landlord Certificate'}
+          body={'Dear ' + (job.clients?.company_name || job.clients?.first_name || 'Customer') + ',\n\nPlease find below your quote ' + selectedQuote.quote_number + ' for the services requested.\n\nQuote Details:\nQuote Number: ' + selectedQuote.quote_number + '\nDate: ' + new Date().toLocaleDateString('en-GB') + '\nValid Until: ' + (selectedQuote.valid_until || 'N/A') + '\nProperty: ' + (job.site_address || '') + '\n\nServices Quoted:\n' + (selectedQuote.quote_line_items || []).map(i => '- ' + i.description + ' x' + i.quantity + ' @ GBP' + Number(i.unit_price).toFixed(2)).join('\n') + '\n\nTotal: GBP' + Number(selectedQuote.total || 0).toFixed(2) + '\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\nThis quote is valid until ' + (selectedQuote.valid_until || 'N/A') + '.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'}
+          onClose={() => { setShowSendQuote(false); setSelectedQuote(null) }}
+          onSent={async () => {
+            await supabase.from('quotes').update({ status: 'Sent', sent_at: new Date().toISOString() }).eq('id', selectedQuote.id)
+            showToast('Quote sent')
+            setShowSendQuote(false)
+            setSelectedQuote(null)
+            fetchJob()
+          }}
         />
       )}
 
