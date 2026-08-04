@@ -26,6 +26,8 @@ export default function SendEmailModal({
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
 
+  const safeSubject = (subjectVal || '').replace(/—/g, '--').replace(/–/g, '-').replace(/[^\x00-\x7F]/g, '')
+
   useEffect(() => {
     // Load connected Gmail accounts (personal first, then cold)
     supabase.from('user_email_accounts')
@@ -63,7 +65,7 @@ export default function SendEmailModal({
       const payload = {
         account_id: accountId,
         to: toAddr,
-        subject: subjectVal,
+        subject: safeSubject,
         message: bodyVal,
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
@@ -87,7 +89,7 @@ export default function SendEmailModal({
         // Log to email_log
         await supabase.from('email_log').insert({
           to_email: toAddr,
-          subject: subjectVal,
+          subject: safeSubject,
           body: bodyVal,
           sent_by: profile?.id,
           sent_at: new Date().toISOString(),
