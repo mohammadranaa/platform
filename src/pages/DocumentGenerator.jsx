@@ -275,40 +275,56 @@ export default function DocumentGenerator() {
     setTimeout(() => w.print(), 600)
   }
 
+  function generateInvoiceNumber() {
+    return 'INV-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-4)
+  }
+
   async function saveInvoice() {
-    if (!data.doc_number) { showToast('Please enter an invoice number first', 'error'); return }
     setSaving(true)
+    const docNumber = data.doc_number || generateInvoiceNumber()
     const subtotalVal = lineItems.reduce((s, l) => s + (Number(l.qty || 1) * Number(l.unit_price || 0)), 0)
     const discountVal = Number(data.discount || 0)
     const totalVal    = subtotalVal - discountVal
     const paidVal     = Number(data.paid || 0)
     const balanceVal  = totalVal - paidVal
 
-    const { error } = await supabase.from('invoices').insert({
-      invoice_number:  data.doc_number,
-      doc_type:        docType,
-      company,
-      client_id:       data.client_id || null,
-      client_name:     data.client_name,
-      client_address:  data.client_address,
-      client_email:    data.client_email,
-      job_id:          data.job_id || null,
-      site_address:    data.site_address,
-      work_completed:  data.work_completed,
-      line_items:      lineItems.filter(l => l.description),
-      subtotal:        subtotalVal,
-      discount:        discountVal,
-      total:           totalVal,
-      amount_paid:     paidVal,
-      balance_due:     balanceVal,
-      status:          balanceVal <= 0 ? 'paid' : 'draft',
-      created_by:      profile.id,
-      created_by_name: profile.full_name,
-    })
+    try {
+      const { error } = await supabase.from('invoices').insert({
+        invoice_number:  docNumber,
+        doc_type:        docType,
+        company,
+        client_id:       data.client_id || null,
+        client_name:     data.client_name,
+        client_address:  data.client_address,
+        client_email:    data.client_email,
+        job_id:          data.job_id || null,
+        site_address:    data.site_address,
+        work_completed:  data.work_completed,
+        line_items:      lineItems.filter(l => l.description),
+        subtotal:        subtotalVal,
+        discount:        discountVal,
+        total:           totalVal,
+        amount_paid:     paidVal,
+        balance_due:     balanceVal,
+        status:          balanceVal <= 0 ? 'paid' : 'draft',
+        created_by:      profile.id,
+        created_by_name: profile.full_name,
+        date:            new Date().toISOString().slice(0, 10),
+      })
 
-    setSaving(false)
-    if (error) { showToast(error.message, 'error'); return }
-    showToast(`${docType === 'invoice' ? 'Invoice' : 'Quote'} ${data.doc_number} saved ✓`)
+      if (error) {
+        console.error('Invoice save error:', error)
+        showToast('Failed to save invoice: ' + error.message, 'error')
+        return
+      }
+      if (!data.doc_number) set('doc_number', docNumber)
+      showToast(`${docType === 'invoice' ? 'Invoice' : 'Quote'} ${docNumber} saved ✓`)
+    } catch (err) {
+      console.error('Invoice save exception:', err)
+      showToast('Failed to save invoice: ' + err.message, 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const set = (k, v) => setData(p => ({ ...p, [k]: v }))

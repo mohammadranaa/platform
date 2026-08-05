@@ -118,6 +118,7 @@ export default function JobDetail() {
   const [savingQuote, setSavingQuote]   = useState(false)
   const [showSendQuote, setShowSendQuote] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState(null)
+  const [invoices, setInvoices] = useState([])
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -135,6 +136,11 @@ export default function JobDetail() {
       .single()
     if (error) {
       console.error('JobDetail fetch error:', error, 'ID:', id)
+      if (error.code === 'PGRST116') {
+        showToast('Job not found', 'error')
+        navigate('/jobs')
+        return
+      }
       setJob(null)
     } else {
       console.log('Job loaded:', data?.job_number)
@@ -159,6 +165,13 @@ export default function JobDetail() {
       .eq('job_id', id)
       .order('created_at', { ascending: false })
     setQuotes(quotesData || [])
+
+    const { data: invoicesData } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('job_id', id)
+      .order('created_at', { ascending: false })
+    setInvoices(invoicesData || [])
   }
 
   async function createQuote() {
@@ -365,11 +378,25 @@ export default function JobDetail() {
             style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             🧾 Generate Invoice
           </button>
-          <button onClick={() => setShowSendInvoice(true)}
+          <button onClick={() => {
+            if (invoices.length === 0) {
+              showToast('No invoice found for this job. Create one first using + New Invoice.', 'error')
+              return
+            }
+            setShowSendInvoice(true)
+          }}
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📧 Send Invoice
           </button>
-          <button onClick={() => setShowSendCert(true)}
+          <button onClick={() => {
+            const hasCert = files.some(f => f.file_type === 'certificate')
+            const hasLink = job.certificate_file_url
+            if (!hasCert && !hasLink) {
+              showToast('No certificate attached to this job. Upload one in the Certificates tab first.', 'error')
+              return
+            }
+            setShowSendCert(true)
+          }}
             style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📜 Send Certificate
           </button>
@@ -911,6 +938,63 @@ export default function JobDetail() {
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Invoices */}
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                Invoices ({invoices.length})
+              </span>
+              <button onClick={() => navigate('/invoices/new', { state: { job: { ...job, line_items: lineItems } } })}
+                style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:6, padding:'4px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                + New Invoice
+              </button>
+            </div>
+
+            {invoices.length === 0 ? (
+              <div style={{ color:'#9CA3AF', fontSize:13, textAlign:'center', padding:'16px 0', border:'2px dashed #E5E7EB', borderRadius:8 }}>
+                No invoices yet.
+              </div>
+            ) : (
+              invoices.map(inv => {
+                const statusColors = { Draft:'#6B7280', Sent:'#0093DB', Paid:'#3d7a00', Overdue:'#DC2626', Cancelled:'#9CA3AF' }
+                const sc = statusColors[inv.status] || '#6B7280'
+                return (
+                  <div key={inv.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, padding:'12px 14px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontWeight:700, color:'#0093DB', fontSize:13 }}>{inv.invoice_number}</div>
+                      <div style={{ fontSize:11, color:'#6B7280', marginTop:2 }}>
+                        Total: £{Number(inv.total || 0).toFixed(2)}
+                        {inv.date && <span style={{ marginLeft:8 }}>{new Date(inv.date).toLocaleDateString('en-GB')}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                      <span style={{ background:sc+'22', color:sc, borderRadius:5, padding:'2px 8px', fontSize:11, fontWeight:600 }}>
+                        {inv.status}
+                      </span>
+                      <button onClick={() => setShowSendInvoice(true)}
+                        style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:6, padding:'5px 12px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
+                        Send
+                      </button>
+                      <button onClick={() => navigate('/invoices/new', { state: { job: { ...job, line_items: lineItems }, invoice: inv } })}
+                        style={{ background:'#F5F7FA', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:6, padding:'5px 10px', fontSize:11, cursor:'pointer' }}>
+                        View
+                      </button>
+                      <select value={inv.status}
+                        onChange={async e => {
+                          await supabase.from('invoices').update({ status: e.target.value }).eq('id', inv.id)
+                          setInvoices(p => p.map(x => x.id === inv.id ? { ...x, status: e.target.value } : x))
+                          showToast('Status updated')
+                        }}
+                        style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:6, padding:'4px 8px', fontSize:11, cursor:'pointer' }}>
+                        {['Draft','Sent','Paid','Overdue','Cancelled'].map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
 

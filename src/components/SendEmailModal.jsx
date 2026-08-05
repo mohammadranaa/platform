@@ -83,6 +83,15 @@ export default function SendEmailModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error('Send failed:', res.status, errText)
+        setError(`Send failed (${res.status}): ${errText || 'Unknown error'}`)
+        setSending(false)
+        return
+      }
+
       const data = await res.json()
 
       if (data.ok) {
