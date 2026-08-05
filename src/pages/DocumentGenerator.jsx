@@ -532,10 +532,14 @@ export default function DocumentGenerator() {
             const co = COMPANIES[company] || COMPANIES.standard
             const { base64, filename } = buildInvoicePdf({
               invoiceNumber: data.doc_number,
-              date: new Date().toLocaleDateString('en-GB'),
+              // Raw date value, not pre-formatted -- the PDF builder's own
+              // date parser handles formatting safely.
+              date: new Date(),
               clientName: data.client_name,
               clientAddress: data.client_address,
+              clientEmail: data.client_email || '',
               siteAddress: data.site_address,
+              services: data.work_completed || '',
               lineItems: lineItems.filter(l => l.description).map(l => ({ description: l.description, quantity: l.qty, unit_price: l.unit_price })),
               total: subtotal - Number(data.discount || 0),
               bankName: co.name,

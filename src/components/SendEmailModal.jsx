@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
 
@@ -112,35 +110,34 @@ export default function SendEmailModal({
       payload.attachment_mime = attachmentInfo.mime || 'application/pdf'
     }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s safety timeout
-
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-reply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Supabase's API gateway requires the apikey header to route
-          // the request to the function at all, even with JWT verification
-          // disabled on the function itself. Without it the request never
-          // reaches our code and the browser reports a generic network
-          // failure ("Failed to fetch") with no useful status code.
-          ...(SUPABASE_ANON_KEY ? { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } : {}),
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
+      // Using the Supabase client's own functions.invoke() instead of a
+      // hand-built fetch(). This reuses the exact URL + apikey/auth
+      // headers the client is already configured with — the same
+      // config every other call in this app (supabase.from(...)) relies
+      // on and which is proven to work. A manually reconstructed fetch()
+      // silently breaks if the anon-key env var isn't populated at build
+      // time, and the resulting failure shows up as a bare, undiagnosable
+      // "Failed to fetch" with no HTTP status to go on.
+      const { data, error: fnError } = await supabase.functions.invoke('gmail-reply', {
+        body: payload,
       })
-      clearTimeout(timeoutId)
 
-      let data
-      try {
-        data = await res.json()
-      } catch {
-        throw new Error(`Server returned an unreadable response (HTTP ${res.status}). The email may not have been sent — check Cold Inbox / Email Inbox to confirm.`)
+      if (fnError) {
+        let msg = fnError.message || 'Send failed'
+        // FunctionsHttpError carries the actual response on .context —
+        // pull the real error message out of it when available.
+        if (fnError.context && typeof fnError.context.json === 'function') {
+          try {
+            const errBody = await fnError.context.json()
+            if (errBody?.error) msg = errBody.error
+          } catch { /* response wasn't JSON, keep the generic message */ }
+        }
+        throw new Error(msg)
       }
 
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || `Send failed (HTTP ${res.status})`)
+      if (!data?.ok) {
+        throw new Error(data?.error || 'Send failed — no confirmation returned by the server')
       }
 
       // Success — log it, then close
@@ -159,15 +156,8 @@ export default function SendEmailModal({
       onClose?.()
 
     } catch (err) {
-      clearTimeout(timeoutId)
       setSending(false)
-      if (err.name === 'AbortError') {
-        setError('The request timed out after 30 seconds. This usually means the email server is slow to respond — check Cold Inbox / Email Inbox before retrying, the email may have still sent.')
-      } else if (err.message === 'Failed to fetch') {
-        setError('Could not reach the server (network error). If this keeps happening, the connected Gmail account may need to be reconnected in Email Inbox.')
-      } else {
-        setError(err.message || 'Something went wrong sending the email.')
-      }
+      setError(err.message || 'Something went wrong sending the email.')
     }
   }
 

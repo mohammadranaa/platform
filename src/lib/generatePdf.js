@@ -18,6 +18,33 @@ const GREY = [107, 114, 128]
 const LIGHT_GREY = [245, 247, 250]
 const RED = [220, 38, 38]
 
+// Robustly parse a date from ANY of the formats this app might hand us,
+// without ever falling through to the ambiguous `new Date(string)`
+// constructor — that constructor guesses MM/DD/YYYY for slash-separated
+// strings, which silently turns "05/08/2026" (5 August, UK format) into
+// 8 May. Every call site in this file goes through here instead.
+function parseFlexibleDate(input) {
+  if (!input) return new Date()
+  if (input instanceof Date) return input
+
+  const str = String(input).trim()
+
+  // ISO: 2026-08-05 (with optional time component)
+  let m = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+
+  // UK slash format: 05/08/2026 -> DD/MM/YYYY (what toLocaleDateString('en-GB') produces)
+  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]))
+
+  // Already a readable long date like "5 August 2026" — safe to hand to Date()
+  // since there's no numeric ambiguity in this format.
+  const parsed = new Date(str)
+  if (!isNaN(parsed.getTime())) return parsed
+
+  return new Date()
+}
+
 function docToBase64(doc) {
   const dataUri = doc.output('datauristring')
   return dataUri.split(',')[1]
@@ -25,7 +52,7 @@ function docToBase64(doc) {
 
 function formatLongDate(d) {
   if (!d) return ''
-  const date = d instanceof Date ? d : new Date(d)
+  const date = d instanceof Date ? d : parseFlexibleDate(d)
   if (isNaN(date.getTime())) return String(d)
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`
@@ -288,7 +315,7 @@ export function buildInvoicePdf({
   lineItems, total, discount = 0, paid = 0, vatRate = 0,
 }) {
   const doc = new jsPDF()
-  const issueDate = date ? new Date(date) : new Date()
+  const issueDate = parseFlexibleDate(date)
   const dueDate = addDays(issueDate, dueDays)
 
   let y = drawCompanyHeader(doc, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
@@ -316,7 +343,7 @@ export function buildQuotePdf({
   lineItems, total, notes,
 }) {
   const doc = new jsPDF()
-  const issueDate = date ? new Date(date) : new Date()
+  const issueDate = parseFlexibleDate(date)
 
   let y = drawCompanyHeader(doc, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
     { label: 'Date: ', value: formatLongDate(issueDate) },

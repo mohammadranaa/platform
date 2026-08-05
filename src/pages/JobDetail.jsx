@@ -1055,17 +1055,29 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={`Invoice ${invoices[0].invoice_number} -- My Landlord Certificate`}
           body={`Dear {{name}},\n\nPlease find attached your invoice ${invoices[0].invoice_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoices[0].invoice_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
-          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          variables={{ name: job.clients?.company_name ||
+            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+            'Customer' }}
           buildAttachment={() => {
             const inv = invoices[0]
+            const fullClientName = job.clients?.company_name ||
+              [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+              'Customer'
             const items = (inv.line_items?.length ? inv.line_items : lineItems)
               .map(l => ({ description: l.description, quantity: l.quantity ?? l.qty ?? 1, unit_price: l.unit_price }))
             const { base64, filename } = buildInvoicePdf({
               invoiceNumber: inv.invoice_number,
-              date: new Date(inv.date || inv.created_at).toLocaleDateString('en-GB'),
-              clientName: job.clients?.company_name || job.clients?.first_name || 'Customer',
+              // Pass the RAW date value straight from the database (ISO format
+              // like "2026-08-05"), never a pre-formatted display string. The
+              // PDF builder's own date parser handles formatting safely --
+              // formatting it here first was exactly what caused the DD/MM vs
+              // MM/DD mixup that turned 5 August into 8 May.
+              date: inv.date || inv.created_at,
+              clientName: fullClientName,
               clientAddress: job.clients?.street_address || '',
+              clientEmail: job.clients?.email || '',
               siteAddress: job.site_address || '',
+              services: job.service_types || [],
               lineItems: items,
               total: inv.total,
             })
@@ -1113,15 +1125,22 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={`Quote ${selectedQuote.quote_number} -- My Landlord Certificate`}
           body={`Dear {{name}},\n\nPlease find attached your quote ${selectedQuote.quote_number} for the services requested.\n\nQuote Details:\nQuote Number: ${selectedQuote.quote_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nValid Until: ${selectedQuote.valid_until || 'N/A'}\nProperty: ${job.site_address || ''}\n\nTotal: GBP${Number(selectedQuote.total || 0).toFixed(2)}\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
-          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          variables={{ name: job.clients?.company_name ||
+            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+            'Customer' }}
           buildAttachment={() => {
+            const fullClientName = job.clients?.company_name ||
+              [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+              'Customer'
             const { base64, filename } = buildQuotePdf({
               quoteNumber: selectedQuote.quote_number,
-              date: new Date(selectedQuote.created_at).toLocaleDateString('en-GB'),
+              date: selectedQuote.created_at,
               validUntil: selectedQuote.valid_until,
-              clientName: job.clients?.company_name || job.clients?.first_name || 'Customer',
+              clientName: fullClientName,
               clientAddress: job.clients?.street_address || '',
+              clientEmail: job.clients?.email || '',
               siteAddress: job.site_address || '',
+              services: job.service_types || [],
               lineItems: selectedQuote.quote_line_items || [],
               total: selectedQuote.total,
               notes: selectedQuote.notes,

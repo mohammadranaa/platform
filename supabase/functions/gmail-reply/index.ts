@@ -100,8 +100,12 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const token = await refreshToken(account, client_id, client_secret)
   const safeSubject = cleanSubject(subject || 'My Landlord Certificate')
-  const fromName = account.display_name || 'My Landlord Certificate'
-  const fromAddr = account.gmail_address
+  const fromName = account.send_as_name || account.display_name || 'My Landlord Certificate'
+  // Use the configured "Send As" alias if one is set (e.g. info@...
+  // sent through an asad@... mailbox that has it added under Gmail
+  // Settings > Accounts > Send mail as). Falls back to the connected
+  // mailbox's own address if no alias is configured.
+  const fromAddr = account.send_as_email || account.gmail_address
   const boundary = 'mlc' + Date.now().toString(36)
 
   // Build RFC 2822 message as a raw string
