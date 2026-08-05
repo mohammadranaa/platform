@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
 
@@ -111,18 +112,31 @@ export default function SendEmailModal({
       payload.attachment_mime = attachmentInfo.mime || 'application/pdf'
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s safety timeout
+
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-reply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Supabase's API gateway requires the apikey header to route
+          // the request to the function at all, even with JWT verification
+          // disabled on the function itself. Without it the request never
+          // reaches our code and the browser reports a generic network
+          // failure ("Failed to fetch") with no useful status code.
+          ...(SUPABASE_ANON_KEY ? { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+        },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
 
       let data
       try {
         data = await res.json()
       } catch {
-        throw new Error(`Server returned an unreadable response (HTTP ${res.status}). The email may not have been sent.`)
+        throw new Error(`Server returned an unreadable response (HTTP ${res.status}). The email may not have been sent — check Cold Inbox / Email Inbox to confirm.`)
       }
 
       if (!res.ok || !data.ok) {
@@ -145,8 +159,15 @@ export default function SendEmailModal({
       onClose?.()
 
     } catch (err) {
+      clearTimeout(timeoutId)
       setSending(false)
-      setError(err.message || 'Network error — the request could not reach the server. Check your connection and try again.')
+      if (err.name === 'AbortError') {
+        setError('The request timed out after 30 seconds. This usually means the email server is slow to respond — check Cold Inbox / Email Inbox before retrying, the email may have still sent.')
+      } else if (err.message === 'Failed to fetch') {
+        setError('Could not reach the server (network error). If this keeps happening, the connected Gmail account may need to be reconnected in Email Inbox.')
+      } else {
+        setError(err.message || 'Something went wrong sending the email.')
+      }
     }
   }
 

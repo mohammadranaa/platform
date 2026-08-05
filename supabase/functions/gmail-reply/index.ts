@@ -49,26 +49,44 @@ function strToBase64Url(str: string): string {
   return bytesToBase64Url(new TextEncoder().encode(str))
 }
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-    })
+    return new Response('ok', { headers: CORS_HEADERS })
   }
 
+  // Everything below is wrapped so that ANY uncaught exception still
+  // returns a response with CORS headers attached. Without this, an
+  // unhandled error produces a bare response the browser cannot read
+  // cross-origin, which surfaces to the user as a generic
+  // "Failed to fetch" with zero diagnostic information — even though
+  // the server-side work (e.g. sending the email) may have completed.
+  try {
+    return await handleRequest(req)
+  } catch (err: any) {
+    console.error('Unhandled error in gmail-reply:', err)
+    return new Response(JSON.stringify({ error: err?.message || 'Unexpected server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    })
+  }
+})
+
+async function handleRequest(req: Request): Promise<Response> {
   let body: any
   try { body = await req.json() }
-  catch { return new Response('Invalid JSON', { status: 400 }) }
+  catch { return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }) }
 
   const { account_id, thread_id, to, subject, message, client_id, client_secret, attachment_base64, attachment_name, attachment_mime } = body
 
   if (!account_id || !to || !message) {
     return new Response(JSON.stringify({ error: 'account_id, to, and message are required' }), {
-      status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 
@@ -76,7 +94,7 @@ Deno.serve(async (req: Request) => {
     .from('user_email_accounts').select('*').eq('id', account_id).single()
   if (!account) {
     return new Response(JSON.stringify({ error: 'Account not found' }), {
-      status: 404, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      status: 404, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 
@@ -151,7 +169,7 @@ Deno.serve(async (req: Request) => {
   if (sendData.error) {
     console.error('Gmail error:', JSON.stringify(sendData.error))
     return new Response(JSON.stringify({ error: sendData.error.message }), {
-      status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   }
 
@@ -167,6 +185,6 @@ Deno.serve(async (req: Request) => {
   }).catch(() => {})
 
   return new Response(JSON.stringify({ ok: true, message_id: sendData.id }), {
-    status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
   })
-})
+}
