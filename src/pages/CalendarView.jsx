@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { toDateString } from '../lib/dateUtils'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -42,7 +43,7 @@ function sameDay(a, b) {
 }
 
 function formatDate(d) {
-  return d.toISOString().slice(0, 10)
+  return toDateString(d)
 }
 
 export default function CalendarView() {

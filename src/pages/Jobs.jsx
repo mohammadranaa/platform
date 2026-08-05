@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
+import { parseLocalDate } from '../lib/dateUtils'
 
 const C = { surface:'#F5F7FA',border:'#E5E7EB',accent:'#0093DB',accentSoft:'#E6F4FC',green:'#80D100',greenSoft:'#F0FAE0',greenDark:'#3d7a00',amber:'#D97706',amberSoft:'#FEF3C7',red:'#DC2626',redSoft:'#FEE2E2',teal:'#0D9488',tealSoft:'#CCFBF1',text:'#1F2937',muted:'#6B7280',dim:'#9CA3AF' }
 const STATUSES = ['New','In Progress','Confirmed','Completed','Declined']
 const SS = { 'New':{color:'#6B7280',bg:'#F5F7FA'},'In Progress':{color:'#0284C7',bg:'#DBEAFE'},'Confirmed':{color:'#0093DB',bg:'#E6F4FC'},'Completed':{color:'#3d7a00',bg:'#F0FAE0'},'Declined':{color:'#DC2626',bg:'#FEE2E2'} }
 const SVCS = ['EICR','GSC (CP12)','EPC','FRA','FSC','PAT Testing','Remedial Works','Consumer Unit','Diagnostics','Asbestos Survey','Fire Alarm','Boiler Installation','Other']
 const fmt = v => '£'+Number(v||0).toLocaleString('en-GB',{minimumFractionDigits:2})
-const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : '—'
+const fmtD = d => d ? parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : '—'
 const cName = c => c?.company_name||[c?.first_name,c?.last_name].filter(Boolean).join(' ')||'—'
 
 export default function Jobs() {
