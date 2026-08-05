@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { MLC_LOGO } from '../lib/logo.js'
 import SendEmailModal from '../components/SendEmailModal'
+import { buildInvoicePdf } from '../lib/generatePdf'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -527,6 +528,22 @@ export default function DocumentGenerator() {
           to={data.client_email || ''}
           subject={`Invoice ${data.doc_number || ''} -- My Landlord Certificate`}
           body={buildEmailBody(data)}
+          buildAttachment={() => {
+            const co = COMPANIES[company] || COMPANIES.standard
+            const { base64, filename } = buildInvoicePdf({
+              invoiceNumber: data.doc_number,
+              date: new Date().toLocaleDateString('en-GB'),
+              clientName: data.client_name,
+              clientAddress: data.client_address,
+              siteAddress: data.site_address,
+              lineItems: lineItems.filter(l => l.description).map(l => ({ description: l.description, quantity: l.qty, unit_price: l.unit_price })),
+              total: subtotal - Number(data.discount || 0),
+              bankName: co.name,
+              sortCode: co.sort,
+              accountNumber: co.account,
+            })
+            return { base64, filename, mime: 'application/pdf' }
+          }}
           onClose={() => setShowSend(false)}
           onSent={() => { showToast('Invoice sent'); setShowSend(false) }}
         />

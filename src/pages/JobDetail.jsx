@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import EmailCompose from '../components/EmailCompose'
 import SendEmailModal from '../components/SendEmailModal'
+import { buildInvoicePdf, buildQuotePdf } from '../lib/generatePdf'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -1048,14 +1049,35 @@ export default function JobDetail() {
         />
       )}
 
-      {showSendInvoice && (
+      {showSendInvoice && invoices[0] && (
         <SendEmailModal
           title="Send Invoice"
           to={job.clients?.email || ''}
-          subject={`Invoice ${job.job_number} -- My Landlord Certificate`}
-          body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\nPlease find attached your invoice ${job.job_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${job.job_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${lineItems.reduce((s,l) => s + (l.quantity||1)*(l.unit_price||0), 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${job.job_number}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          subject={`Invoice ${invoices[0].invoice_number} -- My Landlord Certificate`}
+          body={`Dear {{name}},\n\nPlease find attached your invoice ${invoices[0].invoice_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoices[0].invoice_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          buildAttachment={() => {
+            const inv = invoices[0]
+            const items = (inv.line_items?.length ? inv.line_items : lineItems)
+              .map(l => ({ description: l.description, quantity: l.quantity ?? l.qty ?? 1, unit_price: l.unit_price }))
+            const { base64, filename } = buildInvoicePdf({
+              invoiceNumber: inv.invoice_number,
+              date: new Date(inv.date || inv.created_at).toLocaleDateString('en-GB'),
+              clientName: job.clients?.company_name || job.clients?.first_name || 'Customer',
+              clientAddress: job.clients?.street_address || '',
+              siteAddress: job.site_address || '',
+              lineItems: items,
+              total: inv.total,
+            })
+            return { base64, filename, mime: 'application/pdf' }
+          }}
           onClose={() => setShowSendInvoice(false)}
-          onSent={() => { showToast('Invoice email sent'); setShowSendInvoice(false) }}
+          onSent={async () => {
+            await supabase.from('invoices').update({ status: 'Sent', sent_at: new Date().toISOString() }).eq('id', invoices[0].id)
+            showToast('Invoice sent')
+            setShowSendInvoice(false)
+            fetchJob()
+          }}
         />
       )}
 
@@ -1064,9 +1086,24 @@ export default function JobDetail() {
           title="Send Certificate"
           to={job.clients?.email || ''}
           subject={`Your Certificate -- ${(job.service_types || []).join(', ')} -- My Landlord Certificate`}
-          body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nIf you have any questions, please do not hesitate to contact us.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          body={`Dear {{name}},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nIf you have any questions, please do not hesitate to contact us.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          buildAttachment={async () => {
+            const certFile = files.find(f => f.file_type === 'certificate')
+            if (!certFile) throw new Error('No certificate file found')
+            const res = await fetch(getFileUrl(certFile.storage_path))
+            if (!res.ok) throw new Error('Could not download certificate file (HTTP ' + res.status + ')')
+            const blob = await res.blob()
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onloadend = () => resolve(reader.result.split(',')[1])
+              reader.onerror = reject
+              reader.readAsDataURL(blob)
+            })
+            return { base64, filename: certFile.file_name || 'Certificate.pdf', mime: blob.type || 'application/pdf' }
+          }}
           onClose={() => setShowSendCert(false)}
-          onSent={() => { showToast('Certificate email sent'); setShowSendCert(false) }}
+          onSent={() => { showToast('Certificate sent'); setShowSendCert(false) }}
         />
       )}
 
@@ -1074,8 +1111,23 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Quote"
           to={job.clients?.email || ''}
-          subject={'Quote ' + selectedQuote.quote_number + ' -- My Landlord Certificate'}
-          body={'Dear ' + (job.clients?.company_name || job.clients?.first_name || 'Customer') + ',\n\nPlease find below your quote ' + selectedQuote.quote_number + ' for the services requested.\n\nQuote Details:\nQuote Number: ' + selectedQuote.quote_number + '\nDate: ' + new Date().toLocaleDateString('en-GB') + '\nValid Until: ' + (selectedQuote.valid_until || 'N/A') + '\nProperty: ' + (job.site_address || '') + '\n\nServices Quoted:\n' + (selectedQuote.quote_line_items || []).map(i => '- ' + i.description + ' x' + i.quantity + ' @ GBP' + Number(i.unit_price).toFixed(2)).join('\n') + '\n\nTotal: GBP' + Number(selectedQuote.total || 0).toFixed(2) + '\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\nThis quote is valid until ' + (selectedQuote.valid_until || 'N/A') + '.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'}
+          subject={`Quote ${selectedQuote.quote_number} -- My Landlord Certificate`}
+          body={`Dear {{name}},\n\nPlease find attached your quote ${selectedQuote.quote_number} for the services requested.\n\nQuote Details:\nQuote Number: ${selectedQuote.quote_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nValid Until: ${selectedQuote.valid_until || 'N/A'}\nProperty: ${job.site_address || ''}\n\nTotal: GBP${Number(selectedQuote.total || 0).toFixed(2)}\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          buildAttachment={() => {
+            const { base64, filename } = buildQuotePdf({
+              quoteNumber: selectedQuote.quote_number,
+              date: new Date(selectedQuote.created_at).toLocaleDateString('en-GB'),
+              validUntil: selectedQuote.valid_until,
+              clientName: job.clients?.company_name || job.clients?.first_name || 'Customer',
+              clientAddress: job.clients?.street_address || '',
+              siteAddress: job.site_address || '',
+              lineItems: selectedQuote.quote_line_items || [],
+              total: selectedQuote.total,
+              notes: selectedQuote.notes,
+            })
+            return { base64, filename, mime: 'application/pdf' }
+          }}
           onClose={() => { setShowSendQuote(false); setSelectedQuote(null) }}
           onSent={async () => {
             await supabase.from('quotes').update({ status: 'Sent', sent_at: new Date().toISOString() }).eq('id', selectedQuote.id)
