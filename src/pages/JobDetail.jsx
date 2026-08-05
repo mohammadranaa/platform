@@ -575,6 +575,12 @@ export default function JobDetail() {
                 <input type="checkbox" checked={!!job.google_review_requested} onChange={e => saveField('google_review_requested', e.target.checked)} id="google_review_requested" />
                 <label htmlFor="google_review_requested" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Google Review Requested</label>
               </div>
+              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+                <input type="checkbox" checked={!!job.payment_proof_received}
+                  onChange={e => saveField('payment_proof_received', e.target.checked)}
+                  style={{ width:16, height:16 }} />
+                Payment Proof Received
+              </label>
 
               <div style={{ gridColumn:'span 2' }}>
                 <label style={lbl}>Certificate Link (external)</label>
@@ -646,6 +652,7 @@ export default function JobDetail() {
                   { key:'certificates', label:'📜 Certificates', color:'#3d7a00' },
                   { key:'photos', label:'📷 Photos', color:'#0093DB' },
                   { key:'videos', label:'🎥 Videos', color:'#7C3AED' },
+                  { key:'payment', label:'💳 Payment Proof', color:'#D97706' },
                 ].map(t => (
                   <button key={t.key} type="button" onClick={() => setFileTab(t.key)}
                     style={{ padding:'5px 14px', borderRadius:6, border:'none', cursor:'pointer', fontSize:12,
@@ -654,7 +661,7 @@ export default function JobDetail() {
                       color: fileTab === t.key ? t.color : '#6B7280' }}>
                     {t.label}
                     <span style={{ marginLeft:6, background: fileTab===t.key ? t.color+'22' : 'transparent', color: t.color, borderRadius:20, padding:'1px 6px', fontSize:10 }}>
-                      {files.filter(f => f.file_type === t.key.slice(0, -1)).length}
+                      {files.filter(f => t.key==='payment' ? (f.file_type==='payment') : f.file_type === t.key.slice(0, -1)).length}
                     </span>
                   </button>
                 ))}
@@ -682,6 +689,13 @@ export default function JobDetail() {
                     onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'video')} />
                 </label>
               )}
+              {fileTab === 'payment' && (
+                <label style={{ background:'#FEF3C7', color:'#D97706', border:'1px solid #D9770644', borderRadius:6, padding:'5px 14px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                  + Upload Payment Proof
+                  <input type="file" accept="image/*,.pdf" hidden multiple
+                    onChange={e => Array.from(e.target.files).forEach(f => uploadFile(f, 'payment'))} />
+                </label>
+              )}
             </div>
 
             {/* Certificate link field — only show in certificates tab */}
@@ -704,19 +718,20 @@ export default function JobDetail() {
 
             {/* File grid filtered by tab */}
             {(() => {
-              const tabFiles = files.filter(f => f.file_type === fileTab.slice(0, -1))
+              const tabFiles = files.filter(f => fileTab==='payment' ? (f.file_type==='payment') : f.file_type === fileTab.slice(0, -1))
               if (tabFiles.length === 0) return (
                 <div style={{ color:'#9CA3AF', fontSize:13, padding:'24px 0', textAlign:'center', border:'2px dashed #E5E7EB', borderRadius:8 }}>
-                  No {fileTab} yet. Use the upload button above.
+                  {fileTab === 'payment' ? 'No payment proof yet. Use the upload button above.' : `No ${fileTab} yet. Use the upload button above.`}
                 </div>
               )
               return (
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:10 }}>
                   {tabFiles.map(f => {
                     const url = getFileUrl(f.storage_path)
+                    const isImage = fileTab === 'photos' || (fileTab === 'payment' && f.mime_type?.startsWith('image/'))
                     return (
                       <div key={f.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
-                        {fileTab === 'photos' ? (
+                        {isImage ? (
                           <a href={url} target="_blank" rel="noreferrer">
                             <img src={url} alt={f.file_name}
                               style={{ width:'100%', height:110, objectFit:'cover', display:'block' }} />
@@ -1063,6 +1078,8 @@ export default function JobDetail() {
             const fullClientName = job.clients?.company_name ||
               [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
               'Customer'
+            const clientAddr = [job.clients?.street_address, job.clients?.city, job.clients?.postcode]
+              .filter(Boolean).join(', ')
             const items = (inv.line_items?.length ? inv.line_items : lineItems)
               .map(l => ({ description: l.description, quantity: l.quantity ?? l.qty ?? 1, unit_price: l.unit_price }))
             const { base64, filename } = buildInvoicePdf({
@@ -1073,11 +1090,12 @@ export default function JobDetail() {
               // formatting it here first was exactly what caused the DD/MM vs
               // MM/DD mixup that turned 5 August into 8 May.
               date: inv.date || inv.created_at,
+              dueDays: 3,
               clientName: fullClientName,
-              clientAddress: job.clients?.street_address || '',
+              clientAddress: clientAddr,
               clientEmail: job.clients?.email || '',
               siteAddress: job.site_address || '',
-              services: job.service_types || [],
+              services: (job.service_types || []).join(', '),
               lineItems: items,
               total: inv.total,
             })
@@ -1132,15 +1150,17 @@ export default function JobDetail() {
             const fullClientName = job.clients?.company_name ||
               [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
               'Customer'
+            const clientAddr = [job.clients?.street_address, job.clients?.city, job.clients?.postcode]
+              .filter(Boolean).join(', ')
             const { base64, filename } = buildQuotePdf({
               quoteNumber: selectedQuote.quote_number,
               date: selectedQuote.created_at,
               validUntil: selectedQuote.valid_until,
               clientName: fullClientName,
-              clientAddress: job.clients?.street_address || '',
+              clientAddress: clientAddr,
               clientEmail: job.clients?.email || '',
               siteAddress: job.site_address || '',
-              services: job.service_types || [],
+              services: (job.service_types || []).join(', '),
               lineItems: selectedQuote.quote_line_items || [],
               total: selectedQuote.total,
               notes: selectedQuote.notes,

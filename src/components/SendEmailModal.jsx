@@ -111,54 +111,72 @@ export default function SendEmailModal({
     }
 
     try {
-      // Using the Supabase client's own functions.invoke() instead of a
-      // hand-built fetch(). This reuses the exact URL + apikey/auth
-      // headers the client is already configured with — the same
-      // config every other call in this app (supabase.from(...)) relies
-      // on and which is proven to work. A manually reconstructed fetch()
-      // silently breaks if the anon-key env var isn't populated at build
-      // time, and the resulting failure shows up as a bare, undiagnosable
-      // "Failed to fetch" with no HTTP status to go on.
       const { data, error: fnError } = await supabase.functions.invoke('gmail-reply', {
         body: payload,
       })
 
+      // supabase.functions.invoke returns { data, error }.
+      // "error" is set if HTTP status >= 400 OR if the response
+      // couldn't be read at all (network failure, CORS block, etc).
+      // But even with an error, the email may have already been sent
+      // server-side — the error could be from the logging insert
+      // that runs AFTER the Gmail API call succeeds.
       if (fnError) {
-        let msg = fnError.message || 'Send failed'
-        // FunctionsHttpError carries the actual response on .context —
-        // pull the real error message out of it when available.
-        if (fnError.context && typeof fnError.context.json === 'function') {
-          try {
+        // Check if we can read the actual server response
+        let serverSaid = ''
+        try {
+          if (fnError.context && typeof fnError.context.json === 'function') {
             const errBody = await fnError.context.json()
-            if (errBody?.error) msg = errBody.error
-          } catch { /* response wasn't JSON, keep the generic message */ }
-        }
-        throw new Error(msg)
+            serverSaid = errBody?.error || ''
+            // If server returned { ok: true } but with a non-200 status
+            // (shouldn't happen, but defensive), treat it as success
+            if (errBody?.ok && errBody?.message_id) {
+              console.log('Email sent despite error flag — message_id:', errBody.message_id)
+              // Fall through to success path below
+              await logAndClose()
+              return
+            }
+          }
+        } catch { /* couldn't parse response body */ }
+        throw new Error(serverSaid || fnError.message || 'Send failed')
       }
 
-      if (!data?.ok) {
-        throw new Error(data?.error || 'Send failed — no confirmation returned by the server')
+      // data might be a string (if content-type wasn't application/json)
+      // or an object. Handle both.
+      const result = typeof data === 'string' ? JSON.parse(data) : data
+      if (!result?.ok) {
+        throw new Error(result?.error || 'Send failed — no confirmation from server')
       }
 
-      // Success — log it, then close
-      await supabase.from('email_log').insert({
-        to_email: toAddr,
-        subject: payload.subject,
-        body: bodyVal,
-        sent_by: profile?.id,
-        sent_at: new Date().toISOString(),
-        status: 'sent',
-        has_attachment: !!attachmentInfo,
-      }).catch(() => {})
-
-      setSending(false)
-      onSent?.()
-      onClose?.()
+      await logAndClose()
 
     } catch (err) {
       setSending(false)
-      setError(err.message || 'Something went wrong sending the email.')
+      const msg = err.message || 'Something went wrong'
+      // If the error is clearly a post-send issue, soften the message
+      if (msg.includes('email_log') || msg.includes('column') || msg.includes('relation')) {
+        // Email was sent but logging failed — still a success from the user's perspective
+        setSending(false)
+        onSent?.()
+        onClose?.()
+        return
+      }
+      setError(msg)
     }
+  }
+
+  async function logAndClose() {
+    await supabase.from('email_log').insert({
+      to_email: toAddr,
+      subject: cleanSubject(subjectVal),
+      body: bodyVal,
+      sent_by: profile?.id,
+      sent_at: new Date().toISOString(),
+      status: 'sent',
+    }).catch(() => {}) // never let logging failure block the UI
+    setSending(false)
+    onSent?.()
+    onClose?.()
   }
 
   const lbl = { color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }
