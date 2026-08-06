@@ -8,7 +8,15 @@ const supabase = createClient(
 async function refreshToken(account: any, clientId: string, clientSecret: string): Promise<string> {
   const expiry = new Date(account.token_expiry)
   if (new Date() < expiry) return account.access_token
-  if (!account.refresh_token) return account.access_token
+  if (!account.refresh_token) {
+    console.error(`No refresh token for ${account.gmail_address} — user needs to reconnect`)
+    throw new Error(`Gmail account ${account.gmail_address} needs to be reconnected. Go to Email Inbox and reconnect.`)
+  }
+  if (!clientId || !clientSecret) {
+    console.error('Cannot refresh token: missing Google OAuth credentials')
+    throw new Error('Gmail token expired and cannot be refreshed. Contact admin to set Google OAuth credentials.')
+  }
+  console.log(`Refreshing token for ${account.gmail_address}...`)
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -19,13 +27,16 @@ async function refreshToken(account: any, clientId: string, clientSecret: string
   })
   const data = await res.json()
   if (data.access_token) {
+    const newExpiry = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
     await supabase.from('user_email_accounts').update({
       access_token: data.access_token,
-      token_expiry: new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString(),
+      token_expiry: newExpiry,
     }).eq('id', account.id)
+    console.log(`Token refreshed for ${account.gmail_address}, expires ${newExpiry}`)
     return data.access_token
   }
-  return account.access_token
+  console.error(`Token refresh failed for ${account.gmail_address}:`, JSON.stringify(data))
+  throw new Error(`Gmail token refresh failed for ${account.gmail_address}: ${data.error_description || data.error || 'Unknown error'}. Try reconnecting the account.`)
 }
 
 function cleanSubject(s: string): string {
@@ -82,7 +93,15 @@ async function handleRequest(req: Request): Promise<Response> {
   try { body = await req.json() }
   catch { return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }) }
 
-  const { account_id, thread_id, to, subject, message, client_id, client_secret, attachment_base64, attachment_name, attachment_mime } = body
+  const { account_id, thread_id, to, subject, message, attachment_base64, attachment_name, attachment_mime } = body
+
+  // Google OAuth credentials: prefer request body, fall back to server env
+  const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
+  const client_secret = body.client_secret || Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+
+  if (!client_id || !client_secret) {
+    console.error('No Google OAuth credentials available. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as Supabase secrets.')
+  }
 
   if (!account_id || !to || !message) {
     return new Response(JSON.stringify({ error: 'account_id, to, and message are required' }), {
@@ -177,16 +196,18 @@ async function handleRequest(req: Request): Promise<Response> {
     })
   }
 
-  // Cache sent message (non-critical)
-  supabase.from('gmail_messages').insert({
-    account_id: account.id, gmail_id: sendData.id,
-    thread_id: sendData.threadId || thread_id,
-    from_email: fromAddr, from_name: fromName,
-    to_email: to, subject: safeSubject,
-    body_text: message, snippet: message.slice(0, 200),
-    date: new Date().toISOString(),
-    is_read: true, is_reply: false, mail_type: 'sent', labels: ['SENT'],
-  }).catch(() => {})
+  // Cache sent message (non-critical — never block the response)
+  try {
+    await supabase.from('gmail_messages').insert({
+      account_id: account.id, gmail_id: sendData.id,
+      thread_id: sendData.threadId || thread_id,
+      from_email: fromAddr, from_name: fromName,
+      to_email: to, subject: safeSubject,
+      body_text: message, snippet: message.slice(0, 200),
+      date: new Date().toISOString(),
+      is_read: true, is_reply: false, mail_type: 'sent', labels: ['SENT'],
+    })
+  } catch (e) { console.log('gmail_messages cache failed (non-critical):', e) }
 
   return new Response(JSON.stringify({ ok: true, message_id: sendData.id }), {
     status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }

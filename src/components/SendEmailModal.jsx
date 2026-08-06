@@ -43,14 +43,23 @@ export default function SendEmailModal({
 
   useEffect(() => {
     supabase.from('user_email_accounts')
-      .select('id, gmail_address, display_name, account_type')
+      .select('id, gmail_address, display_name, account_type, token_expiry')
       .eq('is_active', true)
       .order('account_type')
       .then(({ data }) => {
         setAccounts(data || [])
-        const personal = (data || []).find(a => a.account_type === 'personal')
+        // Prefer the personal account if its token is still valid. If it's
+        // expired, fall back to any account with a valid token rather than
+        // silently picking an account that will fail to send — a personal
+        // account with a lapsed refresh needs reconnecting in Email Inbox,
+        // but that shouldn't block sending from a working cold account.
+        const now = new Date()
+        const hasValidToken = a => a.token_expiry && new Date(a.token_expiry) > now
+        const personal = (data || []).find(a => a.account_type === 'personal' && hasValidToken(a))
+        const anyValid = (data || []).find(hasValidToken)
         const preferred = preferPersonal ? personal : null
         if (preferred) setAccountId(preferred.id)
+        else if (anyValid) setAccountId(anyValid.id)
         else if (data?.length) setAccountId(data[0].id)
       })
 
@@ -166,14 +175,18 @@ export default function SendEmailModal({
   }
 
   async function logAndClose() {
-    await supabase.from('email_log').insert({
-      to_email: toAddr,
-      subject: cleanSubject(subjectVal),
-      body: bodyVal,
-      sent_by: profile?.id,
-      sent_at: new Date().toISOString(),
-      status: 'sent',
-    }).catch(() => {}) // never let logging failure block the UI
+    try {
+      await supabase.from('email_log').insert({
+        to_email: toAddr,
+        subject: cleanSubject(subjectVal),
+        body: bodyVal,
+        sent_by: profile?.id,
+        sent_at: new Date().toISOString(),
+        status: 'sent',
+      })
+    } catch (e) {
+      console.log('Email log insert failed (non-critical):', e)
+    }
     setSending(false)
     onSent?.()
     onClose?.()

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
-import EmailCompose from '../components/EmailCompose'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildInvoicePdf, buildQuotePdf } from '../lib/generatePdf'
 
@@ -1047,20 +1046,15 @@ export default function JobDetail() {
         </div>
       </div>
 
-      {showEmailCompose && job.clients && (
-        <EmailCompose
-          context={{
-            clientId: job.client_id,
-            jobId: job.id,
-            toEmail: job.clients.email,
-            toName: job.clients.company_name || job.clients.first_name,
-            name: job.clients.company_name || job.clients.first_name,
-            address: job.site_address,
-            services: (job.service_types || []).join(', '),
-            repName: profile?.full_name,
-            scheduledDate: job.scheduled_date,
-          }}
+      {showEmailCompose && (
+        <SendEmailModal
+          title="Send Email"
+          to={job.clients?.email || ''}
+          subject=""
+          body={`Dear ${job.clients?.company_name || job.clients?.first_name || 'Customer'},\n\n\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          variables={{}}
           onClose={() => setShowEmailCompose(false)}
+          onSent={() => { showToast('Email sent'); setShowEmailCompose(false) }}
         />
       )}
 
