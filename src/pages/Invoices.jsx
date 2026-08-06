@@ -161,7 +161,7 @@ function printInvoice(inv) {
 }
 
 export default function Invoices() {
-  const { profile, isAdmin } = useAuth()
+  const { profile } = useAuth()
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
@@ -172,6 +172,28 @@ export default function Invoices() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCompany, setFilterCompany] = useState('all')
   const [preview, setPreview]     = useState(null)
+  const [selectedInvoice, setSelectedInvoice] = useState(null)
+  const [showEditInvoice, setShowEditInvoice] = useState(false)
+  const [editForm, setEditForm]   = useState({})
+
+  function openEditInvoice(inv) {
+    setSelectedInvoice(inv)
+    setEditForm({
+      invoice_number: inv.invoice_number || '',
+      client_name: inv.client_name || '',
+      client_email: inv.client_email || '',
+      client_address: inv.client_address || '',
+      site_address: inv.site_address || '',
+      status: inv.status || 'draft',
+      subtotal: inv.subtotal || 0,
+      total: inv.total || 0,
+      balance_due: inv.balance_due || 0,
+      line_items: inv.line_items || [],
+      notes: inv.notes || '',
+      date: inv.date || '',
+    })
+    setShowEditInvoice(true)
+  }
 
   useEffect(() => { fetchInvoices() }, [])
 
@@ -305,6 +327,8 @@ export default function Invoices() {
                 const sc = STATUS_COLORS[inv.status] || { color: C.muted, bg: C.surface }
                 return (
                   <tr key={inv.id}
+                    onClick={() => openEditInvoice(inv)}
+                    style={{ cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = C.surface}
                     onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                     <td style={td}>
@@ -331,7 +355,7 @@ export default function Invoices() {
                         {fmt(inv.doc_type === 'invoice' ? inv.balance_due : inv.total)}
                       </span>
                     </td>
-                    <td style={td}>
+                    <td style={td} onClick={e => e.stopPropagation()}>
                       <select value={inv.status} onChange={e => updateStatus(inv.id, e.target.value)}
                         style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.color}44`, borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                         <option value="draft">Draft</option>
@@ -346,7 +370,7 @@ export default function Invoices() {
                       </div>
                       <div style={{ fontSize: 11, color: C.dim }}>{inv.created_by_name}</div>
                     </td>
-                    <td style={td}>
+                    <td style={td} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 5 }}>
                         <button onClick={() => setPreview(inv)}
                           style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
@@ -356,12 +380,10 @@ export default function Invoices() {
                           style={{ background: C.amberSoft, color: C.amber, border: `1px solid ${C.amber}44`, borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
                           🖨
                         </button>
-                        {isAdmin && (
-                          <button onClick={() => deleteInvoice(inv)}
-                            style={{ background: C.redSoft, color: C.red, border: `1px solid ${C.red}44`, borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
-                            ✕
-                          </button>
-                        )}
+                        <button onClick={() => deleteInvoice(inv)}
+                          style={{ background: C.redSoft, color: C.red, border: `1px solid ${C.red}44`, borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          ✕
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -464,6 +486,117 @@ export default function Invoices() {
                   </>
                 )
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditInvoice && selectedInvoice && (
+        <div style={{ position:'fixed', inset:0, background:'#00000066', display:'flex', alignItems:'center', justifyContent:'center', zIndex:300 }}
+          onClick={() => setShowEditInvoice(false)}>
+          <div style={{ background:'#fff', borderRadius:16, padding:32, width:600, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:20 }}>
+              <h3 style={{ fontSize:18, fontWeight:700, margin:0 }}>
+                Invoice {selectedInvoice.invoice_number}
+              </h3>
+              <button onClick={() => setShowEditInvoice(false)}
+                style={{ background:'none', border:'none', color:'#9CA3AF', cursor:'pointer', fontSize:20 }}>✕</button>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Invoice Number</label>
+                <input value={editForm.invoice_number} onChange={e => setEditForm(p=>({...p, invoice_number:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Client Name</label>
+                <input value={editForm.client_name} onChange={e => setEditForm(p=>({...p, client_name:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Client Email</label>
+                <input value={editForm.client_email} onChange={e => setEditForm(p=>({...p, client_email:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Site Address</label>
+                <input value={editForm.site_address} onChange={e => setEditForm(p=>({...p, site_address:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Status</label>
+                <select value={editForm.status} onChange={e => setEditForm(p=>({...p, status:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }}>
+                  <option value="draft">Draft</option>
+                  <option value="sent">Sent</option>
+                  <option value="paid">Paid</option>
+                  <option value="void">Void</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Total (GBP)</label>
+                <input type="number" step="0.01" value={editForm.total} onChange={e => setEditForm(p=>({...p, total:parseFloat(e.target.value)||0}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Balance Due (GBP)</label>
+                <input type="number" step="0.01" value={editForm.balance_due} onChange={e => setEditForm(p=>({...p, balance_due:parseFloat(e.target.value)||0}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Date</label>
+                <input type="date" value={editForm.date || ''} onChange={e => setEditForm(p=>({...p, date:e.target.value}))}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14 }} />
+              </div>
+              <div style={{ gridColumn:'span 2' }}>
+                <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Notes</label>
+                <textarea value={editForm.notes || ''} onChange={e => setEditForm(p=>({...p, notes:e.target.value}))} rows={3}
+                  style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:14, fontFamily:'inherit', resize:'vertical' }} />
+              </div>
+            </div>
+
+            <div style={{ display:'flex', gap:10, marginTop:20 }}>
+              <button onClick={async () => {
+                const { error } = await supabase.from('invoices').update({
+                  invoice_number: editForm.invoice_number,
+                  client_name: editForm.client_name,
+                  client_email: editForm.client_email,
+                  client_address: editForm.client_address,
+                  site_address: editForm.site_address,
+                  status: editForm.status,
+                  total: editForm.total,
+                  balance_due: editForm.balance_due,
+                  date: editForm.date || null,
+                  notes: editForm.notes,
+                }).eq('id', selectedInvoice.id)
+                if (error) { showToast(error.message, 'error'); return }
+                showToast('Invoice updated')
+                setShowEditInvoice(false)
+                fetchInvoices()
+              }}
+                style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'10px 24px', fontWeight:700, fontSize:14, cursor:'pointer', flex:1 }}>
+                Save Changes
+              </button>
+
+              <button onClick={async () => {
+                if (!window.confirm('Delete this invoice permanently?')) return
+                await supabase.from('invoices').delete().eq('id', selectedInvoice.id)
+                showToast('Invoice deleted')
+                setShowEditInvoice(false)
+                fetchInvoices()
+              }}
+                style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:8, padding:'10px 18px', fontWeight:700, fontSize:14, cursor:'pointer' }}>
+                Delete
+              </button>
+
+              <button onClick={() => setShowEditInvoice(false)}
+                style={{ background:'#fff', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:8, padding:'10px 18px', fontWeight:600, fontSize:14, cursor:'pointer' }}>
+                Cancel
+              </button>
             </div>
           </div>
         </div>
