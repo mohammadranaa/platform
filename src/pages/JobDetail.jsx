@@ -119,6 +119,7 @@ export default function JobDetail() {
   const [showSendQuote, setShowSendQuote] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState(null)
   const [invoices, setInvoices] = useState([])
+  const [jobActivity, setJobActivity] = useState([])
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -172,6 +173,11 @@ export default function JobDetail() {
       .eq('job_id', id)
       .order('created_at', { ascending: false })
     setInvoices(invoicesData || [])
+
+    const { data: acts } = await supabase.from('activity_log')
+      .select('*').eq('entity_type', 'job').eq('entity_id', id)
+      .order('created_at', { ascending: false }).limit(20)
+    setJobActivity(acts || [])
   }
 
   async function createQuote() {
@@ -1066,6 +1072,35 @@ export default function JobDetail() {
               ))}
             </div>
           </div>
+
+          {/* Activity Log */}
+          <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
+            <h3 style={{ fontSize:13, fontWeight:700, color:'#6B7280', textTransform:'uppercase', marginBottom:14 }}>Activity Log</h3>
+            {jobActivity.length === 0 ? (
+              <div style={{ color:'#9CA3AF', fontSize:13, textAlign:'center', padding:'16px 0' }}>No activity yet</div>
+            ) : jobActivity.map(a => (
+              <div key={a.id} style={{ padding:'8px 0', borderBottom:'1px solid #F5F7FA', fontSize:12 }}>
+                <div style={{ color:'#1F2937' }}>{a.description || a.action}</div>
+                <div style={{ color:'#9CA3AF', fontSize:11, marginTop:2 }}>
+                  {a.performed_by_name ? a.performed_by_name + ' · ' : ''}{new Date(a.created_at).toLocaleString('en-GB')}
+                </div>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <input placeholder="Add a note..." id="activityInput"
+                onKeyDown={async e => {
+                  if (e.key !== 'Enter' || !e.target.value.trim()) return
+                  await supabase.from('activity_log').insert({
+                    entity_type: 'job', entity_id: id,
+                    action: 'note', description: e.target.value.trim(),
+                    performed_by: profile?.id, performed_by_name: profile?.full_name,
+                  })
+                  e.target.value = ''
+                  fetchJob()
+                }}
+                style={{ flex:1, background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:12 }} />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1133,8 +1168,10 @@ export default function JobDetail() {
           title="Send Certificate"
           to={job.clients?.email || ''}
           subject={`Your Certificate -- ${(job.service_types || []).join(', ')} -- My Landlord Certificate`}
-          body={`Dear {{name}},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nIf you have any questions, please do not hesitate to contact us.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
-          variables={{ name: job.clients?.company_name || job.clients?.first_name || 'Customer' }}
+          body={`Dear {{name}},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nServices: ${(job.service_types || []).join(', ')}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          variables={{ name: job.clients?.company_name ||
+            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+            'Customer' }}
           buildAttachment={async () => {
             const certFile = files.find(f => f.file_type === 'certificate')
             if (!certFile) throw new Error('No certificate file found')

@@ -16,6 +16,7 @@ import EmailInbox from './pages/EmailInbox'
 import Templates from './pages/Templates'
 import Properties from './pages/Properties'
 import Invoices from './pages/Invoices'
+import InvoiceDetail from './pages/InvoiceDetail'
 import DocumentGenerator from './pages/DocumentGenerator'
 import LeadDetail from './pages/LeadDetail'
 import ColdInbox from './pages/ColdInbox'
@@ -59,6 +60,7 @@ function App() {
             <Route path="templates" element={<Templates />} />
             <Route path="invoices/new" element={<DocumentGenerator />} />
             <Route path="invoices" element={<Invoices />} />
+            <Route path="invoices/:id" element={<InvoiceDetail />} />
             <Route path="documents" element={<DocumentGenerator />} />
             <Route path="properties" element={<Properties />} />
             <Route path="cold-inbox" element={<ColdInbox />} />
