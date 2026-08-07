@@ -131,7 +131,7 @@ export default function JobDetail() {
   async function fetchJob() {
     const { data, error } = await supabase
       .from('jobs')
-      .select('*, clients(id, first_name, last_name, company_name, email, phone, street_address), profiles!jobs_assigned_to_fkey(id, full_name), job_line_items(*), job_diary(*), job_files(*)')
+      .select('*, clients(id, first_name, last_name, company_name, email, phone, street_address, city, postcode), profiles!jobs_assigned_to_fkey(id, full_name), job_line_items(*), job_diary(*), job_files(*)')
       .eq('id', id)
       .single()
     if (error) {
@@ -455,6 +455,29 @@ export default function JobDetail() {
                   </div>
                 )}
               </div>
+
+              {job.clients && (
+                <div style={{ gridColumn:'span 2', background:'#F5F7FA', borderRadius:10, padding:'12px 16px', display:'flex', gap:20, flexWrap:'wrap', alignItems:'center', marginBottom:4 }}>
+                  {job.clients.phone && (
+                    <a href={'tel:' + job.clients.phone} style={{ display:'flex', alignItems:'center', gap:6, color:'#0093DB', textDecoration:'none', fontSize:13 }}>
+                      <span style={{ fontSize:16 }}>📞</span>
+                      <span style={{ fontWeight:600 }}>{job.clients.phone}</span>
+                    </a>
+                  )}
+                  {job.clients.email && (
+                    <a href={'mailto:' + job.clients.email} style={{ display:'flex', alignItems:'center', gap:6, color:'#0093DB', textDecoration:'none', fontSize:13 }}>
+                      <span style={{ fontSize:16 }}>✉</span>
+                      <span>{job.clients.email}</span>
+                    </a>
+                  )}
+                  {(job.clients.street_address || job.clients.city || job.clients.postcode) && (
+                    <span style={{ display:'flex', alignItems:'center', gap:6, color:'#6B7280', fontSize:13 }}>
+                      <span style={{ fontSize:16 }}>📍</span>
+                      <span>{[job.clients.street_address, job.clients.city, job.clients.postcode].filter(Boolean).join(', ')}</span>
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Services */}
               <div style={{ gridColumn:'span 2' }}>

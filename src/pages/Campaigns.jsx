@@ -119,7 +119,7 @@ export default function Campaigns() {
   async function fetchAll() {
     setLoading(true)
     const [{ data: c }, { data: i }, { data: accounts }] = await Promise.all([
-      supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
+      supabase.from('campaigns').select('*, campaign_contacts(id, lead_id)').order('created_at', { ascending: false }),
       supabase.from('inboxes').select('id, label, email, is_active').eq('is_active', true),
       supabase.from('user_email_accounts').select('id, gmail_address, display_name').eq('account_type', 'cold').eq('is_active', true).order('gmail_address'),
     ])
@@ -180,11 +180,65 @@ export default function Campaigns() {
 
   async function deleteCampaign(id) {
     if (!window.confirm('Delete this campaign and all its data?')) return
+    await supabase.from('campaign_contacts').delete().eq('campaign_id', id)
     await supabase.from('campaigns').delete().eq('id', id)
     await fetchAll()
     setView('list')
     setSelected(null)
     showToast('Campaign deleted')
+  }
+
+  async function launchCampaign(campaign) {
+    if (!campaign.subject) { showToast('Add an email subject before launching', 'error'); return }
+    if (!campaign.body) { showToast('Write an email body before launching', 'error'); return }
+    if (!campaign.inbox_ids || campaign.inbox_ids.length === 0) { showToast('Select at least one sending inbox', 'error'); return }
+    const contactCount = campaign.campaign_contacts?.length || 0
+    if (contactCount === 0) { showToast('Add contacts to the campaign first', 'error'); return }
+    if (!window.confirm(`Launch "${campaign.name}"? This will start sending ${contactCount} emails.`)) return
+
+    await supabase.from('campaigns').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', campaign.id)
+    if (selected?.id === campaign.id) setSelected(p => ({ ...p, status: 'active' }))
+
+    try {
+      // supabase.functions.invoke (not a raw fetch) — the Supabase API
+      // gateway requires the apikey header to route to the function at
+      // all, even with --no-verify-jwt on the function itself. A bare
+      // fetch() without it surfaces as a generic "Failed to fetch".
+      const { data, error } = await supabase.functions.invoke('send-sequences', {
+        body: { campaign_id: campaign.id },
+      })
+      if (error) throw error
+      showToast('Campaign launched! Sent ' + (data?.total_sent || 0) + ' emails.')
+    } catch {
+      showToast('Campaign set to active. Emails will send when the engine runs.', 'info')
+    }
+    fetchAll()
+  }
+
+  async function addEligibleLeads(campaignId) {
+    const existing = new Set((campaigns.find(c => c.id === campaignId)?.campaign_contacts || []).map(cc => cc.lead_id))
+    const { data: eligible } = await supabase
+      .from('campaign_eligible_leads')
+      .select('id, contact_name, company, email')
+      .limit(500)
+    const newLeads = (eligible || []).filter(l => !existing.has(l.id))
+    if (newLeads.length === 0) { showToast('All eligible leads are already in this campaign'); return }
+    const count = window.prompt('How many leads to add? (' + newLeads.length + ' available)', String(Math.min(newLeads.length, 200)))
+    if (!count) return
+    const toAdd = newLeads.slice(0, parseInt(count) || 100)
+    const contacts = toAdd.map(l => ({
+      campaign_id: campaignId,
+      lead_id: l.id,
+      email: l.email,
+      first_name: (l.contact_name || '').split(' ')[0] || '',
+      last_name: (l.contact_name || '').split(' ').slice(1).join(' ') || '',
+      company: l.company || '',
+      status: 'active',
+    }))
+    const { error } = await supabase.from('campaign_contacts').insert(contacts)
+    if (error) { showToast(error.message, 'error'); return }
+    showToast(contacts.length + ' leads added to campaign')
+    fetchAll()
   }
 
   async function addStep() {
@@ -340,10 +394,80 @@ export default function Campaigns() {
             <Badge status={selected.status} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {selected.status === 'draft'   && <Btn small variant="success" onClick={() => updateStatus(selected.id, 'active')}>▶ Start</Btn>}
+            {selected.status === 'draft'   && <Btn small variant="success" onClick={() => launchCampaign(selected)}>🚀 Launch</Btn>}
             {selected.status === 'active'  && <Btn small variant="amber"   onClick={() => updateStatus(selected.id, 'paused')}>⏸ Pause</Btn>}
             {selected.status === 'paused'  && <Btn small variant="success" onClick={() => updateStatus(selected.id, 'active')}>▶ Resume</Btn>}
+            <Btn small variant="teal" onClick={() => addEligibleLeads(selected.id)}>+ Add Leads</Btn>
             <Btn small variant="danger" onClick={() => deleteCampaign(selected.id)}>Delete</Btn>
+          </div>
+        </div>
+
+        {/* Inline subject + body editor, and sending inbox selector */}
+        <div style={{ marginTop:12, marginBottom:20, padding:16, background:'#F5F7FA', borderRadius:10 }}>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Subject Line</label>
+            <input
+              value={selected.subject || ''}
+              onChange={e => {
+                const v = e.target.value
+                setSelected(p => ({ ...p, subject: v }))
+                setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, subject: v } : c))
+              }}
+              onBlur={e => supabase.from('campaigns').update({ subject: e.target.value }).eq('id', selected.id)}
+              placeholder="e.g. Partnership Opportunity -- My Landlord Certificate"
+              style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}
+            />
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>
+              Email Body
+              <span style={{ fontWeight:400, color:'#9CA3AF', marginLeft:8, textTransform:'none' }}>
+                Variables: {'{{first_name}}'} {'{{company}}'} {'{{sender_name}}'}
+              </span>
+            </label>
+            <textarea
+              value={selected.body || ''}
+              onChange={e => {
+                const v = e.target.value
+                setSelected(p => ({ ...p, body: v }))
+                setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, body: v } : c))
+              }}
+              onBlur={e => supabase.from('campaigns').update({ body: e.target.value }).eq('id', selected.id)}
+              rows={10}
+              placeholder={'Dear {{first_name}},\n\nI hope this email finds you well.\n\nMy name is {{sender_name}} from My Landlord Certificate. We provide EICR, Gas Safety Certificates, EPCs, Fire Risk Assessments and all property compliance certificates across London.\n\nWe work with many estate agents and would love to support your landlord clients with fast, reliable certificates.\n\nWould you be open to a quick call this week?\n\nKind regards,\n{{sender_name}}\nMy Landlord Certificate\n020 3996 1070'}
+              style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', lineHeight:1.6, resize:'vertical' }}
+            />
+          </div>
+
+          {/* Inbox selector */}
+          <div>
+            <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:6 }}>
+              Sending Inboxes ({(selected.inbox_ids || []).length} selected)
+            </label>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {coldAccounts.map(acc => {
+                const isSelected = (selected.inbox_ids || []).includes(acc.id)
+                return (
+                  <button key={acc.id} type="button"
+                    onClick={async () => {
+                      const newIds = isSelected
+                        ? (selected.inbox_ids || []).filter(id => id !== acc.id)
+                        : [...(selected.inbox_ids || []), acc.id]
+                      setSelected(p => ({ ...p, inbox_ids: newIds }))
+                      setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, inbox_ids: newIds } : c))
+                      await supabase.from('campaigns').update({ inbox_ids: newIds }).eq('id', selected.id)
+                    }}
+                    style={{
+                      padding:'6px 12px', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer',
+                      background: isSelected ? '#E6F4FC' : '#fff',
+                      color: isSelected ? '#0093DB' : '#6B7280',
+                      border: isSelected ? '2px solid #0093DB' : '1px solid #E5E7EB',
+                    }}>
+                    {acc.gmail_address.split('@')[0]}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
 
@@ -643,11 +767,19 @@ export default function Campaigns() {
                   <td style={td}><Badge status={c.status} /></td>
                   <td style={td}><span style={{ color: C.accent }}>{c.daily_limit}/day</span></td>
                   <td style={td} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {c.status === 'draft'  && <Btn small variant="success" onClick={() => updateStatus(c.id, 'active')}>▶ Start</Btn>}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {c.status === 'draft'  && <Btn small variant="success" onClick={() => launchCampaign(c)}>🚀 Launch</Btn>}
                       {c.status === 'active' && <Btn small variant="amber"   onClick={() => updateStatus(c.id, 'paused')}>⏸ Pause</Btn>}
                       {c.status === 'paused' && <Btn small variant="success" onClick={() => updateStatus(c.id, 'active')}>▶ Resume</Btn>}
                       <Btn small variant="ghost" onClick={() => openCampaign(c)}>View</Btn>
+                      <button onClick={() => addEligibleLeads(c.id)}
+                        style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                        + Add Leads
+                      </button>
+                      <button onClick={() => deleteCampaign(c.id)}
+                        style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:6, padding:'5px 12px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>
