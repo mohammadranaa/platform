@@ -433,6 +433,7 @@ export default function Invoices() {
                   const clientName = q.clients?.company_name || [q.clients?.first_name, q.clients?.last_name].filter(Boolean).join(' ') || '—'
                   return (
                     <tr key={q.id} style={{ cursor:'pointer' }}
+                      onClick={() => navigate('/quotes/' + q.id)}
                       onMouseEnter={e => e.currentTarget.style.background='#F5F7FA'}
                       onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                       <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontWeight:700, color:'#0093DB', fontSize:13 }}>{q.quote_number}</td>
