@@ -62,7 +62,27 @@
       "Bash(unzip -o -q ~/Downloads/stripe-webhook-deploy.zip -d stripe-zip)",
       "mcp__claude_ai_Supabase__list_tables",
       "Bash(python3 *)",
-      "Bash(awk -F= '{print length\\($2\\), substr\\($2,1,10\\)\"...\", substr\\($2,length\\($2\\)-15\\)}')"
+      "Bash(awk -F= '{print length\\($2\\), substr\\($2,1,10\\)\"...\", substr\\($2,length\\($2\\)-15\\)}')",
+      "Bash(rm -rf invoice-zip)",
+      "Bash(mkdir invoice-zip *)",
+      "Bash(unzip -o -q ~/Downloads/invoice-send-complete.zip -d invoice-zip)",
+      "Bash(rm -rf pdf-fix-zip)",
+      "Bash(mkdir pdf-fix-zip *)",
+      "Bash(unzip -o -q ~/Downloads/invoice-pdf-and-fetch-fix.zip -d pdf-fix-zip)",
+      "Bash(cp __TRACKED_VAR__/supabase/functions/gmail-reply/index.ts supabase/functions/gmail-reply/index.ts)",
+      "Bash(cp __TRACKED_VAR__/src/components/SendEmailModal.jsx src/components/SendEmailModal.jsx)",
+      "Bash(cp __TRACKED_VAR__/src/lib/generatePdf.js src/lib/generatePdf.js)",
+      "Bash(rm -rf invoice-complete-fix)",
+      "Bash(mkdir invoice-complete-fix *)",
+      "Bash(unzip -o -q ~/Downloads/invoice-complete-fix.zip -d invoice-complete-fix)",
+      "Bash(rm -rf all-fixes-final)",
+      "Bash(mkdir all-fixes-final *)",
+      "Bash(unzip -o -q ~/Downloads/all-fixes-final.zip -d all-fixes-final)",
+      "Bash(unzip -l ~/Downloads/catch-fix.zip)",
+      "Bash(unzip -l ~/Downloads/gmail-reply-token-fix.zip)",
+      "Bash(rm -rf catch-fix)",
+      "Bash(mkdir catch-fix *)",
+      "Bash(unzip -o -q ~/Downloads/catch-fix.zip -d catch-fix)"
     ]
   }
 }

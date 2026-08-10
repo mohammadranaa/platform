@@ -29,10 +29,14 @@ export default function Jobs() {
     return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
   })
   const [search, setSearch] = useState('')
+  const [filterPayment, setFilterPayment] = useState('All')
+  const [filterSource, setFilterSource] = useState('All')
+  const [filterService, setFilterService] = useState('All')
+  const [filterCertStatus, setFilterCertStatus] = useState('All')
   const [sortField, setSortField] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
   const [showNew, setShowNew] = useState(false)
-  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'' }
+  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
   const [form, setForm] = useState(blank)
   const sf = (k,v) => setForm(p=>({...p,[k]:v}))
   const tog = s => sf('service_types', form.service_types.includes(s) ? form.service_types.filter(x=>x!==s) : [...form.service_types,s])
@@ -108,6 +112,10 @@ export default function Jobs() {
     if(filterStatus!=='All') r=r.filter(j=>j.status===filterStatus)
     if(filterMonth!=='all') r=r.filter(j=>{const d=j.scheduled_date||j.created_at?.slice(0,10);return d&&d.startsWith(filterMonth)})
     if(search){const q=search.toLowerCase();r=r.filter(j=>(j.title||'').toLowerCase().includes(q)||(j.job_number||'').toLowerCase().includes(q)||cName(j.clients).toLowerCase().includes(q)||(j.site_address||'').toLowerCase().includes(q))}
+    if(filterPayment!=='All') r=r.filter(j=>(j.payment_status||'Unpaid')===filterPayment)
+    if(filterSource!=='All') r=r.filter(j=>(j.job_source_type||'inbound')===filterSource)
+    if(filterService!=='All') r=r.filter(j=>(j.service_types||[]).some(s=>s.toLowerCase().includes(filterService.toLowerCase())))
+    if(filterCertStatus!=='All') r=r.filter(j=>(j.certificate_status||'Not Issued')===filterCertStatus)
     r.sort((a,b)=>{
       let av,bv
       if(sortField==='client'){av=cName(a.clients);bv=cName(b.clients)}
@@ -117,7 +125,7 @@ export default function Jobs() {
       return sortDir==='asc'?av-bv:bv-av
     })
     return r
-  }, [jobs,filterStatus,filterMonth,search,sortField,sortDir])
+  }, [jobs,filterStatus,filterMonth,search,filterPayment,filterSource,filterService,filterCertStatus,sortField,sortDir])
 
   function Th({label,field}) {
     const on = sortField===field
@@ -150,6 +158,7 @@ export default function Jobs() {
     if(form.tenant_name) p.tenant_name=form.tenant_name
     if(form.tenant_phone) p.tenant_phone=form.tenant_phone
     if(form.job_source_type) p.job_source_type=form.job_source_type
+    if(form.engineer_name) p.engineer_name=form.engineer_name
     const {data:job,error}=await supabase.from('jobs').insert(p).select('id,job_number').single()
     if(error){setSaving(false);showToast(error.message,'error');return}
     setSaving(false);setShowNew(false);setForm(blank);await load()
@@ -224,7 +233,37 @@ export default function Jobs() {
               <option value="all">All Months</option>
               {monthly.map(m=><option key={m.key} value={m.key}>{m.label}</option>)}
             </select>
-            {(filterStatus!=='All'||filterMonth!=='all'||search)&&<button onClick={()=>{setFilterStatus('All');setFilterMonth('all');setSearch('')}} style={{background:C.redSoft,color:C.red,border:`1px solid ${C.red}44`,borderRadius:8,padding:'8px 12px',fontWeight:600,fontSize:12,cursor:'pointer'}}>✕ Clear</button>}
+            <select value={filterPayment} onChange={e=>setFilterPayment(e.target.value)} style={{...inp,width:'auto'}}>
+              <option value="All">All Payments</option>
+              <option value="Paid">Paid</option>
+              <option value="Unpaid">Unpaid</option>
+              <option value="Partial">Partial</option>
+            </select>
+            <select value={filterSource} onChange={e=>setFilterSource(e.target.value)} style={{...inp,width:'auto'}}>
+              <option value="All">All Sources</option>
+              <option value="inbound">Inbound</option>
+              <option value="outbound">Outbound</option>
+            </select>
+            <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inp,width:'auto'}}>
+              <option value="All">All Services</option>
+              <option value="EICR">EICR</option>
+              <option value="Gas Safety">Gas Safety (CP12)</option>
+              <option value="EPC">EPC</option>
+              <option value="FRA">Fire Risk Assessment</option>
+              <option value="FSC">Fire Safety Certificate</option>
+              <option value="PAT">PAT Testing</option>
+              <option value="Asbestos">Asbestos Survey</option>
+              <option value="Fuse Box">Fuse Box</option>
+              <option value="Remedial">Remedial Works</option>
+            </select>
+            <select value={filterCertStatus} onChange={e=>setFilterCertStatus(e.target.value)} style={{...inp,width:'auto'}}>
+              <option value="All">All Certificates</option>
+              <option value="Not Issued">Not Issued</option>
+              <option value="Issued">Issued</option>
+              <option value="Delivered">Delivered</option>
+            </select>
+            {(filterStatus!=='All'||filterMonth!=='all'||search||filterPayment!=='All'||filterSource!=='All'||filterService!=='All'||filterCertStatus!=='All')&&<button onClick={()=>{setFilterStatus('All');setFilterMonth('all');setSearch('');setFilterPayment('All');setFilterSource('All');setFilterService('All');setFilterCertStatus('All')}} style={{background:C.redSoft,color:C.red,border:`1px solid ${C.red}44`,borderRadius:8,padding:'8px 12px',fontWeight:600,fontSize:12,cursor:'pointer'}}>✕ Clear Filters</button>}
+            <span style={{fontSize:12,color:C.dim}}>Showing {rows.length} of {jobs.length} jobs</span>
           </div>
 
           {loading ? <div style={{padding:48,textAlign:'center',color:C.muted}}>Loading jobs…</div> :
@@ -384,8 +423,13 @@ export default function Jobs() {
                 <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
                   {SVCS.map(s=><button key={s} type="button" onClick={()=>tog(s)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${form.service_types.includes(s)?C.accent:C.border}`,background:form.service_types.includes(s)?C.accentSoft:'#fff',color:form.service_types.includes(s)?C.accent:C.muted,cursor:'pointer',fontSize:12,fontWeight:form.service_types.includes(s)?700:400}}>{s}</button>)}
                 </div></div>
-              <div><label style={lbl}>Assign BDL</label><select value={form.assigned_to} onChange={e=>sf('assigned_to',e.target.value)} style={inp}><option value="">— Select —</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></div>
+              <div><label style={lbl}>Assigned BDL</label><select value={form.assigned_to} onChange={e=>sf('assigned_to',e.target.value)} style={inp}><option value="">— Select —</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></div>
               <div><label style={lbl}>Type</label><select value={form.job_source_type} onChange={e=>sf('job_source_type',e.target.value)} style={inp}><option value="inbound">Inbound</option><option value="outbound">Outbound</option></select></div>
+              <div style={{gridColumn:'span 2'}}>
+                <label style={lbl}>Engineer Name</label>
+                <input value={form.engineer_name} onChange={e=>sf('engineer_name',e.target.value)} placeholder="Enter engineer name (not the BDL)…" style={inp}/>
+                <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>The person who physically does the inspection (not the assigned BDL) — leave blank until known</div>
+              </div>
               <div><label style={lbl}>Scheduled Date</label><input type="date" value={form.scheduled_date} onChange={e=>sf('scheduled_date',e.target.value)} style={inp}/></div>
               <div><label style={lbl}>Time Slot</label><select value={form.scheduled_slot} onChange={e=>sf('scheduled_slot',e.target.value)} style={inp}><option value="">—</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–6pm)</option></select></div>
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Site Address</label><input value={form.site_address} onChange={e=>sf('site_address',e.target.value)} style={inp}/></div>
