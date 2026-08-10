@@ -17,6 +17,14 @@ export default function InvoiceDetail() {
   const [saving, setSaving] = useState(false)
   const [activity, setActivity] = useState([])
   const [showSend, setShowSend] = useState(false)
+  const [sendSubject, setSendSubject] = useState('')
+  const [sendBody, setSendBody] = useState('')
+
+  async function getTemplate(name) {
+    const { data } = await supabase.from('email_templates')
+      .select('subject, body').eq('name', name).single()
+    return data
+  }
 
   useEffect(() => { fetchInvoice() }, [id])
 
@@ -85,7 +93,27 @@ export default function InvoiceDetail() {
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontWeight:700, fontSize:14, cursor:'pointer' }}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
-          <button onClick={() => setShowSend(true)}
+          <button onClick={async () => {
+            const tpl = await getTemplate('Invoice Email')
+            const greeting = new Date().getHours() < 12 ? 'Good Morning' : 'Good Afternoon'
+            const vars = {
+              name: inv.client_name || 'Customer',
+              inspection_name: inv.work_completed || '',
+              property_address: inv.site_address || '',
+              rep_name: profile?.full_name || 'My Landlord Certificate',
+            }
+            let subject = tpl?.subject || 'Your Invoice'
+            let body = tpl?.body || ''
+            for (const [k,v] of Object.entries(vars)) {
+              subject = subject.replace(new RegExp('{{'+k+'}}','gi'), v)
+              body = body.replace(new RegExp('{{'+k+'}}','gi'), v)
+            }
+            body = body.replace(/Good Morning\/Afternoon/g, greeting)
+            subject = subject.replace(/Good Morning\/Afternoon/g, greeting)
+            setSendSubject(subject)
+            setSendBody(body)
+            setShowSend(true)
+          }}
             style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'9px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             Send Invoice
           </button>
@@ -215,8 +243,8 @@ export default function InvoiceDetail() {
       {/* Send modal */}
       {showSend && (
         <SendEmailModal title="Send Invoice" to={inv.client_email||''}
-          subject={'Invoice ' + (inv.invoice_number||'') + ' -- My Landlord Certificate'}
-          body={'Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'}
+          subject={sendSubject || ('Invoice ' + (inv.invoice_number||'') + ' -- My Landlord Certificate')}
+          body={sendBody || ('Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk')}
           variables={{ name: inv.client_name || 'Customer' }}
           buildAttachment={() => {
             const { base64, filename } = buildInvoicePdf({

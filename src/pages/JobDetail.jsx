@@ -120,8 +120,47 @@ export default function JobDetail() {
   const [selectedQuote, setSelectedQuote] = useState(null)
   const [invoices, setInvoices] = useState([])
   const [jobActivity, setJobActivity] = useState([])
+  const [invoiceSubject, setInvoiceSubject] = useState('')
+  const [invoiceBody, setInvoiceBody] = useState('')
+  const [certSubject, setCertSubject] = useState('')
+  const [certBody, setCertBody] = useState('')
 
   useEffect(() => { if (id) fetchAll() }, [id])
+
+  async function getTemplate(name) {
+    const { data } = await supabase.from('email_templates')
+      .select('subject, body').eq('name', name).single()
+    return data
+  }
+
+  function getGreeting() {
+    const h = new Date().getHours()
+    return h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening'
+  }
+
+  function fillJobVars(text) {
+    const clientName = job.clients?.company_name ||
+      [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') || 'Customer'
+    const vars = {
+      'name': clientName,
+      'first_name': job.clients?.first_name || clientName,
+      'inspection_name': (job.service_types || []).join(', ') || 'Property Inspection',
+      'property_address': job.site_address || '',
+      'date': job.scheduled_date ? new Date(job.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : 'TBC',
+      'time_slot': job.scheduled_slot || 'TBC',
+      'time_window': job.scheduled_slot || 'TBC',
+      'certificate_holder': clientName,
+      'rep_name': profile?.full_name || 'My Landlord Certificate',
+      'renewal_date': '',
+      'Good Morning/Afternoon': getGreeting(),
+    }
+    let result = text || ''
+    for (const [key, val] of Object.entries(vars)) {
+      result = result.replace(new RegExp('\\{\\{\\s*' + key + '\\s*\\}\\}', 'gi'), val)
+    }
+    result = result.replace(/Good Morning\/Afternoon/g, getGreeting())
+    return result
+  }
 
   async function fetchAll() {
     setLoading(true)
@@ -384,22 +423,32 @@ export default function JobDetail() {
             style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             🧾 Generate Invoice
           </button>
-          <button onClick={() => {
+          <button onClick={async () => {
             if (invoices.length === 0) {
               showToast('No invoice found for this job. Create one first using + New Invoice.', 'error')
               return
+            }
+            const tpl = await getTemplate('Invoice Email')
+            if (tpl) {
+              setInvoiceSubject(fillJobVars(tpl.subject))
+              setInvoiceBody(fillJobVars(tpl.body))
             }
             setShowSendInvoice(true)
           }}
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📧 Send Invoice
           </button>
-          <button onClick={() => {
+          <button onClick={async () => {
             const hasCert = files.some(f => f.file_type === 'certificate')
             const hasLink = job.certificate_file_url
             if (!hasCert && !hasLink) {
               showToast('No certificate attached to this job. Upload one in the Certificates tab first.', 'error')
               return
+            }
+            const tpl = await getTemplate('Certificate Delivery')
+            if (tpl) {
+              setCertSubject(fillJobVars(tpl.subject))
+              setCertBody(fillJobVars(tpl.body))
             }
             setShowSendCert(true)
           }}
@@ -1018,7 +1067,14 @@ export default function JobDetail() {
                       <span style={{ background:sc+'22', color:sc, borderRadius:5, padding:'2px 8px', fontSize:11, fontWeight:600 }}>
                         {inv.status}
                       </span>
-                      <button onClick={() => setShowSendInvoice(true)}
+                      <button onClick={async () => {
+                        const tpl = await getTemplate('Invoice Email')
+                        if (tpl) {
+                          setInvoiceSubject(fillJobVars(tpl.subject))
+                          setInvoiceBody(fillJobVars(tpl.body))
+                        }
+                        setShowSendInvoice(true)
+                      }}
                         style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:6, padding:'5px 12px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
                         Send
                       </button>
@@ -1120,8 +1176,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Invoice"
           to={job.clients?.email || ''}
-          subject={`Invoice ${invoices[0].invoice_number} -- My Landlord Certificate`}
-          body={`Dear {{name}},\n\nPlease find attached your invoice ${invoices[0].invoice_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoices[0].invoice_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          subject={invoiceSubject || `Invoice ${invoices[0].invoice_number} -- My Landlord Certificate`}
+          body={invoiceBody || `Dear {{name}},\n\nPlease find attached your invoice ${invoices[0].invoice_number} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoices[0].invoice_number}\nDate: ${new Date().toLocaleDateString('en-GB')}\nServices: ${(job.service_types || []).join(', ')}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nPayment can be made by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding this invoice, please do not hesitate to get in touch.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
@@ -1167,8 +1223,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Certificate"
           to={job.clients?.email || ''}
-          subject={`Your Certificate -- ${(job.service_types || []).join(', ')} -- My Landlord Certificate`}
-          body={`Dear {{name}},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nServices: ${(job.service_types || []).join(', ')}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
+          subject={certSubject || `Your Certificate -- ${(job.service_types || []).join(', ')} -- My Landlord Certificate`}
+          body={certBody || `Dear {{name}},\n\nPlease find attached your certificate for the services completed at ${job.site_address || 'your property'}.\n\nServices: ${(job.service_types || []).join(', ')}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}

@@ -9,12 +9,18 @@ const C = { accent: '#0093DB', text: '#1F2937', muted: '#6B7280', border: '#E5E7
 
 // Fill {{variable}} placeholders with real values. Any placeholder left
 // with no matching variable is removed (not left as literal {{x}}).
+// Also swaps the literal "Good Morning/Afternoon" text for a real
+// time-of-day greeting, since templates use that as a placeholder too.
 function fillTemplate(text, vars) {
   if (!text) return text
-  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => {
+  let result = text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => {
     const v = vars[key]
     return (v === undefined || v === null || v === '') ? '' : String(v)
   })
+  const h = new Date().getHours()
+  const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening'
+  result = result.replace(/Good Morning\/Afternoon/g, greeting)
+  return result
 }
 
 function cleanSubject(s) {
