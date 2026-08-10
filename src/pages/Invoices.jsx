@@ -167,7 +167,9 @@ export default function Invoices() {
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
+  const [activeTab, setActiveTab] = useState('invoices')
   const [invoices, setInvoices]   = useState([])
+  const [quotes, setQuotes]       = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [filterType, setFilterType]     = useState('all')
@@ -175,7 +177,7 @@ export default function Invoices() {
   const [filterCompany, setFilterCompany] = useState('all')
   const [preview, setPreview]     = useState(null)
 
-  useEffect(() => { fetchInvoices() }, [])
+  useEffect(() => { fetchInvoices(); fetchQuotes() }, [])
 
   async function fetchInvoices() {
     setLoading(true)
@@ -185,6 +187,14 @@ export default function Invoices() {
       .order('created_at', { ascending: false })
     setInvoices(data || [])
     setLoading(false)
+  }
+
+  async function fetchQuotes() {
+    const { data } = await supabase
+      .from('quotes')
+      .select('*, quote_line_items(*), jobs(job_number, site_address), clients(first_name, last_name, company_name)')
+      .order('created_at', { ascending: false })
+    setQuotes(data || [])
   }
 
   async function updateStatus(id, status) {
@@ -243,6 +253,26 @@ export default function Invoices() {
         </div>
       </div>
 
+      {/* Tab switcher */}
+      <div style={{ display:'flex', gap:4, background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:8, padding:4, marginBottom:20 }}>
+        {[
+          { key:'invoices', label:'Invoices', count: invoices.length },
+          { key:'quotes', label:'Quotes', count: quotes.length },
+        ].map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            style={{ padding:'8px 20px', borderRadius:6, border:'none', cursor:'pointer', fontSize:13,
+              fontWeight: activeTab === t.key ? 700 : 400,
+              background: activeTab === t.key ? '#fff' : 'transparent',
+              color: activeTab === t.key ? '#0093DB' : '#6B7280',
+              boxShadow: activeTab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            }}>
+            {t.label} <span style={{ marginLeft:6, background: activeTab===t.key ? '#E6F4FC' : '#F5F7FA', borderRadius:10, padding:'1px 8px', fontSize:11 }}>{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'invoices' && (
+      <>
       {/* Stats */}
       <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
@@ -377,6 +407,81 @@ export default function Invoices() {
           </table>
         )}
       </div>
+      </>
+      )}
+
+      {activeTab === 'quotes' && (
+        <div>
+          {quotes.length === 0 ? (
+            <div style={{ color:'#9CA3AF', fontSize:14, textAlign:'center', padding:'40px 0' }}>
+              No quotes yet. Create one from a Job page.
+            </div>
+          ) : (
+            <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse' }}>
+              <thead>
+                <tr style={{ background:'#F5F7FA' }}>
+                  {['Quote #','Client','Job','Site Address','Items','Total','Status','Date','Actions'].map(h => (
+                    <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, textTransform:'uppercase', color:'#6B7280', borderBottom:'1px solid #E5E7EB' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {quotes.map(q => {
+                  const statusColors = { Draft:'#6B7280', Sent:'#0093DB', Accepted:'#3d7a00', Declined:'#DC2626', Expired:'#D97706' }
+                  const sc = statusColors[q.status] || '#6B7280'
+                  const clientName = q.clients?.company_name || [q.clients?.first_name, q.clients?.last_name].filter(Boolean).join(' ') || '—'
+                  return (
+                    <tr key={q.id} style={{ cursor:'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background='#F5F7FA'}
+                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontWeight:700, color:'#0093DB', fontSize:13 }}>{q.quote_number}</td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12 }}>{clientName}</td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12 }}>
+                        {q.jobs ? <a href={'/jobs/'+q.job_id} style={{ color:'#0093DB', textDecoration:'none' }}>{q.jobs.job_number}</a> : '—'}
+                      </td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12, color:'#6B7280' }}>{q.site_address || '—'}</td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:12 }}>{q.quote_line_items?.length || 0}</td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:13, fontWeight:700 }}>£{Number(q.total||0).toFixed(2)}</td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB' }}>
+                        <select value={q.status} onClick={e => e.stopPropagation()}
+                          onChange={async e => {
+                            await supabase.from('quotes').update({ status: e.target.value }).eq('id', q.id)
+                            setQuotes(p => p.map(x => x.id === q.id ? {...x, status: e.target.value} : x))
+                          }}
+                          style={{ background:sc+'15', color:sc, border:'1px solid '+sc+'44', borderRadius:5, padding:'3px 8px', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                          {['Draft','Sent','Accepted','Declined','Expired'].map(s => <option key={s}>{s}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB', fontSize:11, color:'#9CA3AF' }}>
+                        {q.created_at ? new Date(q.created_at).toLocaleDateString('en-GB') : '—'}
+                      </td>
+                      <td style={{ padding:'10px 12px', borderBottom:'1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display:'flex', gap:6 }}>
+                          <button onClick={() => {
+                            if (q.job_id) navigate('/jobs/' + q.job_id)
+                          }} style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:5, padding:'3px 10px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
+                            View Job
+                          </button>
+                          <button onClick={async () => {
+                            if (!window.confirm('Delete quote ' + q.quote_number + '?')) return
+                            await supabase.from('quote_line_items').delete().eq('quote_id', q.id)
+                            await supabase.from('quotes').delete().eq('id', q.id)
+                            setQuotes(p => p.filter(x => x.id !== q.id))
+                          }} style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:5, padding:'3px 8px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
+                            ✕
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Preview Modal */}
       {preview && (
