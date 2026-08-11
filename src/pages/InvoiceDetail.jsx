@@ -93,6 +93,42 @@ export default function InvoiceDetail() {
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontWeight:700, fontSize:14, cursor:'pointer' }}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
+          <button onClick={() => {
+            const { doc } = buildInvoicePdf({
+              invoiceNumber: inv.invoice_number,
+              date: inv.date || inv.created_at,
+              clientName: inv.client_name,
+              clientAddress: inv.client_address,
+              clientEmail: inv.client_email,
+              siteAddress: inv.site_address,
+              services: inv.work_completed,
+              lineItems: inv.line_items || [],
+              total: inv.total,
+              paid: inv.amount_paid || 0,
+            })
+            window.open(doc.output('bloburl'), '_blank')
+          }}
+            style={{ background:'#F5F7FA', color:'#1F2937', border:'1px solid #E5E7EB', borderRadius:8, padding:'9px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+            👁 View PDF
+          </button>
+          <button onClick={() => {
+            const { doc, filename } = buildInvoicePdf({
+              invoiceNumber: inv.invoice_number,
+              date: inv.date || inv.created_at,
+              clientName: inv.client_name,
+              clientAddress: inv.client_address,
+              clientEmail: inv.client_email,
+              siteAddress: inv.site_address,
+              services: inv.work_completed,
+              lineItems: inv.line_items || [],
+              total: inv.total,
+              paid: inv.amount_paid || 0,
+            })
+            doc.save(filename)
+          }}
+            style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:8, padding:'9px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+            ⬇ Download PDF
+          </button>
           <button onClick={async () => {
             const tpl = await getTemplate('Invoice Email')
             const greeting = new Date().getHours() < 12 ? 'Good Morning' : 'Good Afternoon'

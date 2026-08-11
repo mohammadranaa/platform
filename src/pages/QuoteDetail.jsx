@@ -125,6 +125,46 @@ export default function QuoteDetail() {
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontWeight:700, fontSize:14, cursor:'pointer', opacity: saving ? 0.7 : 1 }}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
+          <button onClick={() => {
+            const { doc } = buildQuotePdf({
+              quoteNumber: quote.quote_number,
+              date: quote.created_at,
+              validUntil: quote.valid_until,
+              clientName: quote.clients?.company_name ||
+                [quote.clients?.first_name, quote.clients?.last_name].filter(Boolean).join(' ') || 'Customer',
+              clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
+              clientEmail: quote.clients?.email || '',
+              siteAddress: quote.site_address || '',
+              lineItems: lineItems,
+              total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
+              notes: quote.notes,
+            })
+            // Open PDF in new tab
+            const pdfUrl = doc.output('bloburl')
+            window.open(pdfUrl, '_blank')
+          }}
+            style={{ background:'#F5F7FA', color:'#1F2937', border:'1px solid #E5E7EB', borderRadius:8, padding:'9px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+            👁 View PDF
+          </button>
+          <button onClick={() => {
+            const { doc, filename } = buildQuotePdf({
+              quoteNumber: quote.quote_number,
+              date: quote.created_at,
+              validUntil: quote.valid_until,
+              clientName: quote.clients?.company_name ||
+                [quote.clients?.first_name, quote.clients?.last_name].filter(Boolean).join(' ') || 'Customer',
+              clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
+              clientEmail: quote.clients?.email || '',
+              siteAddress: quote.site_address || '',
+              lineItems: lineItems,
+              total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
+              notes: quote.notes,
+            })
+            doc.save(filename)
+          }}
+            style={{ background:'#E6F4FC', color:'#0093DB', border:'1px solid #0093DB44', borderRadius:8, padding:'9px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+            ⬇ Download PDF
+          </button>
           <button onClick={() => setShowSend(true)}
             style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'9px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             Send Quote
