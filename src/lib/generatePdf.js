@@ -1,16 +1,5 @@
 import jsPDF from 'jspdf'
-
-// ── Company constants — matches the real invoice template exactly ──
-const CO = {
-  name: 'My Landlord Certificate LTD',
-  address: '134 Merton High Street, London, SW19 1BA',
-  phone: '+44 020 3996 1070',
-  email: 'info@mylandlordcertificate.co.uk',
-  regNumber: '17265132',
-  bankAccountName: 'My Landlord Certificate LTD',
-  sortCode: '60-83-71',
-  accountNumber: '83356126',
-}
+import { getCompany } from './companies'
 
 const BLUE = [0, 123, 199]
 const DARK = [26, 32, 44]
@@ -78,22 +67,22 @@ function drawLogo(doc, x, y, size) {
   doc.circle(x + size * 0.78, y + size * 0.28, size * 0.14, 'F')
 }
 
-function drawCompanyHeader(doc, docTitle, docNumber, dateStr, extraLines = []) {
+function drawCompanyHeader(doc, co, docTitle, docNumber, dateStr, extraLines = []) {
   drawLogo(doc, 14, 12, 14)
 
   doc.setTextColor(...BLUE)
   doc.setFontSize(12.5)
   doc.setFont(undefined, 'bold')
-  doc.text(CO.name, 31, 17)
+  doc.text(co.name, 31, 17)
 
   doc.setTextColor(...GREY)
   doc.setFontSize(8.5)
   doc.setFont(undefined, 'normal')
-  doc.text(CO.address, 31, 22)
-  doc.text(CO.phone, 31, 26.5)
-  doc.text(CO.email, 31, 31)
+  doc.text(co.address, 31, 22)
+  doc.text(co.phone, 31, 26.5)
+  doc.text(co.email, 31, 31)
   doc.setFontSize(7.5)
-  doc.text(`Co. Reg: ${CO.regNumber}`, 31, 35)
+  doc.text(`Co. Reg: ${co.regNumber}`, 31, 35)
 
   doc.setTextColor(...DARK)
   doc.setFontSize(20)
@@ -253,7 +242,7 @@ function drawSummaryBox(doc, startY, { subtotal, discount = 0, total, paid = 0 }
   return y + 12
 }
 
-function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
+function drawInvoiceFooter(doc, startY, co, { invoiceNumber, total, dueDateStr }) {
   doc.setDrawColor(220, 220, 220)
   doc.line(14, startY, 196, startY)
   let y = startY + 8
@@ -272,9 +261,9 @@ function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
   doc.text('Bank Details', 14, y)
   y += 5
   doc.setFont(undefined, 'normal')
-  doc.text(`Account Name: ${CO.bankAccountName}`, 14, y); y += 4.5
-  doc.text(`Sort Code: ${CO.sortCode}`, 14, y); y += 4.5
-  doc.text(`Account Number: ${CO.accountNumber}`, 14, y); y += 5.5
+  doc.text(`Account Name: ${co.bankAccountName}`, 14, y); y += 4.5
+  doc.text(`Sort Code: ${co.sortCode}`, 14, y); y += 4.5
+  doc.text(`Account Number: ${co.accountNumber}`, 14, y); y += 5.5
   doc.setTextColor(...RED)
   doc.setFont(undefined, 'bold')
   doc.setFontSize(8)
@@ -295,14 +284,14 @@ function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
   return Math.max(y, ry) + 10
 }
 
-function drawBottomStrip(doc, y) {
+function drawBottomStrip(doc, co, y) {
   doc.setDrawColor(230, 230, 230)
   doc.line(14, y, 196, y)
   doc.setFontSize(7)
   doc.setTextColor(...GREY)
   doc.setFont(undefined, 'normal')
   doc.text(
-    `Company Registration Number ${CO.regNumber} · Registered Office: ${CO.name}, ${CO.address}, United Kingdom`,
+    `Company Registration Number ${co.regNumber} · Registered Office: ${co.name}, ${co.address}, United Kingdom`,
     105, y + 6, { align: 'center' }
   )
 }
@@ -313,12 +302,17 @@ export function buildInvoicePdf({
   clientName, clientAddress, clientEmail,
   siteAddress, services,
   lineItems, total, discount = 0, paid = 0, vatRate = 0,
+  // Pass either company: 'standard' | 'remedials', or a full override object
+  // with the same shape as an entry in COMPANIES (name/address/phone/email/
+  // regNumber/bankAccountName/sortCode/accountNumber). Defaults to Standard.
+  company = 'standard',
 }) {
+  const co = typeof company === 'string' ? getCompany(company) : { ...getCompany('standard'), ...company }
   const doc = new jsPDF()
   const issueDate = parseFlexibleDate(date)
   const dueDate = addDays(issueDate, dueDays)
 
-  let y = drawCompanyHeader(doc, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
+  let y = drawCompanyHeader(doc, co, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
     { label: 'Date: ', value: formatLongDate(issueDate) },
     { label: 'Due: ', value: formatLongDate(dueDate), color: RED },
   ])
@@ -329,8 +323,8 @@ export function buildInvoicePdf({
   const computedTotal = total != null ? Number(total) : subtotal
 
   y = drawSummaryBox(doc, afterTable + 4, { subtotal, discount, total: computedTotal, paid })
-  y = drawInvoiceFooter(doc, y, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
-  drawBottomStrip(doc, Math.min(y, 275))
+  y = drawInvoiceFooter(doc, y, co, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
+  drawBottomStrip(doc, co, Math.min(y, 275))
 
   return { doc, base64: docToBase64(doc), filename: `Invoice_${invoiceNumber || 'INV'}.pdf` }
 }
@@ -341,11 +335,13 @@ export function buildQuotePdf({
   clientName, clientAddress, clientEmail,
   siteAddress, services,
   lineItems, total, notes,
+  company = 'standard',
 }) {
+  const co = typeof company === 'string' ? getCompany(company) : { ...getCompany('standard'), ...company }
   const doc = new jsPDF()
   const issueDate = parseFlexibleDate(date)
 
-  let y = drawCompanyHeader(doc, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
+  let y = drawCompanyHeader(doc, co, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
     { label: 'Date: ', value: formatLongDate(issueDate) },
     { label: 'Valid Until: ', value: validUntil ? formatLongDate(validUntil) : 'N/A' },
   ])
@@ -360,10 +356,35 @@ export function buildQuotePdf({
   doc.setDrawColor(220, 220, 220)
   doc.line(14, y, 196, y)
   y += 8
+
+  // How to Pay / bank details -- matches the reference quote template
+  doc.setFontSize(9)
+  doc.setFont(undefined, 'bold')
+  doc.setTextColor(...BLUE)
+  doc.text('How to Pay', 14, y)
+  y += 5.5
+  doc.setFont(undefined, 'normal')
+  doc.setTextColor(...DARK)
+  doc.setFontSize(8.5)
+  doc.text('We accept payment by: Bank Transfer or Pay Online', 14, y)
+  y += 6
+  doc.setFont(undefined, 'bold')
+  doc.text('Bank Details', 14, y)
+  y += 5
+  doc.setFont(undefined, 'normal')
+  doc.text(`Account Name: ${co.bankAccountName}`, 14, y); y += 4.5
+  doc.text(`Sort Code: ${co.sortCode}`, 14, y); y += 4.5
+  doc.text(`Account Number: ${co.accountNumber}`, 14, y); y += 5.5
+  doc.setTextColor(...RED)
+  doc.setFont(undefined, 'bold')
+  doc.setFontSize(8)
+  doc.text('Note: Please Put Invoice Number As Reference', 14, y)
+  y += 8
+
   doc.setFontSize(9)
   doc.setTextColor(...DARK)
   doc.setFont(undefined, 'normal')
-  doc.text('To accept this quote, please reply to this email or call us on ' + CO.phone + '.', 14, y)
+  doc.text('To accept this quote, please reply to this email or call us on ' + co.phone + '.', 14, y)
   y += 6
   if (notes) {
     doc.setFont(undefined, 'italic')
@@ -373,7 +394,7 @@ export function buildQuotePdf({
     y += 10
   }
 
-  drawBottomStrip(doc, Math.min(y + 6, 275))
+  drawBottomStrip(doc, co, Math.min(y + 6, 275))
 
   return { doc, base64: docToBase64(doc), filename: `Quote_${quoteNumber || 'QT'}.pdf` }
 }

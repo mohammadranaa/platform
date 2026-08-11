@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildQuotePdf } from '../lib/generatePdf'
+import { getCompany } from '../lib/companies'
 
 export default function QuoteDetail() {
   const { id } = useParams()
@@ -51,6 +52,7 @@ export default function QuoteDetail() {
       site_address: quote.site_address,
       notes: quote.notes,
       subtotal,
+      company: quote.company || 'standard',
     }).eq('id', id)
 
     if (error) { setSaving(false); showToast(error.message, 'error'); return }
@@ -118,6 +120,15 @@ export default function QuoteDetail() {
           <div style={{ marginTop:4, display:'flex', alignItems:'center', gap:10 }}>
             <span style={{ background:sc+'18', color:sc, borderRadius:6, padding:'3px 10px', fontSize:12, fontWeight:700 }}>{quote.status}</span>
             <span style={{ fontSize:12, color:'#9CA3AF' }}>Valid until: {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB') : 'Not set'}</span>
+            {[['standard','🏠 Standard'], ['remedials','🔨 Remedials']].map(([key, label]) => (
+              <button key={key} onClick={() => setQuote(p => ({ ...p, company: key }))}
+                style={{ padding:'3px 10px', borderRadius:6, border: (quote.company||'standard') === key ? '2px solid #0093DB' : '1px solid #E5E7EB',
+                  background: (quote.company||'standard') === key ? '#E6F4FC' : '#fff',
+                  color: (quote.company||'standard') === key ? '#0093DB' : '#6B7280',
+                  fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
@@ -135,9 +146,11 @@ export default function QuoteDetail() {
               clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
               clientEmail: quote.clients?.email || '',
               siteAddress: quote.site_address || '',
+              services: quote.jobs?.service_types || '',
               lineItems: lineItems,
               total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
               notes: quote.notes,
+              company: quote.company || 'standard',
             })
             // Open PDF in new tab
             const pdfUrl = doc.output('bloburl')
@@ -156,9 +169,11 @@ export default function QuoteDetail() {
               clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
               clientEmail: quote.clients?.email || '',
               siteAddress: quote.site_address || '',
+              services: quote.jobs?.service_types || '',
               lineItems: lineItems,
               total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
               notes: quote.notes,
+              company: quote.company || 'standard',
             })
             doc.save(filename)
           }}
@@ -350,9 +365,11 @@ export default function QuoteDetail() {
               clientName, clientAddress: clientAddr,
               clientEmail: quote.clients?.email || '',
               siteAddress: quote.site_address,
+              services: quote.jobs?.service_types || '',
               lineItems,
               total: subtotal,
               notes: quote.notes,
+              company: quote.company || 'standard',
             })
             return { base64, filename, mime: 'application/pdf' }
           }}

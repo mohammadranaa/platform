@@ -77,6 +77,36 @@ function personalise(text: string, vars: Record<string, string>): string {
     .replace(/\{\{sender_name\}\}/gi, vars.sender_name || '')
 }
 
+// Checks whether "now" falls inside the campaign's allowed sending window
+// (day-of-week + local time-of-day, in the campaign's own timezone).
+function isWithinSendWindow(campaign: any, now: Date): boolean {
+  const tz = campaign.timezone || 'Europe/London'
+  const days: number[] = campaign.send_days?.length ? campaign.send_days : [1, 2, 3, 4, 5]
+  const startStr: string = (campaign.send_time_start || '09:00').slice(0, 5)
+  const endStr: string = (campaign.send_time_end || '17:30').slice(0, 5)
+
+  // Get the campaign-local weekday and time via Intl, so this is correct
+  // regardless of what timezone the server itself runs in.
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now)
+  const weekdayShort = parts.find(p => p.type === 'weekday')?.value || 'Mon'
+  const hour = parts.find(p => p.type === 'hour')?.value || '00'
+  const minute = parts.find(p => p.type === 'minute')?.value || '00'
+
+  const WEEKDAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const todayIdx = WEEKDAY_MAP[weekdayShort] ?? 1
+  if (!days.includes(todayIdx)) return false
+
+  const nowMinutes = Number(hour) * 60 + Number(minute)
+  const [startH, startM] = startStr.split(':').map(Number)
+  const [endH, endM] = endStr.split(':').map(Number)
+  const startMinutes = startH * 60 + startM
+  const endMinutes = endH * 60 + endM
+
+  return nowMinutes >= startMinutes && nowMinutes <= endMinutes
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
@@ -101,6 +131,11 @@ Deno.serve(async (req: Request) => {
   const results: any[] = []
 
   for (const campaign of campaigns) {
+    if (!body.force && !isWithinSendWindow(campaign, new Date())) {
+      results.push({ campaign: campaign.name, skipped: true, reason: 'outside allowed sending schedule (days/hours)' })
+      continue
+    }
+
     const perInboxLimit = campaign.per_inbox_daily_limit || 50
     const inboxIds: string[] = campaign.inbox_ids?.length ? campaign.inbox_ids : (campaign.from_inbox_id ? [campaign.from_inbox_id] : [])
     if (!inboxIds.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no inboxes configured' }); continue }

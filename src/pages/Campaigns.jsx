@@ -93,6 +93,7 @@ export default function Campaigns() {
 
   const [showNewCampaign, setShowNewCampaign] = useState(false)
   const [showNewStep, setShowNewStep]         = useState(false)
+  const [editingStepId, setEditingStepId]     = useState(null)
   const [showAddContacts, setShowAddContacts] = useState(false)
   const [showImportLeads, setShowImportLeads] = useState(false)
   const [importLeads, setImportLeads]         = useState([])
@@ -259,6 +260,12 @@ export default function Campaigns() {
     setShowNewStep(false)
     setNewStep(blankStep)
     showToast('Step added ✓')
+  }
+
+  async function updateStep(stepId, patch) {
+    setSteps(p => p.map(s => s.id === stepId ? { ...s, ...patch } : s))
+    const { error } = await supabase.from('sequence_steps').update(patch).eq('id', stepId)
+    if (error) showToast(error.message, 'error')
   }
 
   async function deleteStep(id) {
@@ -471,6 +478,63 @@ export default function Campaigns() {
           </div>
         </div>
 
+        {/* Sending schedule -- which days and what time window this campaign is allowed to send in */}
+        <div style={{ marginTop:12, marginBottom:20, padding:16, background:'#F5F7FA', borderRadius:10 }}>
+          <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:8 }}>
+            Sending Schedule
+          </label>
+          <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, idx) => {
+              const isOn = (selected.send_days || [1,2,3,4,5]).includes(idx)
+              return (
+                <button key={day} type="button"
+                  onClick={async () => {
+                    const current = selected.send_days || [1,2,3,4,5]
+                    const next = isOn ? current.filter(d => d !== idx) : [...current, idx].sort()
+                    setSelected(p => ({ ...p, send_days: next }))
+                    setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_days: next } : c))
+                    await supabase.from('campaigns').update({ send_days: next }).eq('id', selected.id)
+                  }}
+                  style={{
+                    width: 42, padding: '6px 0', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    background: isOn ? '#E6F4FC' : '#fff',
+                    color: isOn ? '#0093DB' : '#9CA3AF',
+                    border: isOn ? '2px solid #0093DB' : '1px solid #E5E7EB',
+                  }}>
+                  {day}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ display:'flex', gap:16, alignItems:'flex-end', flexWrap:'wrap' }}>
+            <div>
+              <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Send From</label>
+              <input type="time" value={(selected.send_time_start || '09:00').slice(0,5)}
+                onChange={e => {
+                  const v = e.target.value
+                  setSelected(p => ({ ...p, send_time_start: v }))
+                  setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_time_start: v } : c))
+                }}
+                onBlur={e => supabase.from('campaigns').update({ send_time_start: e.target.value }).eq('id', selected.id)}
+                style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'7px 10px', fontSize:13 }} />
+            </div>
+            <div>
+              <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Send Until</label>
+              <input type="time" value={(selected.send_time_end || '17:30').slice(0,5)}
+                onChange={e => {
+                  const v = e.target.value
+                  setSelected(p => ({ ...p, send_time_end: v }))
+                  setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_time_end: v } : c))
+                }}
+                onBlur={e => supabase.from('campaigns').update({ send_time_end: e.target.value }).eq('id', selected.id)}
+                style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'7px 10px', fontSize:13 }} />
+            </div>
+            <div style={{ fontSize:12, color:'#9CA3AF', paddingBottom:8 }}>
+              Times are in {selected.timezone || 'Europe/London'}. Sends outside these days/hours are held until the next allowed window.
+            </div>
+          </div>
+        </div>
+
         {/* KPIs */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
           {[
@@ -504,14 +568,36 @@ export default function Campaigns() {
                   {i < steps.length - 1 && <div style={{ width: 2, height: 20, background: C.border, margin: '4px 0' }} />}
                 </div>
                 <div style={{ flex: 1, background: '#FFFFFF', borderRadius: 8, padding: '10px 14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{step.subject}</div>
-                    <button onClick={() => deleteStep(step.id)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
-                  </div>
-                  <div style={{ color: C.dim, fontSize: 12 }}>{step.delay_days === 0 ? 'Immediately' : `After ${step.delay_days} day${step.delay_days !== 1 ? 's' : ''}`}</div>
-                  <div style={{ color: C.muted, fontSize: 12, marginTop: 6, lineHeight: 1.5, maxHeight: 36, overflow: 'hidden' }}>
-                    {step.body_html.slice(0, 80)}…
-                  </div>
+                  {editingStepId === step.id ? (
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      <input value={step.subject} onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, subject: e.target.value } : s))}
+                        onBlur={e => updateStep(step.id, { subject: e.target.value })}
+                        style={{ width:'100%', background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:13, fontWeight:600 }} />
+                      <textarea value={step.body_html} rows={5}
+                        onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, body_html: e.target.value } : s))}
+                        onBlur={e => updateStep(step.id, { body_html: e.target.value })}
+                        style={{ width:'100%', background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'8px 10px', fontSize:12, fontFamily:'inherit', lineHeight:1.5, resize:'vertical' }} />
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <label style={{ fontSize:11, color:C.muted }}>Delay (days)</label>
+                        <input type="number" min="0" value={step.delay_days}
+                          onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, delay_days: e.target.value } : s))}
+                          onBlur={e => updateStep(step.id, { delay_days: Number(e.target.value) })}
+                          style={{ width:60, background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'4px 8px', fontSize:12 }} />
+                        <Btn small variant="success" onClick={() => setEditingStepId(null)}>Done</Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13, cursor:'pointer' }} onClick={() => setEditingStepId(step.id)}>{step.subject} ✎</div>
+                        <button onClick={() => deleteStep(step.id)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
+                      </div>
+                      <div style={{ color: C.dim, fontSize: 12 }}>{step.delay_days === 0 ? 'Immediately' : `After ${step.delay_days} day${step.delay_days !== 1 ? 's' : ''}`}</div>
+                      <div style={{ color: C.muted, fontSize: 12, marginTop: 6, lineHeight: 1.5, maxHeight: 36, overflow: 'hidden', cursor:'pointer' }} onClick={() => setEditingStepId(step.id)}>
+                        {step.body_html.slice(0, 80)}…
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

@@ -1,0 +1,8 @@
+ M src/lib/generatePdf.js
+ M src/pages/Campaigns.jsx
+ M src/pages/DocumentGenerator.jsx
+ M src/pages/InvoiceDetail.jsx
+ M src/pages/JobDetail.jsx
+ M src/pages/QuoteDetail.jsx
+ M supabase/functions/send-sequences/index.ts
+?? src/lib/companies.js

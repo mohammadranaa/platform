@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildInvoicePdf, buildQuotePdf } from '../lib/generatePdf'
+import { getCompany, detectCompanyKey } from '../lib/companies'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -129,6 +130,7 @@ export default function JobDetail() {
     const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening'
     const clientName = job.clients?.company_name ||
       [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') || 'Customer'
+    const co = getCompany(detectCompanyKey({ serviceTypes: job.service_types, title: job.title }))
     const map = {
       'name': clientName,
       'first_name': job.clients?.first_name || clientName,
@@ -140,6 +142,9 @@ export default function JobDetail() {
       'certificate_holder': clientName,
       'rep_name': profile?.full_name || 'My Landlord Certificate',
       'renewal_date': '',
+      'bank_name': co.bankAccountName,
+      'sort_code': co.sortCode,
+      'account_number': co.accountNumber,
     }
     let result = text.replaceAll('Good Morning/Afternoon', greeting)
     Object.entries(map).forEach(([k, v]) => {
@@ -1146,7 +1151,7 @@ export default function JobDetail() {
           title="Send Invoice"
           to={job.clients?.email || ''}
           subject={fillJobVars('Your Invoice -- {{inspection_name}} at {{property_address}}')}
-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: My Landlord Certificate Ltd\nAccount Number: 83356126\nSort Code: 60-83-71\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: {{bank_name}}\nAccount Number: {{account_number}}\nSort Code: {{sort_code}}\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
@@ -1175,6 +1180,8 @@ export default function JobDetail() {
               services: (job.service_types || []).join(', '),
               lineItems: items,
               total: inv.total,
+              paid: inv.amount_paid || 0,
+              company: inv.company || detectCompanyKey({ serviceTypes: job.service_types, title: job.title }),
             })
             return { base64, filename, mime: 'application/pdf' }
           }}
@@ -1243,6 +1250,7 @@ export default function JobDetail() {
               lineItems: selectedQuote.quote_line_items || [],
               total: selectedQuote.total,
               notes: selectedQuote.notes,
+              company: selectedQuote.company || detectCompanyKey({ serviceTypes: job.service_types, title: job.title }),
             })
             return { base64, filename, mime: 'application/pdf' }
           }}

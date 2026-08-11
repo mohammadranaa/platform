@@ -1,0 +1,643 @@
+diff --git a/src/lib/generatePdf.js b/src/lib/generatePdf.js
+index dfc7850..a0a0d63 100644
+--- a/src/lib/generatePdf.js
++++ b/src/lib/generatePdf.js
+@@ -1,16 +1,5 @@
+ import jsPDF from 'jspdf'
+-
+-// ── Company constants — matches the real invoice template exactly ──
+-const CO = {
+-  name: 'My Landlord Certificate LTD',
+-  address: '134 Merton High Street, London, SW19 1BA',
+-  phone: '+44 020 3996 1070',
+-  email: 'info@mylandlordcertificate.co.uk',
+-  regNumber: '17265132',
+-  bankAccountName: 'My Landlord Certificate LTD',
+-  sortCode: '60-83-71',
+-  accountNumber: '83356126',
+-}
++import { getCompany } from './companies'
+ 
+ const BLUE = [0, 123, 199]
+ const DARK = [26, 32, 44]
+@@ -78,22 +67,22 @@ function drawLogo(doc, x, y, size) {
+   doc.circle(x + size * 0.78, y + size * 0.28, size * 0.14, 'F')
+ }
+ 
+-function drawCompanyHeader(doc, docTitle, docNumber, dateStr, extraLines = []) {
++function drawCompanyHeader(doc, co, docTitle, docNumber, dateStr, extraLines = []) {
+   drawLogo(doc, 14, 12, 14)
+ 
+   doc.setTextColor(...BLUE)
+   doc.setFontSize(12.5)
+   doc.setFont(undefined, 'bold')
+-  doc.text(CO.name, 31, 17)
++  doc.text(co.name, 31, 17)
+ 
+   doc.setTextColor(...GREY)
+   doc.setFontSize(8.5)
+   doc.setFont(undefined, 'normal')
+-  doc.text(CO.address, 31, 22)
+-  doc.text(CO.phone, 31, 26.5)
+-  doc.text(CO.email, 31, 31)
++  doc.text(co.address, 31, 22)
++  doc.text(co.phone, 31, 26.5)
++  doc.text(co.email, 31, 31)
+   doc.setFontSize(7.5)
+-  doc.text(`Co. Reg: ${CO.regNumber}`, 31, 35)
++  doc.text(`Co. Reg: ${co.regNumber}`, 31, 35)
+ 
+   doc.setTextColor(...DARK)
+   doc.setFontSize(20)
+@@ -253,7 +242,7 @@ function drawSummaryBox(doc, startY, { subtotal, discount = 0, total, paid = 0 }
+   return y + 12
+ }
+ 
+-function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
++function drawInvoiceFooter(doc, startY, co, { invoiceNumber, total, dueDateStr }) {
+   doc.setDrawColor(220, 220, 220)
+   doc.line(14, startY, 196, startY)
+   let y = startY + 8
+@@ -272,9 +261,9 @@ function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
+   doc.text('Bank Details', 14, y)
+   y += 5
+   doc.setFont(undefined, 'normal')
+-  doc.text(`Account Name: ${CO.bankAccountName}`, 14, y); y += 4.5
+-  doc.text(`Sort Code: ${CO.sortCode}`, 14, y); y += 4.5
+-  doc.text(`Account Number: ${CO.accountNumber}`, 14, y); y += 5.5
++  doc.text(`Account Name: ${co.bankAccountName}`, 14, y); y += 4.5
++  doc.text(`Sort Code: ${co.sortCode}`, 14, y); y += 4.5
++  doc.text(`Account Number: ${co.accountNumber}`, 14, y); y += 5.5
+   doc.setTextColor(...RED)
+   doc.setFont(undefined, 'bold')
+   doc.setFontSize(8)
+@@ -295,14 +284,14 @@ function drawInvoiceFooter(doc, startY, { invoiceNumber, total, dueDateStr }) {
+   return Math.max(y, ry) + 10
+ }
+ 
+-function drawBottomStrip(doc, y) {
++function drawBottomStrip(doc, co, y) {
+   doc.setDrawColor(230, 230, 230)
+   doc.line(14, y, 196, y)
+   doc.setFontSize(7)
+   doc.setTextColor(...GREY)
+   doc.setFont(undefined, 'normal')
+   doc.text(
+-    `Company Registration Number ${CO.regNumber} · Registered Office: ${CO.name}, ${CO.address}, United Kingdom`,
++    `Company Registration Number ${co.regNumber} · Registered Office: ${co.name}, ${co.address}, United Kingdom`,
+     105, y + 6, { align: 'center' }
+   )
+ }
+@@ -313,12 +302,17 @@ export function buildInvoicePdf({
+   clientName, clientAddress, clientEmail,
+   siteAddress, services,
+   lineItems, total, discount = 0, paid = 0, vatRate = 0,
++  // Pass either company: 'standard' | 'remedials', or a full override object
++  // with the same shape as an entry in COMPANIES (name/address/phone/email/
++  // regNumber/bankAccountName/sortCode/accountNumber). Defaults to Standard.
++  company = 'standard',
+ }) {
++  const co = typeof company === 'string' ? getCompany(company) : { ...getCompany('standard'), ...company }
+   const doc = new jsPDF()
+   const issueDate = parseFlexibleDate(date)
+   const dueDate = addDays(issueDate, dueDays)
+ 
+-  let y = drawCompanyHeader(doc, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
++  let y = drawCompanyHeader(doc, co, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
+     { label: 'Date: ', value: formatLongDate(issueDate) },
+     { label: 'Due: ', value: formatLongDate(dueDate), color: RED },
+   ])
+@@ -329,8 +323,8 @@ export function buildInvoicePdf({
+   const computedTotal = total != null ? Number(total) : subtotal
+ 
+   y = drawSummaryBox(doc, afterTable + 4, { subtotal, discount, total: computedTotal, paid })
+-  y = drawInvoiceFooter(doc, y, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
+-  drawBottomStrip(doc, Math.min(y, 275))
++  y = drawInvoiceFooter(doc, y, co, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
++  drawBottomStrip(doc, co, Math.min(y, 275))
+ 
+   return { doc, base64: docToBase64(doc), filename: `Invoice_${invoiceNumber || 'INV'}.pdf` }
+ }
+@@ -341,11 +335,13 @@ export function buildQuotePdf({
+   clientName, clientAddress, clientEmail,
+   siteAddress, services,
+   lineItems, total, notes,
++  company = 'standard',
+ }) {
++  const co = typeof company === 'string' ? getCompany(company) : { ...getCompany('standard'), ...company }
+   const doc = new jsPDF()
+   const issueDate = parseFlexibleDate(date)
+ 
+-  let y = drawCompanyHeader(doc, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
++  let y = drawCompanyHeader(doc, co, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
+     { label: 'Date: ', value: formatLongDate(issueDate) },
+     { label: 'Valid Until: ', value: validUntil ? formatLongDate(validUntil) : 'N/A' },
+   ])
+@@ -360,10 +356,35 @@ export function buildQuotePdf({
+   doc.setDrawColor(220, 220, 220)
+   doc.line(14, y, 196, y)
+   y += 8
++
++  // How to Pay / bank details -- matches the reference quote template
++  doc.setFontSize(9)
++  doc.setFont(undefined, 'bold')
++  doc.setTextColor(...BLUE)
++  doc.text('How to Pay', 14, y)
++  y += 5.5
++  doc.setFont(undefined, 'normal')
++  doc.setTextColor(...DARK)
++  doc.setFontSize(8.5)
++  doc.text('We accept payment by: Bank Transfer or Pay Online', 14, y)
++  y += 6
++  doc.setFont(undefined, 'bold')
++  doc.text('Bank Details', 14, y)
++  y += 5
++  doc.setFont(undefined, 'normal')
++  doc.text(`Account Name: ${co.bankAccountName}`, 14, y); y += 4.5
++  doc.text(`Sort Code: ${co.sortCode}`, 14, y); y += 4.5
++  doc.text(`Account Number: ${co.accountNumber}`, 14, y); y += 5.5
++  doc.setTextColor(...RED)
++  doc.setFont(undefined, 'bold')
++  doc.setFontSize(8)
++  doc.text('Note: Please Put Invoice Number As Reference', 14, y)
++  y += 8
++
+   doc.setFontSize(9)
+   doc.setTextColor(...DARK)
+   doc.setFont(undefined, 'normal')
+-  doc.text('To accept this quote, please reply to this email or call us on ' + CO.phone + '.', 14, y)
++  doc.text('To accept this quote, please reply to this email or call us on ' + co.phone + '.', 14, y)
+   y += 6
+   if (notes) {
+     doc.setFont(undefined, 'italic')
+@@ -373,7 +394,7 @@ export function buildQuotePdf({
+     y += 10
+   }
+ 
+-  drawBottomStrip(doc, Math.min(y + 6, 275))
++  drawBottomStrip(doc, co, Math.min(y + 6, 275))
+ 
+   return { doc, base64: docToBase64(doc), filename: `Quote_${quoteNumber || 'QT'}.pdf` }
+ }
+diff --git a/src/pages/Campaigns.jsx b/src/pages/Campaigns.jsx
+index 60a1473..2b6528f 100644
+--- a/src/pages/Campaigns.jsx
++++ b/src/pages/Campaigns.jsx
+@@ -93,6 +93,7 @@ export default function Campaigns() {
+ 
+   const [showNewCampaign, setShowNewCampaign] = useState(false)
+   const [showNewStep, setShowNewStep]         = useState(false)
++  const [editingStepId, setEditingStepId]     = useState(null)
+   const [showAddContacts, setShowAddContacts] = useState(false)
+   const [showImportLeads, setShowImportLeads] = useState(false)
+   const [importLeads, setImportLeads]         = useState([])
+@@ -261,6 +262,12 @@ export default function Campaigns() {
+     showToast('Step added ✓')
+   }
+ 
++  async function updateStep(stepId, patch) {
++    setSteps(p => p.map(s => s.id === stepId ? { ...s, ...patch } : s))
++    const { error } = await supabase.from('sequence_steps').update(patch).eq('id', stepId)
++    if (error) showToast(error.message, 'error')
++  }
++
+   async function deleteStep(id) {
+     await supabase.from('sequence_steps').delete().eq('id', id)
+     setSteps(p => p.filter(s => s.id !== id))
+@@ -471,6 +478,63 @@ export default function Campaigns() {
+           </div>
+         </div>
+ 
++        {/* Sending schedule -- which days and what time window this campaign is allowed to send in */}
++        <div style={{ marginTop:12, marginBottom:20, padding:16, background:'#F5F7FA', borderRadius:10 }}>
++          <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:8 }}>
++            Sending Schedule
++          </label>
++          <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
++            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, idx) => {
++              const isOn = (selected.send_days || [1,2,3,4,5]).includes(idx)
++              return (
++                <button key={day} type="button"
++                  onClick={async () => {
++                    const current = selected.send_days || [1,2,3,4,5]
++                    const next = isOn ? current.filter(d => d !== idx) : [...current, idx].sort()
++                    setSelected(p => ({ ...p, send_days: next }))
++                    setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_days: next } : c))
++                    await supabase.from('campaigns').update({ send_days: next }).eq('id', selected.id)
++                  }}
++                  style={{
++                    width: 42, padding: '6px 0', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
++                    background: isOn ? '#E6F4FC' : '#fff',
++                    color: isOn ? '#0093DB' : '#9CA3AF',
++                    border: isOn ? '2px solid #0093DB' : '1px solid #E5E7EB',
++                  }}>
++                  {day}
++                </button>
++              )
++            })}
++          </div>
++          <div style={{ display:'flex', gap:16, alignItems:'flex-end', flexWrap:'wrap' }}>
++            <div>
++              <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Send From</label>
++              <input type="time" value={(selected.send_time_start || '09:00').slice(0,5)}
++                onChange={e => {
++                  const v = e.target.value
++                  setSelected(p => ({ ...p, send_time_start: v }))
++                  setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_time_start: v } : c))
++                }}
++                onBlur={e => supabase.from('campaigns').update({ send_time_start: e.target.value }).eq('id', selected.id)}
++                style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'7px 10px', fontSize:13 }} />
++            </div>
++            <div>
++              <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Send Until</label>
++              <input type="time" value={(selected.send_time_end || '17:30').slice(0,5)}
++                onChange={e => {
++                  const v = e.target.value
++                  setSelected(p => ({ ...p, send_time_end: v }))
++                  setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, send_time_end: v } : c))
++                }}
++                onBlur={e => supabase.from('campaigns').update({ send_time_end: e.target.value }).eq('id', selected.id)}
++                style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'7px 10px', fontSize:13 }} />
++            </div>
++            <div style={{ fontSize:12, color:'#9CA3AF', paddingBottom:8 }}>
++              Times are in {selected.timezone || 'Europe/London'}. Sends outside these days/hours are held until the next allowed window.
++            </div>
++          </div>
++        </div>
++
+         {/* KPIs */}
+         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+           {[
+@@ -504,14 +568,36 @@ export default function Campaigns() {
+                   {i < steps.length - 1 && <div style={{ width: 2, height: 20, background: C.border, margin: '4px 0' }} />}
+                 </div>
+                 <div style={{ flex: 1, background: '#FFFFFF', borderRadius: 8, padding: '10px 14px' }}>
+-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{step.subject}</div>
+-                    <button onClick={() => deleteStep(step.id)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
+-                  </div>
+-                  <div style={{ color: C.dim, fontSize: 12 }}>{step.delay_days === 0 ? 'Immediately' : `After ${step.delay_days} day${step.delay_days !== 1 ? 's' : ''}`}</div>
+-                  <div style={{ color: C.muted, fontSize: 12, marginTop: 6, lineHeight: 1.5, maxHeight: 36, overflow: 'hidden' }}>
+-                    {step.body_html.slice(0, 80)}…
+-                  </div>
++                  {editingStepId === step.id ? (
++                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
++                      <input value={step.subject} onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, subject: e.target.value } : s))}
++                        onBlur={e => updateStep(step.id, { subject: e.target.value })}
++                        style={{ width:'100%', background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px', fontSize:13, fontWeight:600 }} />
++                      <textarea value={step.body_html} rows={5}
++                        onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, body_html: e.target.value } : s))}
++                        onBlur={e => updateStep(step.id, { body_html: e.target.value })}
++                        style={{ width:'100%', background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'8px 10px', fontSize:12, fontFamily:'inherit', lineHeight:1.5, resize:'vertical' }} />
++                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
++                        <label style={{ fontSize:11, color:C.muted }}>Delay (days)</label>
++                        <input type="number" min="0" value={step.delay_days}
++                          onChange={e => setSteps(p => p.map(s => s.id === step.id ? { ...s, delay_days: e.target.value } : s))}
++                          onBlur={e => updateStep(step.id, { delay_days: Number(e.target.value) })}
++                          style={{ width:60, background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'4px 8px', fontSize:12 }} />
++                        <Btn small variant="success" onClick={() => setEditingStepId(null)}>Done</Btn>
++                      </div>
++                    </div>
++                  ) : (
++                    <>
++                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
++                        <div style={{ fontWeight: 600, fontSize: 13, cursor:'pointer' }} onClick={() => setEditingStepId(step.id)}>{step.subject} ✎</div>
++                        <button onClick={() => deleteStep(step.id)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 14 }}>✕</button>
++                      </div>
++                      <div style={{ color: C.dim, fontSize: 12 }}>{step.delay_days === 0 ? 'Immediately' : `After ${step.delay_days} day${step.delay_days !== 1 ? 's' : ''}`}</div>
++                      <div style={{ color: C.muted, fontSize: 12, marginTop: 6, lineHeight: 1.5, maxHeight: 36, overflow: 'hidden', cursor:'pointer' }} onClick={() => setEditingStepId(step.id)}>
++                        {step.body_html.slice(0, 80)}…
++                      </div>
++                    </>
++                  )}
+                 </div>
+               </div>
+             ))}
+diff --git a/src/pages/DocumentGenerator.jsx b/src/pages/DocumentGenerator.jsx
+index 783827b..fe45e0a 100644
+--- a/src/pages/DocumentGenerator.jsx
++++ b/src/pages/DocumentGenerator.jsx
+@@ -6,6 +6,7 @@ import { useToast, Toast } from '../hooks/useToast.jsx'
+ import { MLC_LOGO } from '../lib/logo.js'
+ import SendEmailModal from '../components/SendEmailModal'
+ import { buildInvoicePdf } from '../lib/generatePdf'
++import { COMPANIES as SHARED_COMPANIES } from '../lib/companies'
+ 
+ const C = {
+   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+@@ -15,18 +16,20 @@ const C = {
+   red: '#DC2626', text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
+ }
+ 
++// Adapts the shared {name,address,phone,email,regNumber,...} shape to the
++// {name,reg,sort,account,...} shape this page's markup expects.
+ const COMPANIES = {
+   standard: {
+-    name: 'My Landlord Certificate LTD', reg: '17265132',
+-    sort: '60-83-71', account: '83356126',
+-    address: '134 Merton High Street, London, SW19 1BA',
+-    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
++    name: SHARED_COMPANIES.standard.name, reg: SHARED_COMPANIES.standard.regNumber,
++    sort: SHARED_COMPANIES.standard.sortCode, account: SHARED_COMPANIES.standard.accountNumber,
++    address: SHARED_COMPANIES.standard.address,
++    email: SHARED_COMPANIES.standard.email, phone: SHARED_COMPANIES.standard.phone,
+   },
+   remedials: {
+-    name: 'My Landlord Certificate Remedials LTD', reg: '17289041',
+-    sort: '04-06-05', account: '32356220',
+-    address: '134 Merton High Street, London, SW19 1BA',
+-    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
++    name: SHARED_COMPANIES.remedials.name, reg: SHARED_COMPANIES.remedials.regNumber,
++    sort: SHARED_COMPANIES.remedials.sortCode, account: SHARED_COMPANIES.remedials.accountNumber,
++    address: SHARED_COMPANIES.remedials.address,
++    email: SHARED_COMPANIES.remedials.email, phone: SHARED_COMPANIES.remedials.phone,
+   },
+ }
+ 
+@@ -129,7 +132,7 @@ function Document({ type, company, data, lineItems }) {
+         <div style={{ width: 280 }}>
+           {[
+             ['SUBTOTAL', fmt(subtotal)],
+-            [discount > 0 ? 'DISCOUNT' : 'NONE', discount > 0 ? `-${fmt(discount)}` : '£0.00'],
++            ...(discount > 0 ? [['DISCOUNT', `-${fmt(discount)}`]] : []),
+             ['TOTAL', fmt(total)],
+             ...(isInvoice ? [['PAID', fmt(paid)]] : []),
+           ].map(([label, value]) => (
+@@ -529,7 +532,6 @@ export default function DocumentGenerator() {
+           subject={`Invoice ${data.doc_number || ''} -- My Landlord Certificate`}
+           body={buildEmailBody(data)}
+           buildAttachment={() => {
+-            const co = COMPANIES[company] || COMPANIES.standard
+             const { base64, filename } = buildInvoicePdf({
+               invoiceNumber: data.doc_number,
+               // Raw date value, not pre-formatted -- the PDF builder's own
+@@ -542,9 +544,9 @@ export default function DocumentGenerator() {
+               services: data.work_completed || '',
+               lineItems: lineItems.filter(l => l.description).map(l => ({ description: l.description, quantity: l.qty, unit_price: l.unit_price })),
+               total: subtotal - Number(data.discount || 0),
+-              bankName: co.name,
+-              sortCode: co.sort,
+-              accountNumber: co.account,
++              paid: Number(data.paid || 0),
++              discount: Number(data.discount || 0),
++              company, // 'standard' | 'remedials' -- generatePdf.js now resolves the correct name/reg/bank details
+             })
+             return { base64, filename, mime: 'application/pdf' }
+           }}
+diff --git a/src/pages/InvoiceDetail.jsx b/src/pages/InvoiceDetail.jsx
+index 3d35243..83f2929 100644
+--- a/src/pages/InvoiceDetail.jsx
++++ b/src/pages/InvoiceDetail.jsx
+@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
+ import { useToast, Toast } from '../hooks/useToast.jsx'
+ import SendEmailModal from '../components/SendEmailModal'
+ import { buildInvoicePdf } from '../lib/generatePdf'
++import { getCompany } from '../lib/companies'
+ 
+ export default function InvoiceDetail() {
+   const { id } = useParams()
+@@ -59,6 +60,7 @@ export default function InvoiceDetail() {
+       status: inv.status,
+       date: inv.date,
+       notes: inv.notes,
++      company: inv.company || 'standard',
+     }).eq('id', id)
+     setSaving(false)
+     if (error) { showToast(error.message, 'error'); return }
+@@ -87,6 +89,17 @@ export default function InvoiceDetail() {
+         <div>
+           <button onClick={() => navigate(-1)} style={{ background:'none', border:'none', color:'#0093DB', cursor:'pointer', fontSize:13, marginBottom:4 }}>← Back</button>
+           <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>Invoice {inv.invoice_number}</h1>
++          <div style={{ display:'flex', gap:6, marginTop:8 }}>
++            {[['standard','🏠 Standard'], ['remedials','🔨 Remedials']].map(([key, label]) => (
++              <button key={key} onClick={() => setInv(p => ({ ...p, company: key }))}
++                style={{ padding:'4px 10px', borderRadius:6, border: (inv.company||'standard') === key ? '2px solid #0093DB' : '1px solid #E5E7EB',
++                  background: (inv.company||'standard') === key ? '#E6F4FC' : '#fff',
++                  color: (inv.company||'standard') === key ? '#0093DB' : '#6B7280',
++                  fontSize:11, fontWeight:700, cursor:'pointer' }}>
++                {label}
++              </button>
++            ))}
++          </div>
+         </div>
+         <div style={{ display:'flex', gap:8 }}>
+           <button onClick={saveInvoice} disabled={saving}
+@@ -105,6 +118,7 @@ export default function InvoiceDetail() {
+               lineItems: inv.line_items || [],
+               total: inv.total,
+               paid: inv.amount_paid || 0,
++              company: inv.company || 'standard',
+             })
+             window.open(doc.output('bloburl'), '_blank')
+           }}
+@@ -123,6 +137,7 @@ export default function InvoiceDetail() {
+               lineItems: inv.line_items || [],
+               total: inv.total,
+               paid: inv.amount_paid || 0,
++              company: inv.company || 'standard',
+             })
+             doc.save(filename)
+           }}
+@@ -280,7 +295,10 @@ export default function InvoiceDetail() {
+       {showSend && (
+         <SendEmailModal title="Send Invoice" to={inv.client_email||''}
+           subject={sendSubject || ('Invoice ' + (inv.invoice_number||'') + ' -- My Landlord Certificate')}
+-          body={sendBody || ('Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk')}
++          body={sendBody || (() => {
++            const co = getCompany(inv.company)
++            return 'Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: ' + co.bankAccountName + '\nSort Code: ' + co.sortCode + '\nAccount: ' + co.accountNumber + '\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'
++          })()}
+           variables={{ name: inv.client_name || 'Customer' }}
+           buildAttachment={() => {
+             const { base64, filename } = buildInvoicePdf({
+@@ -288,7 +306,8 @@ export default function InvoiceDetail() {
+               clientName: inv.client_name, clientAddress: inv.client_address,
+               clientEmail: inv.client_email, siteAddress: inv.site_address,
+               services: inv.work_completed, lineItems: inv.line_items || [],
+-              total: inv.total,
++              total: inv.total, paid: inv.amount_paid || 0,
++              company: inv.company || 'standard',
+             })
+             return { base64, filename, mime: 'application/pdf' }
+           }}
+diff --git a/src/pages/JobDetail.jsx b/src/pages/JobDetail.jsx
+index 990b789..b44f720 100644
+--- a/src/pages/JobDetail.jsx
++++ b/src/pages/JobDetail.jsx
+@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
+ import { useToast, Toast } from '../hooks/useToast.jsx'
+ import SendEmailModal from '../components/SendEmailModal'
+ import { buildInvoicePdf, buildQuotePdf } from '../lib/generatePdf'
++import { getCompany, detectCompanyKey } from '../lib/companies'
+ 
+ const C = {
+   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
+@@ -129,6 +130,7 @@ export default function JobDetail() {
+     const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening'
+     const clientName = job.clients?.company_name ||
+       [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') || 'Customer'
++    const co = getCompany(detectCompanyKey({ serviceTypes: job.service_types, title: job.title }))
+     const map = {
+       'name': clientName,
+       'first_name': job.clients?.first_name || clientName,
+@@ -140,6 +142,9 @@ export default function JobDetail() {
+       'certificate_holder': clientName,
+       'rep_name': profile?.full_name || 'My Landlord Certificate',
+       'renewal_date': '',
++      'bank_name': co.bankAccountName,
++      'sort_code': co.sortCode,
++      'account_number': co.accountNumber,
+     }
+     let result = text.replaceAll('Good Morning/Afternoon', greeting)
+     Object.entries(map).forEach(([k, v]) => {
+@@ -1146,7 +1151,7 @@ export default function JobDetail() {
+           title="Send Invoice"
+           to={job.clients?.email || ''}
+           subject={fillJobVars('Your Invoice -- {{inspection_name}} at {{property_address}}')}
+-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: My Landlord Certificate Ltd\nAccount Number: 83356126\nSort Code: 60-83-71\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
++          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: {{bank_name}}\nAccount Number: {{account_number}}\nSort Code: {{sort_code}}\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+           variables={{ name: job.clients?.company_name ||
+             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+             'Customer' }}
+@@ -1175,6 +1180,8 @@ export default function JobDetail() {
+               services: (job.service_types || []).join(', '),
+               lineItems: items,
+               total: inv.total,
++              paid: inv.amount_paid || 0,
++              company: inv.company || detectCompanyKey({ serviceTypes: job.service_types, title: job.title }),
+             })
+             return { base64, filename, mime: 'application/pdf' }
+           }}
+@@ -1243,6 +1250,7 @@ export default function JobDetail() {
+               lineItems: selectedQuote.quote_line_items || [],
+               total: selectedQuote.total,
+               notes: selectedQuote.notes,
++              company: selectedQuote.company || detectCompanyKey({ serviceTypes: job.service_types, title: job.title }),
+             })
+             return { base64, filename, mime: 'application/pdf' }
+           }}
+diff --git a/src/pages/QuoteDetail.jsx b/src/pages/QuoteDetail.jsx
+index 4e308a1..ffc29f6 100644
+--- a/src/pages/QuoteDetail.jsx
++++ b/src/pages/QuoteDetail.jsx
+@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
+ import { useAuth } from '../lib/AuthContext'
+ import SendEmailModal from '../components/SendEmailModal'
+ import { buildQuotePdf } from '../lib/generatePdf'
++import { getCompany } from '../lib/companies'
+ 
+ export default function QuoteDetail() {
+   const { id } = useParams()
+@@ -51,6 +52,7 @@ export default function QuoteDetail() {
+       site_address: quote.site_address,
+       notes: quote.notes,
+       subtotal,
++      company: quote.company || 'standard',
+     }).eq('id', id)
+ 
+     if (error) { setSaving(false); showToast(error.message, 'error'); return }
+@@ -118,6 +120,15 @@ export default function QuoteDetail() {
+           <div style={{ marginTop:4, display:'flex', alignItems:'center', gap:10 }}>
+             <span style={{ background:sc+'18', color:sc, borderRadius:6, padding:'3px 10px', fontSize:12, fontWeight:700 }}>{quote.status}</span>
+             <span style={{ fontSize:12, color:'#9CA3AF' }}>Valid until: {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB') : 'Not set'}</span>
++            {[['standard','🏠 Standard'], ['remedials','🔨 Remedials']].map(([key, label]) => (
++              <button key={key} onClick={() => setQuote(p => ({ ...p, company: key }))}
++                style={{ padding:'3px 10px', borderRadius:6, border: (quote.company||'standard') === key ? '2px solid #0093DB' : '1px solid #E5E7EB',
++                  background: (quote.company||'standard') === key ? '#E6F4FC' : '#fff',
++                  color: (quote.company||'standard') === key ? '#0093DB' : '#6B7280',
++                  fontSize:11, fontWeight:700, cursor:'pointer' }}>
++                {label}
++              </button>
++            ))}
+           </div>
+         </div>
+         <div style={{ display:'flex', gap:8 }}>
+@@ -135,9 +146,11 @@ export default function QuoteDetail() {
+               clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
+               clientEmail: quote.clients?.email || '',
+               siteAddress: quote.site_address || '',
++              services: quote.jobs?.service_types || '',
+               lineItems: lineItems,
+               total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
+               notes: quote.notes,
++              company: quote.company || 'standard',
+             })
+             // Open PDF in new tab
+             const pdfUrl = doc.output('bloburl')
+@@ -156,9 +169,11 @@ export default function QuoteDetail() {
+               clientAddress: [quote.clients?.street_address, quote.clients?.city, quote.clients?.postcode].filter(Boolean).join(', '),
+               clientEmail: quote.clients?.email || '',
+               siteAddress: quote.site_address || '',
++              services: quote.jobs?.service_types || '',
+               lineItems: lineItems,
+               total: lineItems.reduce((s,i) => s + (i.quantity||1)*(i.unit_price||0), 0),
+               notes: quote.notes,
++              company: quote.company || 'standard',
+             })
+             doc.save(filename)
+           }}
+@@ -350,9 +365,11 @@ export default function QuoteDetail() {
+               clientName, clientAddress: clientAddr,
+               clientEmail: quote.clients?.email || '',
+               siteAddress: quote.site_address,
++              services: quote.jobs?.service_types || '',
+               lineItems,
+               total: subtotal,
+               notes: quote.notes,
++              company: quote.company || 'standard',
+             })
+             return { base64, filename, mime: 'application/pdf' }
+           }}
+diff --git a/supabase/functions/send-sequences/index.ts b/supabase/functions/send-sequences/index.ts
+index def7c3c..ad23c93 100644
+--- a/supabase/functions/send-sequences/index.ts
++++ b/supabase/functions/send-sequences/index.ts
+@@ -77,6 +77,36 @@ function personalise(text: string, vars: Record<string, string>): string {
+     .replace(/\{\{sender_name\}\}/gi, vars.sender_name || '')
+ }
+ 
++// Checks whether "now" falls inside the campaign's allowed sending window
++// (day-of-week + local time-of-day, in the campaign's own timezone).
++function isWithinSendWindow(campaign: any, now: Date): boolean {
++  const tz = campaign.timezone || 'Europe/London'
++  const days: number[] = campaign.send_days?.length ? campaign.send_days : [1, 2, 3, 4, 5]
++  const startStr: string = (campaign.send_time_start || '09:00').slice(0, 5)
++  const endStr: string = (campaign.send_time_end || '17:30').slice(0, 5)
++
++  // Get the campaign-local weekday and time via Intl, so this is correct
++  // regardless of what timezone the server itself runs in.
++  const parts = new Intl.DateTimeFormat('en-GB', {
++    timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
++  }).formatToParts(now)
++  const weekdayShort = parts.find(p => p.type === 'weekday')?.value || 'Mon'
++  const hour = parts.find(p => p.type === 'hour')?.value || '00'
++  const minute = parts.find(p => p.type === 'minute')?.value || '00'
++
++  const WEEKDAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
++  const todayIdx = WEEKDAY_MAP[weekdayShort] ?? 1
++  if (!days.includes(todayIdx)) return false
++
++  const nowMinutes = Number(hour) * 60 + Number(minute)
++  const [startH, startM] = startStr.split(':').map(Number)
++  const [endH, endM] = endStr.split(':').map(Number)
++  const startMinutes = startH * 60 + startM
++  const endMinutes = endH * 60 + endM
++
++  return nowMinutes >= startMinutes && nowMinutes <= endMinutes
++}
++
+ Deno.serve(async (req: Request) => {
+   if (req.method === 'OPTIONS') {
+     return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
+@@ -101,6 +131,11 @@ Deno.serve(async (req: Request) => {
+   const results: any[] = []
+ 
+   for (const campaign of campaigns) {
++    if (!body.force && !isWithinSendWindow(campaign, new Date())) {
++      results.push({ campaign: campaign.name, skipped: true, reason: 'outside allowed sending schedule (days/hours)' })
++      continue
++    }
++
+     const perInboxLimit = campaign.per_inbox_daily_limit || 50
+     const inboxIds: string[] = campaign.inbox_ids?.length ? campaign.inbox_ids : (campaign.from_inbox_id ? [campaign.from_inbox_id] : [])
+     if (!inboxIds.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no inboxes configured' }); continue }

@@ -6,6 +6,7 @@ import { useToast, Toast } from '../hooks/useToast.jsx'
 import { MLC_LOGO } from '../lib/logo.js'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildInvoicePdf } from '../lib/generatePdf'
+import { COMPANIES as SHARED_COMPANIES } from '../lib/companies'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -15,18 +16,20 @@ const C = {
   red: '#DC2626', text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
+// Adapts the shared {name,address,phone,email,regNumber,...} shape to the
+// {name,reg,sort,account,...} shape this page's markup expects.
 const COMPANIES = {
   standard: {
-    name: 'My Landlord Certificate LTD', reg: '17265132',
-    sort: '60-83-71', account: '83356126',
-    address: '134 Merton High Street, London, SW19 1BA',
-    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
+    name: SHARED_COMPANIES.standard.name, reg: SHARED_COMPANIES.standard.regNumber,
+    sort: SHARED_COMPANIES.standard.sortCode, account: SHARED_COMPANIES.standard.accountNumber,
+    address: SHARED_COMPANIES.standard.address,
+    email: SHARED_COMPANIES.standard.email, phone: SHARED_COMPANIES.standard.phone,
   },
   remedials: {
-    name: 'My Landlord Certificate Remedials LTD', reg: '17289041',
-    sort: '04-06-05', account: '32356220',
-    address: '134 Merton High Street, London, SW19 1BA',
-    email: 'info@mylandlordcertificate.co.uk', phone: '+44 020 3996 1070',
+    name: SHARED_COMPANIES.remedials.name, reg: SHARED_COMPANIES.remedials.regNumber,
+    sort: SHARED_COMPANIES.remedials.sortCode, account: SHARED_COMPANIES.remedials.accountNumber,
+    address: SHARED_COMPANIES.remedials.address,
+    email: SHARED_COMPANIES.remedials.email, phone: SHARED_COMPANIES.remedials.phone,
   },
 }
 
@@ -129,7 +132,7 @@ function Document({ type, company, data, lineItems }) {
         <div style={{ width: 280 }}>
           {[
             ['SUBTOTAL', fmt(subtotal)],
-            [discount > 0 ? 'DISCOUNT' : 'NONE', discount > 0 ? `-${fmt(discount)}` : '£0.00'],
+            ...(discount > 0 ? [['DISCOUNT', `-${fmt(discount)}`]] : []),
             ['TOTAL', fmt(total)],
             ...(isInvoice ? [['PAID', fmt(paid)]] : []),
           ].map(([label, value]) => (
@@ -529,7 +532,6 @@ export default function DocumentGenerator() {
           subject={`Invoice ${data.doc_number || ''} -- My Landlord Certificate`}
           body={buildEmailBody(data)}
           buildAttachment={() => {
-            const co = COMPANIES[company] || COMPANIES.standard
             const { base64, filename } = buildInvoicePdf({
               invoiceNumber: data.doc_number,
               // Raw date value, not pre-formatted -- the PDF builder's own
@@ -542,9 +544,9 @@ export default function DocumentGenerator() {
               services: data.work_completed || '',
               lineItems: lineItems.filter(l => l.description).map(l => ({ description: l.description, quantity: l.qty, unit_price: l.unit_price })),
               total: subtotal - Number(data.discount || 0),
-              bankName: co.name,
-              sortCode: co.sort,
-              accountNumber: co.account,
+              paid: Number(data.paid || 0),
+              discount: Number(data.discount || 0),
+              company, // 'standard' | 'remedials' -- generatePdf.js now resolves the correct name/reg/bank details
             })
             return { base64, filename, mime: 'application/pdf' }
           }}

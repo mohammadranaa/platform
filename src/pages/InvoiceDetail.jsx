@@ -5,6 +5,7 @@ import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildInvoicePdf } from '../lib/generatePdf'
+import { getCompany } from '../lib/companies'
 
 export default function InvoiceDetail() {
   const { id } = useParams()
@@ -59,6 +60,7 @@ export default function InvoiceDetail() {
       status: inv.status,
       date: inv.date,
       notes: inv.notes,
+      company: inv.company || 'standard',
     }).eq('id', id)
     setSaving(false)
     if (error) { showToast(error.message, 'error'); return }
@@ -87,6 +89,17 @@ export default function InvoiceDetail() {
         <div>
           <button onClick={() => navigate(-1)} style={{ background:'none', border:'none', color:'#0093DB', cursor:'pointer', fontSize:13, marginBottom:4 }}>← Back</button>
           <h1 style={{ fontSize:22, fontWeight:700, margin:0 }}>Invoice {inv.invoice_number}</h1>
+          <div style={{ display:'flex', gap:6, marginTop:8 }}>
+            {[['standard','🏠 Standard'], ['remedials','🔨 Remedials']].map(([key, label]) => (
+              <button key={key} onClick={() => setInv(p => ({ ...p, company: key }))}
+                style={{ padding:'4px 10px', borderRadius:6, border: (inv.company||'standard') === key ? '2px solid #0093DB' : '1px solid #E5E7EB',
+                  background: (inv.company||'standard') === key ? '#E6F4FC' : '#fff',
+                  color: (inv.company||'standard') === key ? '#0093DB' : '#6B7280',
+                  fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={saveInvoice} disabled={saving}
@@ -105,6 +118,7 @@ export default function InvoiceDetail() {
               lineItems: inv.line_items || [],
               total: inv.total,
               paid: inv.amount_paid || 0,
+              company: inv.company || 'standard',
             })
             window.open(doc.output('bloburl'), '_blank')
           }}
@@ -123,6 +137,7 @@ export default function InvoiceDetail() {
               lineItems: inv.line_items || [],
               total: inv.total,
               paid: inv.amount_paid || 0,
+              company: inv.company || 'standard',
             })
             doc.save(filename)
           }}
@@ -280,7 +295,10 @@ export default function InvoiceDetail() {
       {showSend && (
         <SendEmailModal title="Send Invoice" to={inv.client_email||''}
           subject={sendSubject || ('Invoice ' + (inv.invoice_number||'') + ' -- My Landlord Certificate')}
-          body={sendBody || ('Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: My Landlord Certificate LTD\nSort Code: 60-83-71\nAccount: 83356126\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk')}
+          body={sendBody || (() => {
+            const co = getCompany(inv.company)
+            return 'Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: ' + co.bankAccountName + '\nSort Code: ' + co.sortCode + '\nAccount: ' + co.accountNumber + '\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'
+          })()}
           variables={{ name: inv.client_name || 'Customer' }}
           buildAttachment={() => {
             const { base64, filename } = buildInvoicePdf({
@@ -288,7 +306,8 @@ export default function InvoiceDetail() {
               clientName: inv.client_name, clientAddress: inv.client_address,
               clientEmail: inv.client_email, siteAddress: inv.site_address,
               services: inv.work_completed, lineItems: inv.line_items || [],
-              total: inv.total,
+              total: inv.total, paid: inv.amount_paid || 0,
+              company: inv.company || 'standard',
             })
             return { base64, filename, mime: 'application/pdf' }
           }}
