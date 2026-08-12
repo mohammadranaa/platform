@@ -5,7 +5,10 @@ import { useAuth } from '../lib/AuthContext'
 const C = { accent: '#0093DB', text: '#1F2937', muted: '#6B7280', red: '#DC2626' }
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
-const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
+// NOTE: never put the Google OAuth client *secret* here -- any VITE_ env var
+// gets bundled into the shipped JS and is visible to anyone who opens
+// devtools. The secret lives only in Supabase's server-side secrets and
+// gmail-oauth reads it from there.
 const REDIRECT_URI = `${window.location.origin}/inbox/oauth-callback`
 
 export default function OAuthCallback() {
@@ -45,7 +48,6 @@ export default function OAuthCallback() {
           code,
           redirect_uri: REDIRECT_URI,
           client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
           user_id: profile?.id,
           account_type: accountType,
         }),

@@ -137,7 +137,21 @@ export default function Jobs() {
   const lbl = {color:C.muted,fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em',display:'block',marginBottom:4}
 
   async function deleteJob(jobId) {
-    if (!window.confirm('Delete this job? This cannot be undone.')) return
+    // Deleting a job cascades in the database to permanently delete its
+    // files (certificates, payment proof photos), diary entries, and
+    // activity log -- a generic "cannot be undone" doesn't make that clear,
+    // so check what's actually attached and say so before confirming.
+    const [{ count: fileCount }, { count: diaryCount }] = await Promise.all([
+      supabase.from('job_files').select('id', { count: 'exact', head: true }).eq('job_id', jobId),
+      supabase.from('job_diary').select('id', { count: 'exact', head: true }).eq('job_id', jobId),
+    ])
+    const parts = []
+    if (fileCount) parts.push(`${fileCount} uploaded file${fileCount === 1 ? '' : 's'} (certificates/photos)`)
+    if (diaryCount) parts.push(`${diaryCount} diary ${diaryCount === 1 ? 'entry' : 'entries'}`)
+    const warning = parts.length
+      ? `Delete this job? This will also permanently delete ${parts.join(' and ')}. This cannot be undone.`
+      : 'Delete this job? This cannot be undone.'
+    if (!window.confirm(warning)) return
     const { error } = await supabase.from('jobs').delete().eq('id', jobId)
     if (error) { showToast(error.message, 'error'); return }
     setJobs(p => p.filter(j => j.id !== jobId))

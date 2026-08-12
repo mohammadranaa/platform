@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import DOMPurify from 'dompurify'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
@@ -15,7 +16,9 @@ const C = {
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://fyjgtwupzpeivdedoutj.supabase.co'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
-const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
+// NOTE: never put the Google OAuth client *secret* in a VITE_ env var --
+// it gets bundled into the shipped JS. The secret lives only in Supabase's
+// server-side secrets; gmail-fetch/gmail-reply read it from there.
 const REDIRECT_URI = `${window.location.origin}/inbox/oauth-callback`
 const COLORS = ['#0093DB','#80D100','#D97706','#7C3AED','#0D9488','#DC2626','#EC4899','#8B5CF6']
 
@@ -63,7 +66,7 @@ export default function ColdInbox() {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-fetch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account_type: 'cold', client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, max_results: 30 }),
+        body: JSON.stringify({ account_type: 'cold', client_id: GOOGLE_CLIENT_ID, max_results: 30 }),
       })
       const data = await res.json()
       showToast(data.ok ? `✓ ${data.new_messages} new emails from ${data.accounts} accounts` : 'Fetch failed', data.ok ? undefined : 'error')
@@ -86,7 +89,6 @@ export default function ColdInbox() {
           subject: selected.subject,
           message: replyText,
           client_id: GOOGLE_CLIENT_ID,
-          client_secret: GOOGLE_CLIENT_SECRET,
         }),
       })
       const data = await res.json()
@@ -259,7 +261,7 @@ export default function ColdInbox() {
               {/* Email body */}
               <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
                 {selected.body_html ? (
-                  <div dangerouslySetInnerHTML={{ __html: selected.body_html }}
+                  <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selected.body_html) }}
                     style={{ fontSize:14, lineHeight:1.7, color:C.text, wordBreak:'break-word' }} />
                 ) : selected.body_text ? (
                   <pre style={{ fontSize:14, lineHeight:1.7, color:C.text, whiteSpace:'pre-wrap', fontFamily:'inherit', margin:0 }}>{selected.body_text}</pre>

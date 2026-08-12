@@ -26,17 +26,25 @@ Deno.serve(async (req: Request) => {
       const now = new Date().toISOString()
       const isFirstOpen = !send.open_count || send.open_count === 0
 
-      // Update the send record
+      // Update the send record. Deliberately NOT touching `status` here --
+      // it stays 'sent'. send-sequences counts each inbox's sends-today by
+      // filtering email_sends on status='sent'; flipping it to 'opened'
+      // would make opened emails invisible to that count and silently blow
+      // past the daily/warmup caps.
       await supabase.from('email_sends').update({
         open_count: (send.open_count || 0) + 1,
         opened_at: isFirstOpen ? now : undefined,
-        status: 'opened',
       }).eq('id', send.id)
 
-      // Update the contact
-      await supabase.from('campaign_contacts').update({
-        status: 'opened',
-      }).eq('id', send.contact_id)
+      // Update the contact -- track that they opened without touching
+      // `status`, which is what send-sequences uses to decide who's still
+      // active in the sequence. Overwriting it here used to silently end
+      // every contact's sequence the moment they opened one email.
+      if (isFirstOpen) {
+        await supabase.from('campaign_contacts').update({
+          first_opened_at: new Date().toISOString(),
+        }).eq('id', send.contact_id)
+      }
 
       // Engagement trigger handles the lead update automatically
       if (isFirstOpen) {
@@ -48,12 +56,6 @@ Deno.serve(async (req: Request) => {
           .single()
 
         if (contact?.lead_id) {
-          await supabase.from('leads').update({
-            last_email_opened_at: now,
-            email_open_count: supabase.rpc as any,
-          }).eq('id', contact.lead_id)
-
-          // Simpler approach - direct update
           const { data: lead } = await supabase
             .from('leads')
             .select('email_open_count')

@@ -1,62 +1,77 @@
-# MLC Platform — PDF/Company fix, campaign scheduling, step editing
+# MLC Platform — bug audit, part 3 (Jobs, Leads, Dashboard, Templates, NuacomDialer)
 
-I don't have push access to your GitHub repo, so this bundle contains the
-actual working files (already build-tested with `npm run build`) for you
-to drop into `mohammadranaa/platform` and push yourself. `CHANGES.diff` is
-a standard git diff if you'd rather apply it with `git apply CHANGES.diff`
-from the repo root.
+## Fixed in this bundle
 
-## Already deployed for you (no action needed)
-- **Supabase migration**: `quotes.company` column added (standard/remedials, default standard)
-- **Supabase migration**: `campaigns.send_days` / `send_time_start` / `send_time_end` / `timezone` columns added
-- **Edge function `send-sequences`**: redeployed (v2) with schedule enforcement. Your existing
-  hourly cron job (`send-email-sequences`, `0 * * * *`) will now automatically skip campaigns
-  outside their configured days/hours.
-- `track-open` and `send-sequences` were already ACTIVE in your project before this session —
-  that "pending deployment" item was already resolved.
+### 1. Deleting a job silently destroys uploaded files, with no warning 🟡
+Checked the DB's foreign key rules: deleting a row from `jobs` cascades to
+**permanently delete** `job_files` (certificates, photos, payment proof),
+`job_diary`, and `activities`. The confirm dialog just said "Delete this
+job? This cannot be undone" -- it didn't mention that any attached
+certificates or payment proof photos go with it. (Related rows like
+`invoices` and `quotes` are spared -- they get `job_id` set to null instead
+of being deleted, so financial records survive but become disconnected from
+the job.)
 
-## Files in this bundle → where they go
-```
-src/lib/companies.js                       NEW — single source of truth for Standard vs
-                                            Remedials LTD (name/reg/bank details)
-src/lib/generatePdf.js                     buildInvoicePdf/buildQuotePdf now accept a
-                                            `company` param and render the correct entity
-src/pages/DocumentGenerator.jsx            fixed "NONE: £0.00" row bug; now imports from
-                                            the shared companies.js
-src/pages/InvoiceDetail.jsx                passes company + paid into PDF builder; company
-                                            toggle added to invoice header; fixed hardcoded
-                                            Standard-only bank details in the send email body
-src/pages/QuoteDetail.jsx                  passes `services` (was missing entirely — this is
-                                            why quotes were missing the Services: line) and
-                                            `company` into the PDF builder; company toggle
-                                            added to quote header
-src/pages/JobDetail.jsx                    invoice email now uses {{bank_name}}/{{sort_code}}/
-                                            {{account_number}} template vars (auto-detected
-                                            from job service types) instead of hardcoded
-                                            Standard-entity bank details
-src/pages/Campaigns.jsx                    added day-of-week + send-time-window scheduling
-                                            UI; sequence steps are now editable in place
-                                            (click subject/body to edit, not just add/delete)
-supabase/functions/send-sequences/index.ts adds isWithinSendWindow() schedule check; already
-                                            deployed live, included here so your repo matches
-                                            what's actually running
-```
+**Fixed**: the confirm dialog now checks how many files/diary entries are
+attached and says so explicitly, e.g. *"Delete this job? This will also
+permanently delete 3 uploaded files (certificates/photos) and 2 diary
+entries. This cannot be undone."* Doesn't change what deletion does, just
+makes sure whoever clicks it knows the actual blast radius.
 
-## Root cause summary (what was actually broken)
-Your platform grew two separate invoicing code paths at different times:
-`DocumentGenerator.jsx` (the "Documents" page) knew about the Standard vs Remedials LTD
-entities but had a display bug; the newer Job/Quote/Invoice-linked flow (`generatePdf.js` +
-JobDetail/QuoteDetail/InvoiceDetail) never learned about the Remedials entity at all, so it
-always rendered "My Landlord Certificate LTD" with Standard bank details — even for jobs
-that should bill through Remedials LTD. QuoteDetail also never passed the `services` field
-to the PDF builder, so quotes generated from the Quotes page were missing the "Services:"
-line entirely. All of this is now unified through `src/lib/companies.js`.
+### 2. Renewal countdown had the same timezone bug fixed elsewhere already 🟢
+`Dashboard.jsx`'s "Renewals Due Soon" widget computed days-until-renewal
+with `new Date(lead.renewal_due_date)` on a plain `YYYY-MM-DD` string --
+that parses as UTC midnight, which drifts by an hour in BST and can make a
+renewal look a day early/late right around midnight. Your own codebase
+already has a `parseLocalDate()` helper in `lib/dateUtils.js` for exactly
+this (used correctly in Jobs/Calendar) -- Dashboard just wasn't using it.
+**Fixed**: now imports and uses the same helper.
 
-## Still outstanding (not done in this session)
-- `verify-emails` edge function: referenced in your notes as "built" but does not exist
-  anywhere in the repo — it needs to be written from scratch (ZeroBounce + DNS fallback).
-- `GOOGLE_CLIENT_SECRET`: you said you'd add this yourself.
-- Campaign step *editing* now works, but the actual multi-step sequence isn't wired into
-  `send-sequences` yet — that function currently only ever sends the single campaign-level
-  subject/body, not the `sequence_steps` you can now edit. If you want the sequence to
-  actually progress contacts through step 1 → 2 → 3 automatically, that's a follow-up.
+## Found, not fixed -- needs a product decision
+
+### 3. CSV lead import has no duplicate detection
+`Leads.jsx`'s CSV importer inserts every row as a new lead with zero check
+against existing leads by email or phone. Uploading the same file twice, or
+two overlapping contact lists, creates full duplicate lead rows -- which
+then means duplicate contacts in `campaign_contacts` and the same person
+getting cold-emailed twice from two different lead records. I didn't fix
+this because the right dedup key depends on your data (email only? phone
+only? either? within a lead_type or across all three?), and getting it
+wrong could silently drop legitimate leads that happen to share a phone
+number (e.g. a landlord and their agent). Want me to add a dedup check --
+and if so, on what field(s)?
+
+### 4. (Confirmed working as designed, not a bug) CSV import can auto-create jobs
+I initially flagged this as a bug -- importing an "inbound" CSV row with
+`payment_status = paid` sets the lead's status to `Accepted`, which fires
+your DB trigger to auto-create a client + job. Turned out this is
+deliberate: the import flow has a specific success message ("X
+auto-converted (paid)") built around it, clearly intentional for migrating
+real historical paid bookings. Leaving as-is, just noting it here in case
+it wasn't obvious that a "paid" row in an import file creates a real job
+record, not just a lead.
+
+## Templates.jsx and NuacomDialer.jsx
+Went through both -- no credential leaks, no dangerous write paths, nothing
+worth flagging. NuacomDialer doesn't handle any API keys client-side (calls
+go through the `nuacom-webhook` function and read from a table), and
+Templates.jsx's save/delete paths are straightforward with no cascade
+surprises.
+
+## Where this leaves the overall audit
+Across all three passes I've now gone through every page and every edge
+function in the repo. Summary of what's fixed vs. still open:
+
+**Live in production**: XSS sanitization, Google OAuth secret leak (server
++ client), track-open sequence-breaking bug, reply/bounce detection restored
+to match what's on GitHub.
+
+**In this bundle, not yet pushed**: job-delete warning, Dashboard renewal
+date fix.
+
+**Written but intentionally not deployed**: Stripe webhook signature
+verification (needs `STRIPE_WEBHOOK_SECRET` set first).
+
+**Still waiting on your input**: the dead SMTP Inboxes page/table, CSV
+duplicate detection, and whether to add shared-secret checks to
+`inbound-booking`/`nuacom-webhook`.

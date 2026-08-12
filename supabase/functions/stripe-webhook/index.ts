@@ -1,9 +1,20 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@17?target=deno'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
+
+// IMPORTANT: this must be the *webhook signing secret* from Stripe Dashboard
+// -> Developers -> Webhooks -> (this endpoint) -> "Signing secret", NOT your
+// API key. Set it with:
+//   supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+// Until this secret is set, every request is rejected (fail closed, not
+// open) -- better a payment briefly doesn't get processed than the endpoint
+// silently accepting forged events again.
+const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') || ''
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || 'sk_placeholder', { apiVersion: '2024-06-20' })
 
 // Parse "Mr James Spender" into { first: "James", last: "Spender" }
 function parseName(raw: string): { first: string; last: string } {
@@ -26,9 +37,23 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' } })
   }
 
+  const rawBody = await req.text()
+  const signature = req.headers.get('stripe-signature') || ''
+
+  if (!WEBHOOK_SECRET) {
+    console.error('STRIPE_WEBHOOK_SECRET not configured -- rejecting all webhook events until it is set')
+    return new Response('Webhook not configured', { status: 500 })
+  }
+
   let event: any
-  try { event = JSON.parse(await req.text()) }
-  catch { return new Response('Invalid JSON', { status: 400 }) }
+  try {
+    // constructEventAsync (not constructEvent) is required in Deno/edge
+    // runtimes since it uses Web Crypto instead of Node's crypto module.
+    event = await stripe.webhooks.constructEventAsync(rawBody, signature, WEBHOOK_SECRET)
+  } catch (err) {
+    console.error('Stripe signature verification failed:', err.message)
+    return new Response(`Webhook signature verification failed: ${err.message}`, { status: 400 })
+  }
 
   if (event.type !== 'checkout.session.completed' && event.type !== 'payment_intent.succeeded') {
     return new Response(JSON.stringify({ received: true }), {

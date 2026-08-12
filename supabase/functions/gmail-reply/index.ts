@@ -95,9 +95,11 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const { account_id, thread_id, to, subject, message, attachment_base64, attachment_name, attachment_mime } = body
 
-  // Google OAuth credentials: prefer request body, fall back to server env
+  // client_id isn't sensitive (OAuth client IDs are meant to be public), so
+  // a body fallback is fine. client_secret must never be trusted from the
+  // browser -- always use the server-side Supabase secret.
   const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
-  const client_secret = body.client_secret || Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+  const client_secret = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
   if (!client_id || !client_secret) {
     console.error('No Google OAuth credentials available. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as Supabase secrets.')

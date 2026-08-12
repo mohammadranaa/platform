@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
-const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || ''
+// Never put the client *secret* in a VITE_ var -- it gets bundled into the
+// shipped JS. gmail-reply reads it from Supabase's server-side secrets.
 
 const C = { accent: '#0093DB', text: '#1F2937', muted: '#6B7280', border: '#E5E7EB', green: '#3d7a00', greenSoft: '#F0FAE0', red: '#DC2626', redSoft: '#FEE2E2' }
 
@@ -117,7 +118,6 @@ export default function SendEmailModal({
       subject: cleanSubject(subjectVal),
       message: bodyVal,
       client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
     }
     if (attachmentInfo) {
       payload.attachment_base64 = attachmentInfo.base64

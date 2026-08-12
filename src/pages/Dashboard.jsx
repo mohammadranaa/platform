@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { parseLocalDate } from '../lib/dateUtils'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -304,7 +305,7 @@ export default function Dashboard() {
               </SectionTitle>
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 {renewalsDue.map((lead, i) => {
-                  const days = lead.renewal_due_date ? Math.floor((new Date(lead.renewal_due_date) - new Date()) / 86400000) : null
+                  const days = lead.renewal_due_date ? Math.floor((parseLocalDate(lead.renewal_due_date) - new Date()) / 86400000) : null
                   const color = days < 0 ? C.red : days <= 14 ? C.amber : C.greenDark
                   const bg = days < 0 ? C.redSoft : days <= 14 ? C.amberSoft : C.greenSoft
                   return (

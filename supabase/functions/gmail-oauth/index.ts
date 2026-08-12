@@ -15,7 +15,8 @@ Deno.serve(async (req: Request) => {
   let body: any
   try { body = await req.json() } catch { return new Response('Invalid JSON', { status: 400 }) }
 
-  const { code, redirect_uri, client_id, client_secret, user_id, account_type } = body
+  const { code, redirect_uri, client_id, user_id, account_type } = body
+  const client_secret = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
   if (!code || !redirect_uri || !client_id || !client_secret) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
