@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
-import { toDateString } from '../lib/dateUtils'
+import { toDateString, parseLocalDate } from '../lib/dateUtils'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -49,14 +49,26 @@ function formatDate(d) {
 export default function CalendarView() {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [view, setView]         = useState('week') // day | week | month
-  const [current, setCurrent]   = useState(new Date())
+  const [view, setView]         = useState(searchParams.get('view') || 'week') // day | week | month
+  const [current, setCurrent]   = useState(() => {
+    const d = searchParams.get('date')
+    return d ? parseLocalDate(d) : new Date()
+  })
   const [jobs, setJobs]         = useState([])
   const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState(null)
-  const [filterEng, setFilterEng]    = useState('all')
+  const [filterEng, setFilterEng]    = useState(searchParams.get('eng') || 'all')
   const [engineers, setEngineers]    = useState([])
+
+  useEffect(() => {
+    const params = {}
+    if (view !== 'week') params.view = view
+    params.date = toDateString(current)
+    if (filterEng !== 'all') params.eng = filterEng
+    setSearchParams(params, { replace: true })
+  }, [view, current, filterEng])
 
   useEffect(() => { fetchJobs() }, [current, view, profile])
   useEffect(() => { fetchEngineers() }, [])

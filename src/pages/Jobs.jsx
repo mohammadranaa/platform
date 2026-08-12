@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
@@ -16,6 +16,7 @@ const cName = c => c?.company_name||[c?.first_name,c?.last_name].filter(Boolean)
 export default function Jobs() {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { toast, showToast } = useToast()
   const [jobs, setJobs] = useState([])
   const [clients, setClients] = useState([])
@@ -23,18 +24,20 @@ export default function Jobs() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState('list')
-  const [filterStatus, setFilterStatus] = useState('All')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'All')
   const [filterMonth, setFilterMonth] = useState(() => {
+    const fromUrl = searchParams.get('month')
+    if (fromUrl) return fromUrl
     const now = new Date()
     return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
   })
-  const [search, setSearch] = useState('')
-  const [filterPayment, setFilterPayment] = useState('All')
-  const [filterSource, setFilterSource] = useState('All')
-  const [filterService, setFilterService] = useState('All')
-  const [filterCertStatus, setFilterCertStatus] = useState('All')
-  const [sortField, setSortField] = useState('created_at')
-  const [sortDir, setSortDir] = useState('desc')
+  const [search, setSearch] = useState(searchParams.get('q') || '')
+  const [filterPayment, setFilterPayment] = useState(searchParams.get('payment') || 'All')
+  const [filterSource, setFilterSource] = useState(searchParams.get('source') || 'All')
+  const [filterService, setFilterService] = useState(searchParams.get('service') || 'All')
+  const [filterCertStatus, setFilterCertStatus] = useState(searchParams.get('cert') || 'All')
+  const [sortField, setSortField] = useState(searchParams.get('sort') || 'created_at')
+  const [sortDir, setSortDir] = useState(searchParams.get('dir') || 'desc')
   const [showNew, setShowNew] = useState(false)
   const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
   const [form, setForm] = useState(blank)
@@ -62,6 +65,21 @@ export default function Jobs() {
   }
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    const defaultMonth = (() => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') })()
+    const params = {}
+    if (filterStatus !== 'All') params.status = filterStatus
+    if (filterMonth !== defaultMonth) params.month = filterMonth
+    if (search) params.q = search
+    if (filterPayment !== 'All') params.payment = filterPayment
+    if (filterSource !== 'All') params.source = filterSource
+    if (filterService !== 'All') params.service = filterService
+    if (filterCertStatus !== 'All') params.cert = filterCertStatus
+    if (sortField !== 'created_at') params.sort = sortField
+    if (sortDir !== 'desc') params.dir = sortDir
+    setSearchParams(params, { replace: true })
+  }, [filterStatus, filterMonth, search, filterPayment, filterSource, filterService, filterCertStatus, sortField, sortDir])
 
   async function load() {
     setLoading(true)

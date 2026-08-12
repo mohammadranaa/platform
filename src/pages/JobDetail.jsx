@@ -369,7 +369,7 @@ export default function JobDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <Btn variant="ghost" small onClick={() => navigate('/jobs')}>← Jobs</Btn>
+            <Btn variant="ghost" small onClick={() => navigate(-1)}>← Back</Btn>
             <span style={{ color: C.accent, fontWeight: 700, fontSize: 14 }}>{job.job_number}</span>
             <span style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}33`, borderRadius: 6, padding: '2px 9px', fontSize: 12, fontWeight: 600 }}>
               {job.status}

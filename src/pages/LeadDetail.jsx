@@ -225,7 +225,7 @@ export default function LeadDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Btn variant="ghost" small onClick={() => navigate('/leads')}>← Leads</Btn>
+            <Btn variant="ghost" small onClick={() => navigate(-1)}>← Back</Btn>
             <span style={{ background: tm.bg, color: tm.color, border: `1px solid ${tm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{tm.label}</span>
             <span style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{lead.status}</span>
           </div>

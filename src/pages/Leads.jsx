@@ -86,7 +86,7 @@ const TABS = [
 export default function Leads() {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { toast, showToast } = useToast()
   const fileRef = useRef()
 
@@ -94,19 +94,19 @@ export default function Leads() {
   const [profiles, setProfiles]   = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0 })
-  const [page, setPage]           = useState(0)
+  const [page, setPage]           = useState(Number(searchParams.get('page')) || 0)
   const PAGE_SIZE = 100
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [tab, setTab]             = useState(searchParams.get('type') || 'all')
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch]       = useState('')
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
+  const [search, setSearch]       = useState(searchParams.get('q') || '')
   const searchTimer = useRef(null)
-  const [filterStatus, setFilterStatus] = useState('All')
-  const [renewalFilter, setRenewalFilter] = useState('All')
-  const [sortField, setSortField]       = useState('created_at')
-  const [sortDir, setSortDir]           = useState('desc')
-  const [filterVerified, setFilterVerified] = useState('All')
+  const [filterStatus, setFilterStatus] = useState(searchParams.get('status') || 'All')
+  const [renewalFilter, setRenewalFilter] = useState(searchParams.get('renewal') || 'All')
+  const [sortField, setSortField]       = useState(searchParams.get('sort') || 'created_at')
+  const [sortDir, setSortDir]           = useState(searchParams.get('dir') || 'desc')
+  const [filterVerified, setFilterVerified] = useState(searchParams.get('verified') || 'All')
   const [selectedIds, setSelectedIds]   = useState(new Set())
   const [bulkAssignTo, setBulkAssignTo] = useState('')
   const [showBulkBar, setShowBulkBar]   = useState(false)
@@ -123,7 +123,32 @@ export default function Leads() {
   const [form, setForm]           = useState({ status: 'New', email_verified: 'Unknown' })
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
-  useEffect(() => { setPage(0); fetchLeads() }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      // First render: respect whatever page came from the URL (e.g. the
+      // user hit "back" after paging through the list) instead of forcing
+      // page 0.
+      didMountRef.current = true
+      fetchLeads(page)
+      return
+    }
+    setPage(0)
+    fetchLeads(0) // explicit 0, not the (still-stale) `page` state
+  }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
+
+  useEffect(() => {
+    const params = {}
+    if (tab !== 'all') params.type = tab
+    if (search) params.q = search
+    if (filterStatus !== 'All') params.status = filterStatus
+    if (renewalFilter !== 'All') params.renewal = renewalFilter
+    if (filterVerified !== 'All') params.verified = filterVerified
+    if (sortField !== 'created_at') params.sort = sortField
+    if (sortDir !== 'desc') params.dir = sortDir
+    if (page > 0) params.page = String(page)
+    setSearchParams(params, { replace: true })
+  }, [tab, search, filterStatus, renewalFilter, filterVerified, sortField, sortDir, page])
 
   async function fetchLeads(p = page) {
     setLoading(true)
@@ -692,10 +717,24 @@ export default function Leads() {
         </>}
 
         {/* Assigned to */}
-        <td style={td}>
-          <span style={{ fontSize: 12, color: C.muted }}>
-            {l.assigned_to ? profiles?.find?.(p => p.id === l.assigned_to)?.full_name || '—' : '—'}
-          </span>
+        <td style={td} onClick={e => e.stopPropagation()}>
+          {isAdmin ? (
+            <select
+              value={l.assigned_to || ''}
+              onChange={async e => {
+                const newAssignee = e.target.value || null
+                await supabase.from('leads').update({ assigned_to: newAssignee }).eq('id', l.id)
+                setLeads(p => p.map(x => x.id === l.id ? { ...x, assigned_to: newAssignee } : x))
+              }}
+              style={{ background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 6, padding: '3px 6px', fontSize: 11, cursor: 'pointer', color: l.assigned_to ? C.text : C.dim, maxWidth: 130 }}>
+              <option value="">Unassigned</option>
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
+          ) : (
+            <span style={{ fontSize: 12, color: C.muted }}>
+              {l.assigned_to ? profiles?.find?.(p => p.id === l.assigned_to)?.full_name || '—' : '—'}
+            </span>
+          )}
         </td>
 
         {/* Status — inline editable */}

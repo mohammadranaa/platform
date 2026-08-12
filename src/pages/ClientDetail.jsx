@@ -160,7 +160,7 @@ export default function ClientDetail() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Btn variant="ghost" small onClick={() => navigate('/clients')}>← Clients</Btn>
+            <Btn variant="ghost" small onClick={() => navigate(-1)}>← Back</Btn>
             <span style={{ background: tm.bg, color: tm.color, border: `1px solid ${tm.color}44`, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 700 }}>{client.client_type}</span>
             <span style={{ background: client.is_active !== false ? C.greenSoft : C.redSoft, color: client.is_active !== false ? C.greenDark : C.red, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600 }}>
               {client.is_active !== false ? 'Active' : 'Inactive'}
