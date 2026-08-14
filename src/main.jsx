@@ -11,7 +11,6 @@ import ClientDetail from './pages/ClientDetail'
 import Jobs from './pages/Jobs'
 import JobDetail from './pages/JobDetail'
 import Campaigns from './pages/Campaigns'
-import Inboxes from './pages/Inboxes'
 import EmailInbox from './pages/EmailInbox'
 import Templates from './pages/Templates'
 import Properties from './pages/Properties'
@@ -69,7 +68,6 @@ function App() {
             <Route path="calendar" element={<CalendarView />} />
             <Route path="calls" element={<NuacomDialer />} />
             <Route path="campaigns" element={<Campaigns />} />
-            <Route path="inboxes" element={<AdminRoute><Inboxes /></AdminRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

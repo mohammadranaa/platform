@@ -82,7 +82,6 @@ export default function Campaigns() {
   const { toast, showToast } = useToast()
 
   const [campaigns, setCampaigns]   = useState([])
-  const [inboxes, setInboxes]       = useState([])
   const [selected, setSelected]     = useState(null)
   const [contacts, setContacts]     = useState([])
   const [steps, setSteps]           = useState([])
@@ -119,13 +118,11 @@ export default function Campaigns() {
 
   async function fetchAll() {
     setLoading(true)
-    const [{ data: c }, { data: i }, { data: accounts }] = await Promise.all([
+    const [{ data: c }, { data: accounts }] = await Promise.all([
       supabase.from('campaigns').select('*, campaign_contacts(id, lead_id)').order('created_at', { ascending: false }),
-      supabase.from('inboxes').select('id, label, email, is_active').eq('is_active', true),
       supabase.from('user_email_accounts').select('id, gmail_address, display_name').eq('account_type', 'cold').eq('is_active', true).order('gmail_address'),
     ])
     setCampaigns(c || [])
-    setInboxes(i || [])
     setColdAccounts(accounts || [])
     // Default: select ALL accounts so rotation starts immediately (only on first load)
     setSelectedInboxIds(prev => prev.length === 0 ? (accounts || []).map(a => a.id) : prev)
@@ -809,7 +806,7 @@ export default function Campaigns() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cold Email Campaigns</h1>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{campaigns.length} campaigns · {inboxes.length} active inboxes</div>
+          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{campaigns.length} campaigns · {coldAccounts.length} active inboxes</div>
         </div>
         <Btn onClick={openNewCampaign}>+ New Campaign</Btn>
       </div>

@@ -26,7 +26,6 @@ const NAV_ITEMS = [
   { to: '/invoices',   icon: '🧾', label: 'Invoices'                  },
   { to: '/campaigns',  icon: '⚡', label: 'Cold Email' },
   { to: '/cold-inbox', icon: '📨', label: 'Cold Inbox',  adminOnly: false },
-  { to: '/inboxes',    icon: '📬', label: 'SMTP Inboxes', adminOnly: true },
 ]
 
 export default function Layout() {

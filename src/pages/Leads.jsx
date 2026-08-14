@@ -499,13 +499,78 @@ export default function Leads() {
       }
     }).filter(Boolean)
 
+    // ── Duplicate detection ──────────────────────────────────────
+    // Reliable key per lead type differs (each type stores its contact
+    // email under a different column), plus a phone fallback for rows
+    // that have no email at all (mainly "verified" leads, which are
+    // often phone-first).
+    const EMAIL_FIELD = { inbound: 'inbound_email', verified: 'email_address', cold_agent: 'cold_email' }
+    const PHONE_FIELDS = {
+      inbound: ['inbound_phone', 'tenant_phone'],
+      verified: ['job_telephone', 'job_mobile'],
+      cold_agent: ['landline_number', 'direct_number'],
+    }
+    const emailField = EMAIL_FIELD[importType]
+    const phoneFields = PHONE_FIELDS[importType]
+    const normEmail = v => (v || '').trim().toLowerCase()
+    const normPhone = v => (v || '').replace(/[^\d]/g, '') // digits only, ignores spacing/formatting differences
+
+    function keyFor(row) {
+      const email = normEmail(row[emailField])
+      if (email) return `e:${email}`
+      for (const f of phoneFields) {
+        const p = normPhone(row[f])
+        if (p) return `p:${p}`
+      }
+      return null // nothing to dedupe on -- let it through
+    }
+
+    // 1. Collapse duplicates within the file itself (keep first occurrence)
+    const seenInFile = new Set()
+    let withinFileDupes = 0
+    const deduped = toInsert.filter(row => {
+      const key = keyFor(row)
+      if (!key) return true
+      if (seenInFile.has(key)) { withinFileDupes++; return false }
+      seenInFile.add(key)
+      return true
+    })
+
+    // 2. Check against leads already in the database (same lead type only)
+    const emailKeys = [...new Set(deduped.map(r => normEmail(r[emailField])).filter(Boolean))]
+    const phoneKeys = [...new Set(deduped.flatMap(r => phoneFields.map(f => normPhone(r[f]))).filter(Boolean))]
+
+    const existingKeys = new Set()
+    if (emailKeys.length) {
+      const { data: existingByEmail } = await supabase.from('leads').select(emailField)
+        .eq('lead_type', importType).in(emailField, emailKeys)
+      for (const r of (existingByEmail || [])) existingKeys.add(`e:${normEmail(r[emailField])}`)
+    }
+    if (phoneKeys.length) {
+      const orClause = phoneFields.map(f => phoneKeys.map(p => `${f}.eq.${p}`).join(',')).join(',')
+      const { data: existingByPhone } = await supabase.from('leads').select(phoneFields.join(','))
+        .eq('lead_type', importType).or(orClause)
+      for (const r of (existingByPhone || [])) {
+        for (const f of phoneFields) { const p = normPhone(r[f]); if (p) existingKeys.add(`p:${p}`) }
+      }
+    }
+
+    let alreadyExisted = 0
+    const finalRows = deduped.filter(row => {
+      const key = keyFor(row)
+      if (key && existingKeys.has(key)) { alreadyExisted++; return false }
+      return true
+    })
+
+    const skippedTotal = withinFileDupes + alreadyExisted
+
     // Batch insert in chunks of 500 to handle large files
     const BATCH_SIZE = 500
     let inserted = 0
     let errors = 0
 
-    for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
-      const batch = toInsert.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < finalRows.length; i += BATCH_SIZE) {
+      const batch = finalRows.slice(i, i + BATCH_SIZE)
       const { error } = await supabase.from('leads').insert(batch)
       if (error) {
         console.error('Batch error:', error)
@@ -514,18 +579,19 @@ export default function Leads() {
         inserted += batch.length
       }
       // Update progress
-      showToast(`Importing… ${inserted} / ${toInsert.length}`)
+      showToast(`Importing… ${inserted} / ${finalRows.length}`)
     }
 
     setImporting(false)
 
+    const dupeNote = skippedTotal > 0 ? ` · ${skippedTotal} duplicate${skippedTotal === 1 ? '' : 's'} skipped` : ''
     if (errors > 0) {
-      showToast(`${inserted} imported, ${errors} batches failed — check console`, 'error')
+      showToast(`${inserted} imported, ${errors} batches failed — check console${dupeNote}`, 'error')
     } else if (importType === 'inbound') {
-      const paid = toInsert.filter(r => r.status === 'Accepted').length
-      showToast(`✓ ${inserted} leads imported · ${paid} auto-converted (paid)`)
+      const paid = finalRows.filter(r => r.status === 'Accepted').length
+      showToast(`✓ ${inserted} leads imported · ${paid} auto-converted (paid)${dupeNote}`)
     } else {
-      showToast(`✓ ${inserted} leads imported`)
+      showToast(`✓ ${inserted} leads imported${dupeNote}`)
     }
 
     await fetchLeads()

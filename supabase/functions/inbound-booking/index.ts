@@ -88,15 +88,16 @@ Deno.serve(async (req: Request) => {
   if (data.additionalCharges?.parkingCharge) charges.push('No Free Parking (£10.00)')
   const additionalCharges = charges.length > 0 ? charges.join(', ') : 'None'
 
-  // ── Skip partial form fills — only create lead for meaningful statuses ──
+  // Partial form fills still carry real, useful data (by step 3-4 the
+  // customer has usually entered address/services/appointment details) --
+  // we must NOT throw that away, or a customer who pays before the form
+  // ever reaches a "complete" status ends up with a lead that has nothing
+  // in it except whatever Stripe's payment webhook can supply (name, email,
+  // amount -- no address, no services, no appointment). We only suppress
+  // the staff notification/activity-log noise for partial steps; the lead
+  // record itself is always saved so later calls (including the Stripe
+  // webhook, which matches by this same sessionId) can find and enrich it.
   const isPartial = formStatus.includes('Partial')
-  if (isPartial) {
-    // Don't create a lead for partial fills — just acknowledge
-    return new Response(JSON.stringify({ ok: true, action: 'skipped_partial' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    })
-  }
 
   // ── Determine platform lead status ────────────────────────
   // Map website status → platform status
@@ -176,43 +177,47 @@ Deno.serve(async (req: Request) => {
     leadId = newLead.id
   }
 
-  // ── Create notification ───────────────────────────────────
-  const notifTitle = paymentStatus.toLowerCase() === 'paid'
-    ? `✅ New PAID booking — ${customerName}`
-    : formStatus === 'Pending Payment'
-    ? `⏳ Checkout started — ${customerName}`
-    : formStatus.includes('Abandoned')
-    ? `👀 Abandoned at review — ${customerName}`
-    : formStatus.includes('Saved Quote')
-    ? `💾 Saved quote — ${customerName}`
-    : `📋 New inbound lead — ${customerName}`
+  // ── Create notification (skip for partial steps -- don't spam the team
+  // every time a customer types another form field) ──
+  if (!isPartial) {
+    const notifTitle = paymentStatus.toLowerCase() === 'paid'
+      ? `✅ New PAID booking — ${customerName}`
+      : formStatus === 'Pending Payment'
+      ? `⏳ Checkout started — ${customerName}`
+      : formStatus.includes('Abandoned')
+      ? `👀 Abandoned at review — ${customerName}`
+      : formStatus.includes('Saved Quote')
+      ? `💾 Saved quote — ${customerName}`
+      : `📋 New inbound lead — ${customerName}`
 
-  await supabase.from('notifications').insert({
-    type: 'system',
-    title: notifTitle,
-    body: `${servicesReadable || 'No services'} · £${totalPrice || 0} · ${streetAddress}, ${postcode}`,
-    link: `/leads/${leadId}`,
-  })
+    await supabase.from('notifications').insert({
+      type: 'system',
+      title: notifTitle,
+      body: `${servicesReadable || 'No services'} · £${totalPrice || 0} · ${streetAddress}, ${postcode}`,
+      link: `/leads/${leadId}`,
+    })
 
-  // ── Log activity ──────────────────────────────────────────
-  await supabase.from('activities').insert({
-    lead_id: leadId,
-    rep_name: 'System',
-    activity_type: 'system',
-    title: `Website booking received — ${formStatus}`,
-    body: `${customerName} · ${servicesReadable} · £${totalPrice || 0} · Payment: ${paymentStatus}`,
-    metadata: {
-      session_id: sessionId,
-      form_status: formStatus,
-      payment_status: paymentStatus,
-      source: 'website-form',
-    },
-  })
+    // ── Log activity ──────────────────────────────────────────
+    await supabase.from('activities').insert({
+      lead_id: leadId,
+      rep_name: 'System',
+      activity_type: 'system',
+      title: `Website booking received — ${formStatus}`,
+      body: `${customerName} · ${servicesReadable} · £${totalPrice || 0} · Payment: ${paymentStatus}`,
+      metadata: {
+        session_id: sessionId,
+        form_status: formStatus,
+        payment_status: paymentStatus,
+        source: 'website-form',
+      },
+    })
+  }
 
   return new Response(JSON.stringify({
     ok: true,
     lead_id: leadId,
     status: leadStatus,
+    partial: isPartial,
     action: existingLead ? 'updated' : 'created',
   }), {
     status: 200,

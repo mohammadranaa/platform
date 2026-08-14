@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+// Never put the client *secret* in a VITE_ var -- it gets bundled into the
+// shipped JS. gmail-reply reads it from Supabase's server-side secrets.
+
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
   accent: '#0093DB', accentSoft: '#E6F4FC',
@@ -61,9 +65,18 @@ export default function EmailCompose({ onClose, context = {} }) {
   }
 
   async function fetchInboxes() {
-    const { data } = await supabase.from('inboxes').select('id, label, email').eq('is_active', true)
+    const { data } = await supabase.from('user_email_accounts')
+      .select('id, gmail_address, display_name, account_type, token_expiry')
+      .eq('is_active', true)
+      .order('account_type')
     setInboxes(data || [])
-    if (data?.length > 0) setSelectedInbox(data[0].id)
+    const now = new Date()
+    const hasValidToken = a => a.token_expiry && new Date(a.token_expiry) > now
+    const personal = (data || []).find(a => a.account_type === 'personal' && hasValidToken(a))
+    const anyValid = (data || []).find(hasValidToken)
+    if (personal) setSelectedInbox(personal.id)
+    else if (anyValid) setSelectedInbox(anyValid.id)
+    else if (data?.length) setSelectedInbox(data[0].id)
   }
 
   function applyTemplate(templateId) {
@@ -76,13 +89,40 @@ export default function EmailCompose({ onClose, context = {} }) {
 
   async function sendEmail() {
     if (!to || !subject || !body) { setError('To, subject and body are all required'); return }
+    if (!selectedInbox) { setError('No Gmail account connected. Connect one in Email Inbox first.'); return }
     setSending(true)
     setError('')
 
     const inbox = inboxes.find(i => i.id === selectedInbox)
     const tmpl  = templates.find(t => t.id === selectedTemplate)
 
-    // Log to email_log table
+    // Actually send it via Gmail first -- this used to skip straight to
+    // logging a "sent" row without ever calling gmail-reply, so nothing
+    // ever left the outbox even though the UI said "Email logged successfully".
+    const { data, error: fnError } = await supabase.functions.invoke('gmail-reply', {
+      body: {
+        account_id: selectedInbox,
+        to,
+        subject: subject.replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/\u00a3/g, 'GBP'),
+        message: body,
+        client_id: CLIENT_ID,
+      },
+    })
+
+    if (fnError) {
+      setSending(false)
+      let serverSaid = ''
+      try {
+        if (fnError.context && typeof fnError.context.json === 'function') {
+          const errBody = await fnError.context.json()
+          serverSaid = errBody?.error || ''
+        }
+      } catch { /* ignore -- fall back to generic message below */ }
+      setError(serverSaid || fnError.message || 'Send failed -- the email was not delivered')
+      return
+    }
+
+    // Log to email_log table -- only reached after a confirmed real send
     const { error: logErr } = await supabase.from('email_log').insert({
       sent_by:       profile.id,
       sent_by_name:  profile.full_name,
@@ -109,11 +149,11 @@ export default function EmailCompose({ onClose, context = {} }) {
       activity_type: 'email',
       title:         `Email sent: ${subject}`,
       body:          body.slice(0, 500),
-      metadata:      { to_email: to, template: tmpl?.name, inbox: inbox?.email },
+      metadata:      { to_email: to, template: tmpl?.name, inbox: inbox?.gmail_address },
     })
 
     setSending(false)
-    if (logErr) { setError(logErr.message); return }
+    if (logErr) { setError('Email sent, but failed to log to activity feed: ' + logErr.message); return }
     setSent(true)
     setTimeout(() => onClose?.(), 2000)
   }
@@ -171,7 +211,8 @@ export default function EmailCompose({ onClose, context = {} }) {
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>From</div>
                 <select value={selectedInbox} onChange={e => setSelectedInbox(e.target.value)} style={inputStyle}>
-                  {inboxes.map(i => <option key={i.id} value={i.id}>{i.label || i.email}</option>)}
+                  {inboxes.length === 0 && <option value="">No Gmail account connected</option>}
+                  {inboxes.map(i => <option key={i.id} value={i.id}>{i.display_name || i.gmail_address}{i.account_type === 'personal' ? ' (personal)' : ''}</option>)}
                 </select>
               </div>
 
@@ -201,7 +242,7 @@ export default function EmailCompose({ onClose, context = {} }) {
               <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
                 <button onClick={sendEmail} disabled={sending || !to || !subject || !body}
                   style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: sending ? 0.7 : 1, flex: 1 }}>
-                  {sending ? 'Logging…' : '📤 Send & Log'}
+                  {sending ? 'Sending…' : '📤 Send'}
                 </button>
                 <button onClick={onClose} style={{ background: '#fff', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                   Discard
@@ -209,7 +250,7 @@ export default function EmailCompose({ onClose, context = {} }) {
               </div>
 
               <div style={{ fontSize: 11, color: C.dim, textAlign: 'center' }}>
-                Email is logged to the activity feed of the linked record
+                Sent from your connected Gmail account, and logged to the activity feed of the linked record
               </div>
             </>
           )}
