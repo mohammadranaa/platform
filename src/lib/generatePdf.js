@@ -1,11 +1,17 @@
 import jsPDF from 'jspdf'
 import { getCompany } from './companies'
+import { MLC_ICON } from './logo.js'
 
 const BLUE = [0, 123, 199]
 const DARK = [26, 32, 44]
 const GREY = [107, 114, 128]
 const LIGHT_GREY = [245, 247, 250]
 const RED = [220, 38, 38]
+
+// A4 is 297mm tall. Content below this Y triggers a new page; the fixed
+// footer always sits at FOOTER_Y on every page.
+const PAGE_CONTENT_BOTTOM = 268
+const FOOTER_Y = 282
 
 // Robustly parse a date from ANY of the formats this app might hand us,
 // without ever falling through to the ambiguous `new Date(string)`
@@ -55,34 +61,37 @@ function addDays(d, n) {
 
 // Simple vector "house" logo — no network fetch required, so it can
 // never be the cause of a failed/slow attachment build.
-function drawLogo(doc, x, y, size) {
-  doc.setFillColor(...BLUE)
-  doc.roundedRect(x, y, size, size, 2, 2, 'F')
-  doc.setFillColor(255, 255, 255)
-  // simple house shape
-  const cx = x + size / 2
-  doc.triangle(x + size * 0.15, y + size * 0.5, cx, y + size * 0.15, x + size * 0.85, y + size * 0.5, 'F')
-  doc.rect(x + size * 0.25, y + size * 0.5, size * 0.5, size * 0.35, 'F')
-  doc.setFillColor(128, 209, 0)
-  doc.circle(x + size * 0.78, y + size * 0.28, size * 0.14, 'F')
+function drawLogo(doc, x, y, width) {
+  const height = width * (908 / 832) // match the icon's real (not-quite-square) aspect ratio
+  try {
+    doc.addImage(MLC_ICON, 'PNG', x, y, width, height)
+  } catch (err) {
+    doc.setFillColor(...BLUE)
+    doc.roundedRect(x, y, width, height, 2, 2, 'F')
+  }
+  return height
+}
+
+function fmtMoney(n) {
+  return Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function drawCompanyHeader(doc, co, docTitle, docNumber, dateStr, extraLines = []) {
-  drawLogo(doc, 14, 12, 14)
+  drawLogo(doc, 14, 8, 24)
 
   doc.setTextColor(...BLUE)
   doc.setFontSize(12.5)
   doc.setFont(undefined, 'bold')
-  doc.text(co.name, 31, 17)
+  doc.text(co.name, 43, 16)
 
   doc.setTextColor(...GREY)
   doc.setFontSize(8.5)
   doc.setFont(undefined, 'normal')
-  doc.text(co.address, 31, 22)
-  doc.text(co.phone, 31, 26.5)
-  doc.text(co.email, 31, 31)
+  doc.text(co.address, 43, 21)
+  doc.text(co.phone, 43, 25.5)
+  doc.text(co.email, 43, 30)
   doc.setFontSize(7.5)
-  doc.text(`Co. Reg: ${co.regNumber}`, 31, 35)
+  doc.text(`Co. Reg: ${co.regNumber}`, 43, 34)
 
   doc.setTextColor(...DARK)
   doc.setFontSize(20)
@@ -102,8 +111,8 @@ function drawCompanyHeader(doc, co, docTitle, docNumber, dateStr, extraLines = [
   extraLines.forEach(line => {
     doc.setTextColor(...GREY)
     doc.setFont(undefined, 'normal')
-    doc.setFontSize(9.5)
-    doc.text(line.label, 160, y)
+    doc.setFontSize(9)
+    doc.text(line.label, 148, y)
     doc.setTextColor(...(line.color || DARK))
     doc.setFont(undefined, 'bold')
     doc.text(line.value, 196, y, { align: 'right' })
@@ -147,13 +156,15 @@ function drawBilledToAndJobDetails(doc, startY, { clientName, clientAddress, cli
   let rightY = startY + 6
   doc.setFontSize(9)
   doc.setTextColor(...DARK)
+  const valueX = 138 // clears both "Site: " and the wider "Services: " label with room to spare
+  const valueWrapWidth = 196 - valueX
   if (siteAddress) {
     doc.setFont(undefined, 'bold')
     doc.text('Site: ', 110, rightY)
     doc.setFont(undefined, 'normal')
     doc.setTextColor(...GREY)
-    const lines = doc.splitTextToSize(siteAddress, 78)
-    doc.text(lines, 122, rightY)
+    const lines = doc.splitTextToSize(siteAddress, valueWrapWidth)
+    doc.text(lines, valueX, rightY)
     rightY += lines.length * 4.2
   }
   if (services) {
@@ -163,30 +174,34 @@ function drawBilledToAndJobDetails(doc, startY, { clientName, clientAddress, cli
     doc.setFont(undefined, 'normal')
     doc.setTextColor(...GREY)
     const svcText = Array.isArray(services) ? services.join(', ') : services
-    const lines = doc.splitTextToSize(svcText, 78)
-    doc.text(lines, 128, rightY)
+    const lines = doc.splitTextToSize(svcText, valueWrapWidth)
+    doc.text(lines, valueX, rightY)
     rightY += lines.length * 4.2
   }
 
   return Math.max(leftY, rightY) + 6
 }
 
-function drawItemsTable(doc, items, startY) {
+function drawItemsTable(doc, items, startY, renderContinuationHeader) {
   let y = startY
-  doc.setFillColor(...LIGHT_GREY)
-  doc.rect(14, y, 182, 8, 'F')
-  doc.setFontSize(8)
-  doc.setFont(undefined, 'bold')
-  doc.setTextColor(...GREY)
-  doc.text('DESCRIPTION', 17, y + 5.5)
-  doc.text('QTY', 132, y + 5.5, { align: 'center' })
-  doc.text('UNIT PRICE', 165, y + 5.5, { align: 'right' })
-  doc.text('TOTAL PRICE', 193, y + 5.5, { align: 'right' })
-  y += 12
 
+  function drawColumnHeaderRow() {
+    doc.setFillColor(...LIGHT_GREY)
+    doc.rect(14, y, 182, 8, 'F')
+    doc.setFontSize(8)
+    doc.setFont(undefined, 'bold')
+    doc.setTextColor(...GREY)
+    doc.text('DESCRIPTION', 17, y + 5.5)
+    doc.text('QTY', 132, y + 5.5, { align: 'center' })
+    doc.text('UNIT PRICE', 165, y + 5.5, { align: 'right' })
+    doc.text('TOTAL PRICE', 193, y + 5.5, { align: 'right' })
+    y += 12
+    doc.setFont(undefined, 'normal')
+    doc.setTextColor(...DARK)
+  }
+
+  drawColumnHeaderRow()
   let subtotal = 0
-  doc.setFont(undefined, 'normal')
-  doc.setTextColor(...DARK)
 
   ;(items || []).forEach(item => {
     const qty = Number(item.quantity ?? 1)
@@ -196,28 +211,57 @@ function drawItemsTable(doc, items, startY) {
 
     doc.setFontSize(9.5)
     const desc = doc.splitTextToSize(item.description || '', 108)
+    const rowHeight = Math.max(7, desc.length * 4.6)
+
+    // This row won't fit in what's left on the page -- start a new one
+    // (repeating the letterhead and column headers) instead of letting it
+    // run into the footer or off the bottom of the page.
+    if (y + rowHeight > PAGE_CONTENT_BOTTOM) {
+      doc.addPage()
+      y = renderContinuationHeader()
+      drawColumnHeaderRow()
+      doc.setFontSize(9.5)
+    }
+
     doc.text(desc, 17, y)
     doc.text(String(qty), 132, y, { align: 'center' })
-    doc.text(`£${price.toFixed(2)}`, 165, y, { align: 'right' })
+    doc.text(`£${fmtMoney(price)}`, 165, y, { align: 'right' })
     doc.setFont(undefined, 'bold')
-    doc.text(`£${lineTotal.toFixed(2)}`, 193, y, { align: 'right' })
+    doc.text(`£${fmtMoney(lineTotal)}`, 193, y, { align: 'right' })
     doc.setFont(undefined, 'normal')
 
-    y += Math.max(7, desc.length * 4.6)
+    const rowBottom = y + rowHeight
     doc.setDrawColor(230, 230, 230)
-    doc.line(14, y - 2, 196, y - 2)
+    doc.line(14, rowBottom - 2, 196, rowBottom - 2)
+    // 3mm gap between the separator and the next row's text -- the old
+    // version started the next row only 2mm below the line, which wasn't
+    // enough clearance for tall characters' ascenders, so text visibly
+    // touched the separator on real (non-trivial) descriptions.
+    y = rowBottom + 3
   })
 
   return { y: y + 4, subtotal }
 }
 
+// Ensures at least `needed` mm of space remains before the footer; starts a
+// new page (repeating the letterhead) first if not. Used before drawing the
+// summary box / payment footer, which are shorter and simpler than the line
+// items table but still shouldn't be allowed to collide with the footer.
+function ensureSpace(doc, y, needed, renderContinuationHeader) {
+  if (y + needed > PAGE_CONTENT_BOTTOM) {
+    doc.addPage()
+    return renderContinuationHeader()
+  }
+  return y
+}
+
 function drawSummaryBox(doc, startY, { subtotal, discount = 0, total, paid = 0 }) {
   const boxX = 130, boxW = 66
   let y = startY
-  const rows = [{ label: 'SUBTOTAL:', value: `£${subtotal.toFixed(2)}` }]
-  if (discount > 0) rows.push({ label: 'DISCOUNT:', value: `-£${discount.toFixed(2)}` })
-  rows.push({ label: 'TOTAL:', value: `£${total.toFixed(2)}`, bold: true })
-  if (paid > 0) rows.push({ label: 'PAID:', value: `£${paid.toFixed(2)}` })
+  const rows = [{ label: 'SUBTOTAL:', value: `£${fmtMoney(subtotal)}` }]
+  if (discount > 0) rows.push({ label: 'DISCOUNT:', value: `-£${fmtMoney(discount)}` })
+  rows.push({ label: 'TOTAL:', value: `£${fmtMoney(total)}`, bold: true })
+  if (paid > 0) rows.push({ label: 'PAID:', value: `£${fmtMoney(paid)}` })
 
   doc.setFontSize(9.5)
   rows.forEach(r => {
@@ -237,7 +281,7 @@ function drawSummaryBox(doc, startY, { subtotal, discount = 0, total, paid = 0 }
   doc.setTextColor(...GREY)
   doc.text('BALANCE DUE:', boxX + 2, y + 1.5)
   doc.setTextColor(...BLUE)
-  doc.text(`£${balanceDue.toFixed(2)}`, 194, y + 1.5, { align: 'right' })
+  doc.text(`£${fmtMoney(balanceDue)}`, 194, y + 1.5, { align: 'right' })
 
   return y + 12
 }
@@ -275,7 +319,7 @@ function drawInvoiceFooter(doc, startY, co, { invoiceNumber, total, dueDateStr }
   doc.setFont(undefined, 'bold')
   doc.setFontSize(9.5)
   doc.text(`Invoice #${invoiceNumber}`, 196, ry, { align: 'right' }); ry += 5.5
-  doc.text(`£${total.toFixed(2)} due by ${dueDateStr}`, 196, ry, { align: 'right' }); ry += 5.5
+  doc.text(`£${fmtMoney(total)} due by ${dueDateStr}`, 196, ry, { align: 'right' }); ry += 5.5
   doc.setFont(undefined, 'italic')
   doc.setTextColor(...GREY)
   doc.setFontSize(8)
@@ -284,16 +328,25 @@ function drawInvoiceFooter(doc, startY, co, { invoiceNumber, total, dueDateStr }
   return Math.max(y, ry) + 10
 }
 
-function drawBottomStrip(doc, co, y) {
-  doc.setDrawColor(230, 230, 230)
-  doc.line(14, y, 196, y)
-  doc.setFontSize(7)
-  doc.setTextColor(...GREY)
-  doc.setFont(undefined, 'normal')
-  doc.text(
-    `Company Registration Number ${co.regNumber} · Registered Office: ${co.name}, ${co.address}, United Kingdom`,
-    105, y + 6, { align: 'center' }
-  )
+function drawFooterOnAllPages(doc, co) {
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setDrawColor(230, 230, 230)
+    doc.line(14, FOOTER_Y, 196, FOOTER_Y)
+    doc.setFontSize(7)
+    doc.setTextColor(...GREY)
+    doc.setFont(undefined, 'normal')
+    doc.text(
+      `Company Registration Number ${co.regNumber} · Registered Office: ${co.name}, ${co.address}, United Kingdom`,
+      105, FOOTER_Y + 6, { align: 'center' }
+    )
+    if (pageCount > 1) {
+      doc.setFontSize(7)
+      doc.setTextColor(...GREY)
+      doc.text(`Page ${i} of ${pageCount}`, 105, FOOTER_Y + 10, { align: 'center' })
+    }
+  }
 }
 
 // ── PUBLIC: Invoice ──────────────────────────────────────────────
@@ -312,19 +365,28 @@ export function buildInvoicePdf({
   const issueDate = parseFlexibleDate(date)
   const dueDate = addDays(issueDate, dueDays)
 
-  let y = drawCompanyHeader(doc, co, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), [
+  const extraLines = [
     { label: 'Date: ', value: formatLongDate(issueDate) },
     { label: 'Due: ', value: formatLongDate(dueDate), color: RED },
-  ])
+  ]
+  // Redraws the same letterhead (logo/company info/doc title/date) on every
+  // continuation page -- this is what makes the header "fixed" across a
+  // multi-page document rather than only appearing once on page 1.
+  const renderContinuationHeader = () => drawCompanyHeader(doc, co, 'TAX INVOICE', invoiceNumber, formatLongDate(issueDate), extraLines)
 
+  let y = renderContinuationHeader()
   y = drawBilledToAndJobDetails(doc, y, { clientName, clientAddress, clientEmail, siteAddress, services })
 
-  const { y: afterTable, subtotal } = drawItemsTable(doc, lineItems, y)
+  const { y: afterTable, subtotal } = drawItemsTable(doc, lineItems, y, renderContinuationHeader)
   const computedTotal = total != null ? Number(total) : subtotal
 
-  y = drawSummaryBox(doc, afterTable + 4, { subtotal, discount, total: computedTotal, paid })
-  y = drawInvoiceFooter(doc, y, co, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
-  drawBottomStrip(doc, co, Math.min(y, 275))
+  y = ensureSpace(doc, afterTable, 40, renderContinuationHeader)
+  y = drawSummaryBox(doc, y + 4, { subtotal, discount, total: computedTotal, paid })
+
+  y = ensureSpace(doc, y, 45, renderContinuationHeader)
+  drawInvoiceFooter(doc, y, co, { invoiceNumber, total: computedTotal, dueDateStr: formatLongDate(dueDate) })
+
+  drawFooterOnAllPages(doc, co)
 
   return { doc, base64: docToBase64(doc), filename: `Invoice_${invoiceNumber || 'INV'}.pdf` }
 }
@@ -341,44 +403,26 @@ export function buildQuotePdf({
   const doc = new jsPDF()
   const issueDate = parseFlexibleDate(date)
 
-  let y = drawCompanyHeader(doc, co, 'QUOTE', quoteNumber, formatLongDate(issueDate), [
+  const extraLines = [
     { label: 'Date: ', value: formatLongDate(issueDate) },
     { label: 'Valid Until: ', value: validUntil ? formatLongDate(validUntil) : 'N/A' },
-  ])
+  ]
+  const renderContinuationHeader = () => drawCompanyHeader(doc, co, 'QUOTE', quoteNumber, formatLongDate(issueDate), extraLines)
 
+  let y = renderContinuationHeader()
   y = drawBilledToAndJobDetails(doc, y, { clientName, clientAddress, clientEmail, siteAddress, services })
 
-  const { y: afterTable, subtotal } = drawItemsTable(doc, lineItems, y)
+  const { y: afterTable, subtotal } = drawItemsTable(doc, lineItems, y, renderContinuationHeader)
   const computedTotal = total != null ? Number(total) : subtotal
 
-  y = drawSummaryBox(doc, afterTable + 4, { subtotal, total: computedTotal, paid: 0 })
+  y = ensureSpace(doc, afterTable, 40, renderContinuationHeader)
+  y = drawSummaryBox(doc, y + 4, { subtotal, total: computedTotal, paid: 0 })
 
+  // Quotes never show bank/account details -- that's invoice-only. Just the
+  // acceptance line and any notes.
+  y = ensureSpace(doc, y, 30, renderContinuationHeader)
   doc.setDrawColor(220, 220, 220)
   doc.line(14, y, 196, y)
-  y += 8
-
-  // How to Pay / bank details -- matches the reference quote template
-  doc.setFontSize(9)
-  doc.setFont(undefined, 'bold')
-  doc.setTextColor(...BLUE)
-  doc.text('How to Pay', 14, y)
-  y += 5.5
-  doc.setFont(undefined, 'normal')
-  doc.setTextColor(...DARK)
-  doc.setFontSize(8.5)
-  doc.text('We accept payment by: Bank Transfer or Pay Online', 14, y)
-  y += 6
-  doc.setFont(undefined, 'bold')
-  doc.text('Bank Details', 14, y)
-  y += 5
-  doc.setFont(undefined, 'normal')
-  doc.text(`Account Name: ${co.bankAccountName}`, 14, y); y += 4.5
-  doc.text(`Sort Code: ${co.sortCode}`, 14, y); y += 4.5
-  doc.text(`Account Number: ${co.accountNumber}`, 14, y); y += 5.5
-  doc.setTextColor(...RED)
-  doc.setFont(undefined, 'bold')
-  doc.setFontSize(8)
-  doc.text('Note: Please Put Invoice Number As Reference', 14, y)
   y += 8
 
   doc.setFontSize(9)
@@ -387,6 +431,7 @@ export function buildQuotePdf({
   doc.text('To accept this quote, please reply to this email or call us on ' + co.phone + '.', 14, y)
   y += 6
   if (notes) {
+    y = ensureSpace(doc, y, 15, renderContinuationHeader)
     doc.setFont(undefined, 'italic')
     doc.setTextColor(...GREY)
     doc.setFontSize(8.5)
@@ -394,7 +439,7 @@ export function buildQuotePdf({
     y += 10
   }
 
-  drawBottomStrip(doc, co, Math.min(y + 6, 275))
+  drawFooterOnAllPages(doc, co)
 
   return { doc, base64: docToBase64(doc), filename: `Quote_${quoteNumber || 'QT'}.pdf` }
 }
