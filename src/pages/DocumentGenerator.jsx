@@ -310,7 +310,7 @@ export default function DocumentGenerator() {
         total:           totalVal,
         amount_paid:     paidVal,
         balance_due:     balanceVal,
-        status:          balanceVal <= 0 ? 'paid' : 'draft',
+        status:          balanceVal <= 0 ? 'Paid' : (paidVal > 0 ? 'Partial Paid' : 'Draft'),
         created_by:      profile.id,
         created_by_name: profile.full_name,
         date:            new Date().toISOString().slice(0, 10),
