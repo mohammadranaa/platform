@@ -19,15 +19,14 @@ function fail(msg: string, status = 400) {
 }
 
 function cleanSubject(s: string): string {
-  return (s || '').replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/\u00a3/g, 'GBP').replace(/[^\x00-\x7F]/g, '').trim()
+  return (s || '').replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/[^\x00-\x7F]/g, '').trim()
 }
 
 async function refreshToken(account: any, clientId: string, clientSecret: string): Promise<string> {
   if (new Date() < new Date(account.token_expiry)) return account.access_token
-  if (!account.refresh_token) throw new Error(`${account.gmail_address} needs to be reconnected in Email Inbox`)
-  if (!clientId || !clientSecret) throw new Error('Missing Google OAuth credentials')
+  if (!account.refresh_token) throw new Error(`${account.gmail_address} needs to be reconnected`)
+  if (!clientId || !clientSecret) throw new Error('Missing Google OAuth credentials — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as Supabase secrets')
 
-  console.log(`Refreshing token for ${account.gmail_address}...`)
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -35,20 +34,43 @@ async function refreshToken(account: any, clientId: string, clientSecret: string
   })
   const data = await res.json()
   if (!data.access_token) throw new Error(`Token refresh failed: ${data.error_description || data.error || 'unknown'}`)
-
   const expiry = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
   await supabase.from('user_email_accounts').update({ access_token: data.access_token, token_expiry: expiry }).eq('id', account.id)
   console.log(`Token refreshed for ${account.gmail_address}`)
   return data.access_token
 }
 
+// Convert Uint8Array to base64 in chunks to avoid stack overflow on large files
+function uint8ToBase64(bytes: Uint8Array): string {
+  const CHUNK = 8192
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+function b64Lines(b64: string): string {
+  return b64.replace(/[\r\n\s]/g, '').match(/.{1,76}/g)?.join('\r\n') || b64
+}
+
 function toBase64Url(str: string): string {
   return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function b64Lines(raw: string): string {
-  // Strip whitespace only, split into 76-char lines per RFC 2045
-  return raw.replace(/[\r\n\s]/g, '').match(/.{1,76}/g)?.join('\r\n') || raw
+// Fetch a file from Supabase Storage using service role (no CORS, no size issues)
+async function fetchStorageFile(storagePath: string): Promise<{ data: Uint8Array; contentType: string }> {
+  const { data, error } = await supabase.storage
+    .from('job-files')
+    .download(storagePath)
+
+  if (error || !data) throw new Error(`Storage fetch failed for ${storagePath}: ${error?.message || 'unknown'}`)
+
+  const buffer = await data.arrayBuffer()
+  return {
+    data: new Uint8Array(buffer),
+    contentType: data.type || 'application/pdf',
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -60,11 +82,14 @@ Deno.serve(async (req: Request) => {
 
     const {
       account_id, to, subject, message, thread_id,
-      // Single attachment (legacy)
-      attachment_base64, attachment_name, attachment_mime,
-      // Multiple attachments (new)
+      // For certificates: pass storage paths, edge function fetches them
+      // storage_paths: [{ path: 'job-id/cert.pdf', name: 'EICR.pdf', mime: 'application/pdf' }]
+      storage_paths,
+      // For small attachments: pass base64 directly (invoices, quotes)
       // attachments: [{ base64, name, mime }]
       attachments,
+      // Legacy single attachment
+      attachment_base64, attachment_name, attachment_mime,
     } = body
 
     const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
@@ -81,10 +106,26 @@ Deno.serve(async (req: Request) => {
     const safeSubject = cleanSubject(subject || 'My Landlord Certificate')
     const boundary = 'MLC' + Date.now()
 
-    // Normalise attachments — support both single and multiple
-    // All base64 content comes from the frontend (browser already read the files)
-    // Edge function never fetches files — no memory spike from file loading
-    const allAttachments: { base64: string; name: string; mime: string }[] = []
+    // Build attachment list
+    // Strategy A: storage_paths — edge function fetches from storage (for large files like certs)
+    // Strategy B: attachments array — base64 already prepared by frontend (for small files)
+    // Strategy C: legacy single attachment_base64
+    type Attachment = { base64: string; name: string; mime: string }
+    const allAttachments: Attachment[] = []
+
+    if (storage_paths && Array.isArray(storage_paths)) {
+      for (const sp of storage_paths) {
+        if (!sp.path) continue
+        console.log(`Fetching from storage: ${sp.path}`)
+        const { data: fileBytes, contentType } = await fetchStorageFile(sp.path)
+        allAttachments.push({
+          base64: uint8ToBase64(fileBytes),
+          name: sp.name || sp.path.split('/').pop() || 'Certificate.pdf',
+          mime: sp.mime || contentType || 'application/pdf',
+        })
+        console.log(`Fetched ${sp.name}: ${fileBytes.length} bytes`)
+      }
+    }
 
     if (attachments && Array.isArray(attachments)) {
       for (const a of attachments) {
@@ -94,9 +135,8 @@ Deno.serve(async (req: Request) => {
       allAttachments.push({ base64: attachment_base64, name: attachment_name, mime: attachment_mime || 'application/pdf' })
     }
 
-    // Build RFC 2822 MIME message
+    // Build MIME message
     let mime: string
-
     if (allAttachments.length > 0) {
       const parts = [
         `From: ${fromName} <${fromAddr}>`,
@@ -106,7 +146,6 @@ Deno.serve(async (req: Request) => {
         'MIME-Version: 1.0',
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         '',
-        // Text body
         `--${boundary}`,
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: quoted-printable',
@@ -114,8 +153,6 @@ Deno.serve(async (req: Request) => {
         message.replace(/\n/g, '\r\n'),
         '',
       ]
-
-      // One MIME part per attachment
       for (const att of allAttachments) {
         parts.push(
           `--${boundary}`,
@@ -127,12 +164,9 @@ Deno.serve(async (req: Request) => {
           '',
         )
       }
-
       parts.push(`--${boundary}--`)
       mime = parts.join('\r\n')
-
     } else {
-      // Plain text, no attachments
       mime = [
         `From: ${fromName} <${fromAddr}>`,
         `To: ${to}`,
@@ -146,6 +180,8 @@ Deno.serve(async (req: Request) => {
       ].join('\r\n')
     }
 
+    console.log(`Sending to ${to} with ${allAttachments.length} attachment(s)`)
+
     const sendRes = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -158,21 +194,19 @@ Deno.serve(async (req: Request) => {
       return fail(sendData.error.message || 'Gmail send failed')
     }
 
-    console.log(`Sent to ${to} with ${allAttachments.length} attachment(s). Message ID: ${sendData.id}`)
+    console.log(`Email sent. Message ID: ${sendData.id}`)
 
-    // Cache in gmail_messages (non-critical)
     try {
       await supabase.from('gmail_messages').insert({
         account_id: account.id, gmail_id: sendData.id,
         thread_id: sendData.threadId || thread_id,
         from_email: fromAddr, from_name: fromName,
         to_email: to, subject: safeSubject,
-        body_text: message.slice(0, 500),
-        snippet: message.slice(0, 200),
+        body_text: message.slice(0, 500), snippet: message.slice(0, 200),
         date: new Date().toISOString(),
         is_read: true, is_reply: false, mail_type: 'sent', labels: ['SENT'],
       })
-    } catch (e) { console.log('gmail_messages cache skipped') }
+    } catch (e) { /* non-critical */ }
 
     return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length })
 

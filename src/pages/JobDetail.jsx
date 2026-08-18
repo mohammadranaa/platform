@@ -1205,36 +1205,17 @@ export default function JobDetail() {
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
           buildAttachments={async () => {
-            // Get ALL certificate files, not just the first one
-            const certFiles = (job.job_files || []).filter(f =>
-              f.file_type === 'certificate' ||
-              f.file_name?.toLowerCase().includes('cert') ||
-              f.file_name?.toLowerCase().endsWith('.pdf')
-            )
-
+            const certFiles = (job.job_files || []).filter(f => f.file_type === 'certificate')
             if (certFiles.length === 0) {
               throw new Error('No certificate files found. Upload them in the Files tab first.')
             }
-
-            // Read all files in parallel, preserving every byte exactly
-            const results = await Promise.all(certFiles.map(async (certFile) => {
-              const res = await fetch(getFileUrl(certFile.storage_path))
-              if (!res.ok) throw new Error('Could not access: ' + certFile.file_name + ' (HTTP ' + res.status + ')')
-
-              const buffer = await res.arrayBuffer()
-              const bytes = new Uint8Array(buffer)
-              let binary = ''
-              for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i])
-              }
-              return {
-                base64: btoa(binary),
-                filename: certFile.file_name || 'Certificate.pdf',
-                mime: res.headers.get('content-type') || 'application/pdf',
-              }
+            // Return storage paths — the edge function fetches the actual files
+            // This avoids loading large PDFs (6MB+) in the browser
+            return certFiles.map(f => ({
+              storagePath: f.storage_path,
+              name: f.file_name || 'Certificate.pdf',
+              mime: f.mime_type || 'application/pdf',
             }))
-
-            return results
           }}
           onClose={() => setShowSendCert(false)}
           onSent={() => { showToast('Certificate sent'); setShowSendCert(false) }}

@@ -90,7 +90,7 @@ export default function SendEmailModal({
       .then(builder)
       .then(results => {
         if (cancelled) return
-        const valid = (Array.isArray(results) ? results : [results]).filter(r => r?.base64)
+        const valid = (Array.isArray(results) ? results : [results]).filter(r => r?.base64 || r?.storagePath)
         if (valid.length === 0) throw new Error('No attachment data returned')
         setAttachmentInfo(valid)
         setBuildingAttachment(false)
@@ -120,18 +120,22 @@ export default function SendEmailModal({
 
     setSending(true)
 
+    const hasStoragePaths = attachmentInfo.length > 0 && attachmentInfo[0].storagePath
+
     const payload = {
       account_id: accountId,
       to: toAddr,
       subject: cleanSubject(subjectVal),
       message: bodyVal,
       client_id: CLIENT_ID,
-      // Always an array — gmail-reply handles both single and multiple
-      attachments: attachmentInfo.map(a => ({
-        base64: a.base64,
-        name: a.filename || a.name,
-        mime: a.mime || 'application/pdf',
-      })),
+      // If storage paths: edge function fetches the files (large certs)
+      // If base64: send directly (invoices, quotes generated client-side)
+      ...(hasStoragePaths
+        ? { storage_paths: attachmentInfo.map(a => ({ path: a.storagePath, name: a.name, mime: a.mime })) }
+        : attachmentInfo.length > 0
+          ? { attachments: attachmentInfo.map(a => ({ base64: a.base64, name: a.filename || a.name, mime: a.mime })) }
+          : {}
+      ),
     }
 
     try {
@@ -269,10 +273,10 @@ export default function SendEmailModal({
                 ) : attachmentInfo.length > 0 ? (
                   <>
                     <div style={{ fontWeight: 600, fontSize: 13, color: C.green, marginBottom: 4 }}>
-                      📎 {attachmentInfo.length} attachment{attachmentInfo.length > 1 ? 's' : ''}
+                      📎 {attachmentInfo.length} file{attachmentInfo.length > 1 ? 's' : ''} will be attached
                     </div>
                     {attachmentInfo.map((a, i) => (
-                      <div key={i} style={{ fontSize: 11, color: C.muted }}>{a.filename || a.name}</div>
+                      <div key={i} style={{ fontSize: 11, color: C.muted }}>{a.name || a.filename}</div>
                     ))}
                   </>
                 ) : (
