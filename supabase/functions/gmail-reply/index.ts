@@ -14,7 +14,7 @@ const CORS = {
 function ok(data: any) {
   return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json', ...CORS } })
 }
-function err(msg: string, status = 400) {
+function fail(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), { status, headers: { 'Content-Type': 'application/json', ...CORS } })
 }
 
@@ -25,7 +25,7 @@ function cleanSubject(s: string): string {
 async function refreshToken(account: any, clientId: string, clientSecret: string): Promise<string> {
   if (new Date() < new Date(account.token_expiry)) return account.access_token
   if (!account.refresh_token) throw new Error(`${account.gmail_address} needs to be reconnected in Email Inbox`)
-  if (!clientId || !clientSecret) throw new Error('Missing Google OAuth credentials — set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET as Supabase secrets')
+  if (!clientId || !clientSecret) throw new Error('Missing Google OAuth credentials')
 
   console.log(`Refreshing token for ${account.gmail_address}...`)
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -42,9 +42,13 @@ async function refreshToken(account: any, clientId: string, clientSecret: string
   return data.access_token
 }
 
-// Encode string to base64url for Gmail API raw field
 function toBase64Url(str: string): string {
   return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function b64Lines(raw: string): string {
+  // Strip whitespace only, split into 76-char lines per RFC 2045
+  return raw.replace(/[\r\n\s]/g, '').match(/.{1,76}/g)?.join('\r\n') || raw
 }
 
 Deno.serve(async (req: Request) => {
@@ -52,16 +56,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => null)
-    if (!body) return err('Invalid JSON body')
+    if (!body) return fail('Invalid JSON body')
 
-    const { account_id, to, subject, message, thread_id, attachment_base64, attachment_name, attachment_mime } = body
+    const {
+      account_id, to, subject, message, thread_id,
+      // Single attachment (legacy)
+      attachment_base64, attachment_name, attachment_mime,
+      // Multiple attachments (new)
+      // attachments: [{ base64, name, mime }]
+      attachments,
+    } = body
+
     const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
     const client_secret = body.client_secret || Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
-    if (!account_id || !to || !message) return err('account_id, to, and message are required')
+    if (!account_id || !to || !message) return fail('account_id, to, and message are required')
 
     const { data: account } = await supabase.from('user_email_accounts').select('*').eq('id', account_id).single()
-    if (!account) return err('Account not found', 404)
+    if (!account) return fail('Account not found', 404)
 
     const token = await refreshToken(account, client_id, client_secret)
     const fromName = account.send_as_name || account.display_name || 'My Landlord Certificate'
@@ -69,18 +81,24 @@ Deno.serve(async (req: Request) => {
     const safeSubject = cleanSubject(subject || 'My Landlord Certificate')
     const boundary = 'MLC' + Date.now()
 
-    // Build the RFC 2822 message
-    // IMPORTANT: For attachments, the base64 content comes from the frontend
-    // (where the file was already in memory as a blob). The edge function
-    // never fetches or decodes the file — it only assembles the MIME message.
+    // Normalise attachments — support both single and multiple
+    // All base64 content comes from the frontend (browser already read the files)
+    // Edge function never fetches files — no memory spike from file loading
+    const allAttachments: { base64: string; name: string; mime: string }[] = []
+
+    if (attachments && Array.isArray(attachments)) {
+      for (const a of attachments) {
+        if (a.base64 && a.name) allAttachments.push({ base64: a.base64, name: a.name, mime: a.mime || 'application/pdf' })
+      }
+    } else if (attachment_base64 && attachment_name) {
+      allAttachments.push({ base64: attachment_base64, name: attachment_name, mime: attachment_mime || 'application/pdf' })
+    }
+
+    // Build RFC 2822 MIME message
     let mime: string
 
-    if (attachment_base64 && attachment_name) {
-      const mimeType = attachment_mime || 'application/pdf'
-      // Split base64 into 76-char lines (RFC 2045) — no decode, just formatting
-      const b64 = attachment_base64.replace(/[\r\n\s]/g, '').match(/.{1,76}/g)?.join('\r\n') || attachment_base64
-
-      mime = [
+    if (allAttachments.length > 0) {
+      const parts = [
         `From: ${fromName} <${fromAddr}>`,
         `To: ${to}`,
         `Subject: ${safeSubject}`,
@@ -88,22 +106,33 @@ Deno.serve(async (req: Request) => {
         'MIME-Version: 1.0',
         `Content-Type: multipart/mixed; boundary="${boundary}"`,
         '',
+        // Text body
         `--${boundary}`,
         'Content-Type: text/plain; charset=UTF-8',
         'Content-Transfer-Encoding: quoted-printable',
         '',
         message.replace(/\n/g, '\r\n'),
         '',
-        `--${boundary}`,
-        `Content-Type: ${mimeType}; name="${attachment_name}"`,
-        'Content-Transfer-Encoding: base64',
-        `Content-Disposition: attachment; filename="${attachment_name}"`,
-        '',
-        b64,
-        '',
-        `--${boundary}--`,
-      ].join('\r\n')
+      ]
+
+      // One MIME part per attachment
+      for (const att of allAttachments) {
+        parts.push(
+          `--${boundary}`,
+          `Content-Type: ${att.mime}; name="${att.name}"`,
+          'Content-Transfer-Encoding: base64',
+          `Content-Disposition: attachment; filename="${att.name}"`,
+          '',
+          b64Lines(att.base64),
+          '',
+        )
+      }
+
+      parts.push(`--${boundary}--`)
+      mime = parts.join('\r\n')
+
     } else {
+      // Plain text, no attachments
       mime = [
         `From: ${fromName} <${fromAddr}>`,
         `To: ${to}`,
@@ -126,8 +155,10 @@ Deno.serve(async (req: Request) => {
     const sendData = await sendRes.json()
     if (sendData.error) {
       console.error('Gmail API error:', JSON.stringify(sendData.error))
-      return err(sendData.error.message || 'Gmail send failed')
+      return fail(sendData.error.message || 'Gmail send failed')
     }
+
+    console.log(`Sent to ${to} with ${allAttachments.length} attachment(s). Message ID: ${sendData.id}`)
 
     // Cache in gmail_messages (non-critical)
     try {
@@ -141,12 +172,12 @@ Deno.serve(async (req: Request) => {
         date: new Date().toISOString(),
         is_read: true, is_reply: false, mail_type: 'sent', labels: ['SENT'],
       })
-    } catch (e) { console.log('gmail_messages cache failed (non-critical)') }
+    } catch (e) { console.log('gmail_messages cache skipped') }
 
-    return ok({ ok: true, message_id: sendData.id })
+    return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length })
 
   } catch (e: any) {
     console.error('gmail-reply error:', e?.message || e)
-    return err(e?.message || 'Unexpected server error', 500)
+    return fail(e?.message || 'Unexpected server error', 500)
   }
 })

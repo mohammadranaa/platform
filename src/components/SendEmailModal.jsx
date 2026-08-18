@@ -33,6 +33,7 @@ export default function SendEmailModal({
   to = '', subject = '', body = '',
   variables = {},              // e.g. { name, inspection_name, property_address }
   buildAttachment = null,      // optional: () => { base64, filename, mime } | Promise<...>
+  buildAttachments = null,     // optional: () => [{ base64, filename, mime }] | Promise<...>
   title = 'Send Email',
   preferPersonal = true,       // default to the main business inbox, not cold accounts
 }) {
@@ -45,8 +46,8 @@ export default function SendEmailModal({
   const [bodyVal, setBodyVal] = useState(fillTemplate(body, variables))
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
-  const [attachmentInfo, setAttachmentInfo] = useState(null) // { filename } once built
-  const [buildingAttachment, setBuildingAttachment] = useState(!!buildAttachment)
+  const [attachmentInfo, setAttachmentInfo] = useState([]) // [{ filename }] once built
+  const [buildingAttachment, setBuildingAttachment] = useState(!!(buildAttachment || buildAttachments))
 
   useEffect(() => {
     supabase.from('user_email_accounts')
@@ -73,25 +74,31 @@ export default function SendEmailModal({
     supabase.from('email_templates').select('id, name, subject, body').then(({ data }) => setTemplates(data || []))
   }, [])
 
-  // Pre-build the attachment as soon as the modal opens, so the user
+  // Pre-build the attachment(s) as soon as the modal opens, so the user
   // sees a clear error immediately if PDF generation fails — instead
   // of finding out only after clicking Send.
   useEffect(() => {
-    if (!buildAttachment) { setBuildingAttachment(false); return }
+    const builder = buildAttachments || (buildAttachment ? async () => {
+      const r = await buildAttachment()
+      return [r]
+    } : null)
+
+    if (!builder) { setBuildingAttachment(false); return }
     let cancelled = false
     setBuildingAttachment(true)
     Promise.resolve()
-      .then(buildAttachment)
-      .then(result => {
+      .then(builder)
+      .then(results => {
         if (cancelled) return
-        if (!result || !result.base64) throw new Error('Attachment builder returned no data')
-        setAttachmentInfo(result)
+        const valid = (Array.isArray(results) ? results : [results]).filter(r => r?.base64)
+        if (valid.length === 0) throw new Error('No attachment data returned')
+        setAttachmentInfo(valid)
         setBuildingAttachment(false)
       })
       .catch(err => {
         if (cancelled) return
         console.error('Attachment build failed:', err)
-        setError('Could not generate attachment: ' + err.message)
+        setError('Could not prepare attachment: ' + err.message)
         setBuildingAttachment(false)
       })
     return () => { cancelled = true }
@@ -107,8 +114,9 @@ export default function SendEmailModal({
     setError('')
     if (!toAddr || !subjectVal || !bodyVal) { setError('To, Subject and Message are required'); return }
     if (!accountId) { setError('No Gmail account connected. Connect one in Email Inbox first.'); return }
-    if (buildAttachment && buildingAttachment) { setError('Attachment is still being prepared, please wait a moment.'); return }
-    if (buildAttachment && !attachmentInfo) { setError('Attachment failed to generate. Fix the error above before sending, or remove the attachment requirement.'); return }
+    const hasAttachmentBuilder = buildAttachment || buildAttachments
+    if (hasAttachmentBuilder && buildingAttachment) { setError('Attachment is still being prepared, please wait a moment.'); return }
+    if (hasAttachmentBuilder && attachmentInfo.length === 0) { setError('Attachment failed to generate. Fix the error above before sending, or remove the attachment requirement.'); return }
 
     setSending(true)
 
@@ -118,11 +126,12 @@ export default function SendEmailModal({
       subject: cleanSubject(subjectVal),
       message: bodyVal,
       client_id: CLIENT_ID,
-    }
-    if (attachmentInfo) {
-      payload.attachment_base64 = attachmentInfo.base64
-      payload.attachment_name = attachmentInfo.filename
-      payload.attachment_mime = attachmentInfo.mime || 'application/pdf'
+      // Always an array — gmail-reply handles both single and multiple
+      attachments: attachmentInfo.map(a => ({
+        base64: a.base64,
+        name: a.filename || a.name,
+        mime: a.mime || 'application/pdf',
+      })),
     }
 
     try {
@@ -247,19 +256,30 @@ export default function SendEmailModal({
           </div>
 
           {/* Attachment status */}
-          {buildAttachment && (
+          {(buildAttachment || buildAttachments) && (
             <div style={{
-              background: buildingAttachment ? '#F5F7FA' : attachmentInfo ? C.greenSoft : C.redSoft,
-              border: `1px solid ${buildingAttachment ? C.border : attachmentInfo ? '#80D10066' : '#DC262644'}`,
-              borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10
+              background: buildingAttachment ? '#F5F7FA' : attachmentInfo.length > 0 ? C.greenSoft : C.redSoft,
+              border: `1px solid ${buildingAttachment ? C.border : attachmentInfo.length > 0 ? '#80D10066' : '#DC262644'}`,
+              borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: 10
             }}>
-              <span style={{ fontSize: 20 }}>{buildingAttachment ? '⏳' : attachmentInfo ? '📎' : '⚠'}</span>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13, color: buildingAttachment ? C.muted : attachmentInfo ? C.green : C.red }}>
-                  {buildingAttachment ? 'Generating attachment...' : attachmentInfo ? attachmentInfo.filename : 'Attachment failed'}
-                </div>
-                <div style={{ fontSize: 11, color: C.muted }}>
-                  {buildingAttachment ? 'Please wait' : attachmentInfo ? 'Will be attached to this email' : 'Fix the error below or contact support'}
+              <span style={{ fontSize: 20 }}>{buildingAttachment ? '⏳' : attachmentInfo.length > 0 ? '📎' : '⚠'}</span>
+              <div style={{ flex: 1 }}>
+                {buildingAttachment ? (
+                  <div style={{ fontWeight: 600, fontSize: 13, color: C.muted }}>Generating attachment...</div>
+                ) : attachmentInfo.length > 0 ? (
+                  <>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: C.green, marginBottom: 4 }}>
+                      📎 {attachmentInfo.length} attachment{attachmentInfo.length > 1 ? 's' : ''}
+                    </div>
+                    {attachmentInfo.map((a, i) => (
+                      <div key={i} style={{ fontSize: 11, color: C.muted }}>{a.filename || a.name}</div>
+                    ))}
+                  </>
+                ) : (
+                  <div style={{ fontWeight: 600, fontSize: 13, color: C.red }}>Attachment failed</div>
+                )}
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                  {buildingAttachment ? 'Please wait' : attachmentInfo.length > 0 ? 'Will be attached to this email' : 'Fix the error below or contact support'}
                 </div>
               </div>
             </div>
@@ -278,7 +298,7 @@ export default function SendEmailModal({
           )}
 
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            <button onClick={send} disabled={sending || !accountId || buildingAttachment}
+            <button onClick={send} disabled={sending || !accountId || buildingAttachment || ((buildAttachment || buildAttachments) && attachmentInfo.length === 0)}
               style={{ background: C.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 28px', fontWeight: 700, fontSize: 14, cursor: 'pointer', flex: 1, opacity: (sending || !accountId || buildingAttachment) ? 0.6 : 1 }}>
               {sending ? '⏳ Sending...' : buildingAttachment ? '⏳ Preparing...' : '📤 Send Email'}
             </button>

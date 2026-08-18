@@ -1199,40 +1199,42 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Certificate"
           to={job.clients?.email || ''}
-          subject={fillJobVars('Your Certificate -- {{inspection_name}} at {{property_address}}')}
+          subject={fillJobVars('Your Certificate' + ((job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : '') + ' -- {{inspection_name}} at {{property_address}}')}
           body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your {{inspection_name}} certificate attached for {{property_address}}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe\'d really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
-          buildAttachment={async () => {
-            const certFile = (job.job_files || []).find(f =>
-              f.file_type === 'certificate' || f.file_name?.toLowerCase().includes('cert')
+          buildAttachments={async () => {
+            // Get ALL certificate files, not just the first one
+            const certFiles = (job.job_files || []).filter(f =>
+              f.file_type === 'certificate' ||
+              f.file_name?.toLowerCase().includes('cert') ||
+              f.file_name?.toLowerCase().endsWith('.pdf')
             )
-            if (!certFile?.storage_path) {
-              throw new Error('No certificate file found. Please upload it in the Files tab first.')
+
+            if (certFiles.length === 0) {
+              throw new Error('No certificate files found. Upload them in the Files tab first.')
             }
 
-            const res = await fetch(getFileUrl(certFile.storage_path))
-            if (!res.ok) {
-              throw new Error('Could not access the certificate file (HTTP ' + res.status + '). It may have been deleted from storage.')
-            }
+            // Read all files in parallel, preserving every byte exactly
+            const results = await Promise.all(certFiles.map(async (certFile) => {
+              const res = await fetch(getFileUrl(certFile.storage_path))
+              if (!res.ok) throw new Error('Could not access: ' + certFile.file_name + ' (HTTP ' + res.status + ')')
 
-            // Read the file as an ArrayBuffer to preserve every byte exactly
-            const buffer = await res.arrayBuffer()
-            const bytes = new Uint8Array(buffer)
+              const buffer = await res.arrayBuffer()
+              const bytes = new Uint8Array(buffer)
+              let binary = ''
+              for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i])
+              }
+              return {
+                base64: btoa(binary),
+                filename: certFile.file_name || 'Certificate.pdf',
+                mime: res.headers.get('content-type') || 'application/pdf',
+              }
+            }))
 
-            // Convert to base64 without any modification to file content
-            let binary = ''
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i])
-            }
-            const base64 = btoa(binary)
-
-            return {
-              base64,
-              filename: certFile.file_name || 'Certificate.pdf',
-              mime: res.headers.get('content-type') || 'application/pdf',
-            }
+            return results
           }}
           onClose={() => setShowSendCert(false)}
           onSent={() => { showToast('Certificate sent'); setShowSendCert(false) }}
