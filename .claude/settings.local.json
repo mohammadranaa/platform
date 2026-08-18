@@ -84,7 +84,11 @@
       "Bash(mkdir catch-fix *)",
       "Bash(unzip -o -q ~/Downloads/catch-fix.zip -d catch-fix)",
       "mcp__claude_ai_Supabase__list_projects",
-      "Bash(supabase projects *2)"
+      "Bash(supabase projects *2)",
+      "Bash(supabase projects *)",
+      "Bash(supabase login *)",
+      "Bash(supabase logout *)",
+      "Bash(supabase orgs *)"
     ]
   }
 }
