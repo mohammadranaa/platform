@@ -127,7 +127,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // Settings > Accounts > Send mail as). Falls back to the connected
   // mailbox's own address if no alias is configured.
   const fromAddr = account.send_as_email || account.gmail_address
-  const boundary = 'mlc' + Date.now().toString(36)
+  const boundary = 'MLC' + Date.now()
 
   // Build RFC 2822 message as a raw string
   // CRITICAL: headers and body must be separated by exactly one blank line
@@ -136,8 +136,11 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (attachment_base64 && attachment_name) {
     const mimeType = attachment_mime || 'application/pdf'
-    // Split attachment into 76-char lines per RFC 2045
-    const b64clean = (attachment_base64 as string).replace(/\s/g, '')
+    // Split attachment into 76-char lines per RFC 2045. This only strips
+    // whitespace added during transport -- it does NOT touch the file bytes
+    // themselves, so the recipient gets back the identical file that was
+    // uploaded.
+    const b64clean = (attachment_base64 as string).replace(/[\r\n\s]/g, '')
     const b64lines = b64clean.match(/.{1,76}/g)?.join('\r\n') || b64clean
 
     mime = [

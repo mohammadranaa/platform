@@ -1205,18 +1205,34 @@ export default function JobDetail() {
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
           buildAttachment={async () => {
-            const certFile = files.find(f => f.file_type === 'certificate')
-            if (!certFile) throw new Error('No certificate file found')
+            const certFile = (job.job_files || []).find(f =>
+              f.file_type === 'certificate' || f.file_name?.toLowerCase().includes('cert')
+            )
+            if (!certFile?.storage_path) {
+              throw new Error('No certificate file found. Please upload it in the Files tab first.')
+            }
+
             const res = await fetch(getFileUrl(certFile.storage_path))
-            if (!res.ok) throw new Error('Could not download certificate file (HTTP ' + res.status + ')')
-            const blob = await res.blob()
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onloadend = () => resolve(reader.result.split(',')[1])
-              reader.onerror = reject
-              reader.readAsDataURL(blob)
-            })
-            return { base64, filename: certFile.file_name || 'Certificate.pdf', mime: blob.type || 'application/pdf' }
+            if (!res.ok) {
+              throw new Error('Could not access the certificate file (HTTP ' + res.status + '). It may have been deleted from storage.')
+            }
+
+            // Read the file as an ArrayBuffer to preserve every byte exactly
+            const buffer = await res.arrayBuffer()
+            const bytes = new Uint8Array(buffer)
+
+            // Convert to base64 without any modification to file content
+            let binary = ''
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i])
+            }
+            const base64 = btoa(binary)
+
+            return {
+              base64,
+              filename: certFile.file_name || 'Certificate.pdf',
+              mime: res.headers.get('content-type') || 'application/pdf',
+            }
           }}
           onClose={() => setShowSendCert(false)}
           onSent={() => { showToast('Certificate sent'); setShowSendCert(false) }}
