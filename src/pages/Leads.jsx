@@ -137,6 +137,24 @@ export default function Leads() {
     fetchLeads(0) // explicit 0, not the (still-stale) `page` state
   }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
 
+  // Restore scroll position after returning from a lead's detail page.
+  // Tab/filters/page already survive via the URL params above — the only
+  // thing not covered is scroll offset, which we save in openLead() below.
+  useEffect(() => {
+    if (loading) return
+    const savedScroll = sessionStorage.getItem('leads_scroll')
+    if (!savedScroll) return
+    requestAnimationFrame(() => {
+      window.scrollTo(0, parseInt(savedScroll, 10) || 0)
+      sessionStorage.removeItem('leads_scroll')
+    })
+  }, [loading])
+
+  function openLead(leadId) {
+    sessionStorage.setItem('leads_scroll', String(window.scrollY))
+    navigate('/leads/' + leadId)
+  }
+
   useEffect(() => {
     const params = {}
     if (tab !== 'all') params.type = tab
@@ -700,7 +718,7 @@ export default function Leads() {
 
         {/* Name — clickable */}
         <td style={td}>
-          <div style={{ fontWeight: 600, color: C.accent, cursor: 'pointer' }} onClick={() => navigate(`/leads/${l.id}`)}>
+          <div style={{ fontWeight: 600, color: C.accent, cursor: 'pointer' }} onClick={() => openLead(l.id)}>
             {displayName(l)}
           </div>
           {l.lead_type === 'verified' && l.company_name && <div style={{ fontSize: 12, color: C.muted }}>{l.contact_first} {l.contact_last}</div>}

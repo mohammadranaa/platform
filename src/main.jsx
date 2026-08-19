@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Leads from './pages/Leads'
+import MyLeads from './pages/MyLeads'
 import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
 import Jobs from './pages/Jobs'
@@ -50,6 +51,7 @@ function App() {
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="leads" element={<Leads />} />
+            <Route path="my-leads" element={<MyLeads />} />
             <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="clients" element={<Clients />} />
             <Route path="clients/:id" element={<ClientDetail />} />

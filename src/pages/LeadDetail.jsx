@@ -242,6 +242,15 @@ export default function LeadDetail() {
             </a>
           )}
           <Btn small variant="ghost" onClick={() => setShowEmail(true)}>✉ Send Email</Btn>
+          {lead.assigned_to !== profile?.id ? (
+            <Btn small variant="success" onClick={() => updateAssignment(profile.id)}>
+              + Claim This Lead
+            </Btn>
+          ) : (
+            <span style={{ background:'#F0FAE0', color:'#3d7a00', borderRadius:8, padding:'7px 14px', fontSize:13, fontWeight:600 }}>
+              ✓ Your Lead
+            </span>
+          )}
           {lead.status !== 'Accepted' && (
             <Btn small variant="success" onClick={() => updateStatus('Accepted')} disabled={saving}>
               ✓ Accept → Client

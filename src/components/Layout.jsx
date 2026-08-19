@@ -16,6 +16,7 @@ const S = {
 
 const NAV_ITEMS = [
   { to: '/',           icon: '◉',  label: 'Dashboard',    exact: true },
+  { to: '/my-leads',   icon: '📋', label: 'My Leads'                  },
   { to: '/leads',      icon: '🎯', label: 'Leads'                     },
   { to: '/clients',    icon: '◎',  label: 'Clients'                   },
   { to: '/jobs',       icon: '🔧', label: 'Jobs'                      },
