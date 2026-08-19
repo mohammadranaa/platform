@@ -66,7 +66,12 @@ export default function NuacomDialer() {
 
   // Recording player
   const [playingId, setPlayingId]       = useState(null)
-  const [liveCall, setLiveCall]         = useState(null)
+
+  // Phone match lookups — { [number]: matches[] } from match_phone(), fetched
+  // once per unique number and cached (not per row/render) since a call list
+  // can be hundreds of rows with many repeat callers.
+  const [phoneMatches, setPhoneMatches] = useState({})
+  const fetchedNumbersRef = useRef(new Set())
 
   useEffect(() => { fetchAll() }, [filterPeriod])
 
@@ -74,16 +79,33 @@ export default function NuacomDialer() {
     const channel = supabase
       .channel('nuacom_live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'nuacom_calls' }, payload => {
-        const call = payload.new
-        setCalls(p => [call, ...p])
-        if (call.call_direction === 'inbound') {
-          setLiveCall(call)
-          setTimeout(() => setLiveCall(null), 15000)
-        }
+        setCalls(p => [payload.new, ...p])
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
+
+  useEffect(() => {
+    const numbers = new Set()
+    calls.forEach(c => {
+      const num = c.call_direction === 'inbound'
+        ? (c.call_caller_number || c.call_caller_number_local)
+        : (c.call_callee_number || c.call_callee_number_local)
+      if (num && !fetchedNumbersRef.current.has(num)) numbers.add(num)
+    })
+    if (numbers.size === 0) return
+    numbers.forEach(n => fetchedNumbersRef.current.add(n))
+    Promise.all([...numbers].map(async n => {
+      const { data } = await supabase.rpc('match_phone', { p_number: n })
+      return [n, data || []]
+    })).then(results => {
+      setPhoneMatches(prev => {
+        const next = { ...prev }
+        results.forEach(([n, data]) => { next[n] = data })
+        return next
+      })
+    })
+  }, [calls])
 
   async function fetchAll() {
     setLoading(true)
@@ -183,21 +205,6 @@ export default function NuacomDialer() {
 
   return (
     <div>
-      {/* Inbound call popup */}
-      {liveCall && (
-        <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 600, background: '#fff', border: `2px solid ${C.green}`, borderRadius: 16, padding: 20, width: 320, boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ background: C.greenSoft, color: C.greenDark, borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>📞 Incoming Call</span>
-            <button onClick={() => setLiveCall(null)} style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 18 }}>✕</button>
-          </div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 4 }}>{liveCall.call_caller_name || 'Unknown Caller'}</div>
-          <div style={{ fontSize: 14, color: C.muted, marginBottom: 12 }}>{liveCall.call_caller_number_local || liveCall.call_caller_number}</div>
-          {liveCall.matched_lead_id && <button onClick={() => { navigate(`/leads/${liveCall.matched_lead_id}`); setLiveCall(null) }} style={{ width: '100%', background: C.accent, color: '#fff', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Open Lead →</button>}
-          {liveCall.matched_client_id && <button onClick={() => { navigate(`/clients/${liveCall.matched_client_id}`); setLiveCall(null) }} style={{ width: '100%', background: C.accent, color: '#fff', border: 'none', borderRadius: 8, padding: 10, fontWeight: 700, cursor: 'pointer', fontSize: 13, marginTop: 6 }}>Open Client →</button>}
-          {!liveCall.matched_lead_id && !liveCall.matched_client_id && <div style={{ fontSize: 12, color: C.amber, background: C.amberSoft, borderRadius: 8, padding: '8px 12px' }}>⚠ Number not found in leads or clients</div>}
-        </div>
-      )}
-
       {/* Hidden audio player */}
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} style={{ display: 'none' }} />
 
@@ -326,6 +333,10 @@ export default function NuacomDialer() {
                 const dirColor  = isMissed ? C.red : isInbound ? C.accent : C.purple
                 const dirBg     = isMissed ? C.redSoft : isInbound ? C.accentSoft : C.purpleSoft
                 const isPlaying = playingId === call.id
+                const callNum = call.call_direction === 'inbound'
+                  ? (call.call_caller_number || call.call_caller_number_local)
+                  : (call.call_callee_number || call.call_callee_number_local)
+                const matches = phoneMatches[callNum] || []
 
                 return (
                   <tr key={call.id}
@@ -382,22 +393,20 @@ export default function NuacomDialer() {
                       )}
                     </td>
                     <td style={td}>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        {call.matched_lead_id && (
-                          <button onClick={() => navigate(`/leads/${call.matched_lead_id}`)}
-                            style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
-                            Lead →
-                          </button>
-                        )}
-                        {call.matched_client_id && (
-                          <button onClick={() => navigate(`/clients/${call.matched_client_id}`)}
-                            style={{ background: C.greenSoft, color: C.greenDark, border: `1px solid ${C.green}44`, borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
-                            Client →
-                          </button>
-                        )}
-                        {!call.matched_lead_id && !call.matched_client_id && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {matches.length === 0 ? (
                           <span style={{ color: C.dim, fontSize: 11 }}>—</span>
-                        )}
+                        ) : matches.map((m, i) => (
+                          <button key={i} onClick={() => navigate(m.link)}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              background: m.entity_type === 'client' ? C.accentSoft : m.entity_type === 'lead' ? C.greenSoft : C.amberSoft,
+                              color: m.entity_type === 'client' ? C.accent : m.entity_type === 'lead' ? C.greenDark : C.amber,
+                              border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600,
+                            }}>
+                            {m.entity_type === 'client' ? '👤' : m.entity_type === 'lead' ? '📋' : '🏠'} {m.entity_name}
+                          </button>
+                        ))}
                       </div>
                     </td>
                   </tr>

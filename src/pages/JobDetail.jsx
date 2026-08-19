@@ -121,8 +121,15 @@ export default function JobDetail() {
   const [selectedQuote, setSelectedQuote] = useState(null)
   const [invoices, setInvoices] = useState([])
   const [jobActivity, setJobActivity] = useState([])
+  const [invoiceTpl, setInvoiceTpl] = useState({ subject: '', body: '' })
+  const [certTpl, setCertTpl] = useState({ subject: '', body: '' })
 
   useEffect(() => { if (id) fetchAll() }, [id])
+
+  const getTemplate = async (name) => {
+    const { data } = await supabase.from('email_templates').select('subject,body').eq('name', name).single()
+    return data
+  }
 
   const fillJobVars = (text) => {
     if (!text || !job) return text || ''
@@ -249,10 +256,33 @@ export default function JobDetail() {
     fetchJob()
   }
 
+  // Fields the log_job_changes() DB trigger already logs on every jobs
+  // UPDATE (with no performed_by info). Skip the manual insert below for
+  // these so we don't create a duplicate entry for the same change.
+  const TRIGGER_LOGGED_FIELDS = ['status', 'payment_status', 'certificate_status', 'site_address', 'scheduled_date', 'engineer_name', 'assigned_to', 'invoice_amount', 'amount_received']
+
   async function saveField(field, value) {
     const { error } = await supabase.from('jobs').update({ [field]: value }).eq('id', id)
     if (error) { showToast(error.message, 'error'); return }
     setJob(prev => ({ ...prev, [field]: value }))
+
+    // Log who made the change for fields the DB trigger doesn't cover, so
+    // we know WHICH rep did it (the trigger's own entries have no attribution).
+    if (!TRIGGER_LOGGED_FIELDS.includes(field)) {
+      try {
+        await supabase.from('activity_log').insert({
+          entity_type: 'job',
+          entity_id: id,
+          action: 'field_edited',
+          field_name: field,
+          new_value: String(value || ''),
+          description: field.replace(/_/g,' ') + ' updated',
+          performed_by: profile?.id,
+          performed_by_name: profile?.full_name,
+        })
+      } catch(e) {}
+    }
+
     showToast('Saved ✓')
   }
 
@@ -414,23 +444,27 @@ export default function JobDetail() {
             style={{ background: '#F0FAE0', color: '#3d7a00', border: '1px solid #80D10066', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             🧾 Generate Invoice
           </button>
-          <button onClick={() => {
+          <button onClick={async () => {
             if (invoices.length === 0) {
               showToast('No invoice found for this job. Create one first using + New Invoice.', 'error')
               return
             }
+            const tpl = await getTemplate('Invoice Email')
+            if (tpl) setInvoiceTpl({ subject: fillJobVars(tpl.subject), body: fillJobVars(tpl.body) })
             setShowSendInvoice(true)
           }}
             style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📧 Send Invoice
           </button>
-          <button onClick={() => {
+          <button onClick={async () => {
             const hasCert = files.some(f => f.file_type === 'certificate')
             const hasLink = job.certificate_file_url
             if (!hasCert && !hasLink) {
               showToast('No certificate attached to this job. Upload one in the Certificates tab first.', 'error')
               return
             }
+            const tpl = await getTemplate('Certificate Delivery')
+            if (tpl) setCertTpl({ subject: fillJobVars(tpl.subject), body: fillJobVars(tpl.body) })
             setShowSendCert(true)
           }}
             style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
@@ -1048,7 +1082,11 @@ export default function JobDetail() {
                       <span style={{ background:sc+'22', color:sc, borderRadius:5, padding:'2px 8px', fontSize:11, fontWeight:600 }}>
                         {inv.status}
                       </span>
-                      <button onClick={() => setShowSendInvoice(true)}
+                      <button onClick={async () => {
+                        const tpl = await getTemplate('Invoice Email')
+                        if (tpl) setInvoiceTpl({ subject: fillJobVars(tpl.subject), body: fillJobVars(tpl.body) })
+                        setShowSendInvoice(true)
+                      }}
                         style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:6, padding:'5px 12px', fontSize:11, cursor:'pointer', fontWeight:600 }}>
                         Send
                       </button>
@@ -1150,8 +1188,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Invoice"
           to={job.clients?.email || ''}
-          subject={fillJobVars('Your Invoice -- {{inspection_name}} at {{property_address}}')}
-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: {{bank_name}}\nAccount Number: {{account_number}}\nSort Code: {{sort_code}}\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+          subject={invoiceTpl.subject || fillJobVars('Your Invoice -- {{inspection_name}} at {{property_address}}')}
+          body={invoiceTpl.body || fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your invoice attached for the {{inspection_name}} at {{property_address}}.\n\nBank Transfer Details:\nAccount Name: {{bank_name}}\nAccount Number: {{account_number}}\nSort Code: {{sort_code}}\n\nIf you have any questions regarding the invoice, please don\'t hesitate to get in touch.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
@@ -1199,8 +1237,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Certificate"
           to={job.clients?.email || ''}
-          subject={fillJobVars('Your Certificate' + ((job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : '') + ' -- {{inspection_name}} at {{property_address}}')}
-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your {{inspection_name}} certificate attached for {{property_address}}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe\'d really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+          subject={certTpl.subject || fillJobVars('Your Certificate' + ((job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : '') + ' -- {{inspection_name}} at {{property_address}}')}
+          body={certTpl.body || fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find your {{inspection_name}} certificate attached for {{property_address}}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe\'d really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}

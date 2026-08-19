@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 import { supabase } from '../lib/supabase'
 import AISidebar from './AISidebar'
+import IncomingCallPopup from './IncomingCallPopup'
 
 const S = {
   sidebarBg:      '#1F2937',
@@ -151,6 +152,7 @@ export default function Layout() {
       </div>
 
       <AISidebar isOpen={aiOpen} onClose={() => setAiOpen(false)} />
+      <IncomingCallPopup />
     </div>
   )
 }
