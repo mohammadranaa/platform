@@ -165,9 +165,19 @@ Deno.serve(async (req: Request) => {
 
     if (!contacts?.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no contacts due' }); continue }
 
-    // Get template
-    let templateSubject = campaign.subject || 'Partnership Opportunity - My Landlord Certificate'
-    let templateBody = campaign.body || `Dear {{first_name}},
+    // Load this campaign's sequence steps (added via the Campaigns page).
+    // A contact's next step is (current_step + 1) — step numbering starts
+    // at 1, current_step starts at 0 on enrollment.
+    const { data: stepsData } = await supabase
+      .from('sequence_steps').select('*').eq('campaign_id', campaign.id).order('step_number')
+    const steps = stepsData || []
+    const stepByNumber = new Map(steps.map((s: any) => [s.step_number, s]))
+    const usesSteps = steps.length > 0
+
+    // Fallback content — only used for legacy campaigns with no sequence
+    // steps configured at all (campaign-level subject/body or template_id).
+    let fallbackSubject = campaign.subject || 'Partnership Opportunity - My Landlord Certificate'
+    let fallbackBody = campaign.body || `Dear {{first_name}},
 
 I hope this email finds you well.
 
@@ -183,16 +193,32 @@ My Landlord Certificate
 020 3996 1070
 info@mylandlordcertificate.co.uk`
 
-    if (campaign.template_id) {
+    if (!usesSteps && campaign.template_id) {
       const { data: tpl } = await supabase.from('email_templates').select('subject, body').eq('id', campaign.template_id).single()
-      if (tpl) { templateSubject = tpl.subject; templateBody = tpl.body }
+      if (tpl) { fallbackSubject = tpl.subject; fallbackBody = tpl.body }
     }
 
     // Send with round-robin rotation respecting per-inbox limits
-    let campaignSent = 0, campaignFailed = 0
+    let campaignSent = 0, campaignFailed = 0, campaignCompleted = 0
     let slotIndex = 0
 
     for (const contact of contacts) {
+      const nextStepNumber = (contact.current_step || 0) + 1
+      let templateSubject = fallbackSubject
+      let templateBody = fallbackBody
+
+      if (usesSteps) {
+        const step: any = stepByNumber.get(nextStepNumber)
+        if (!step) {
+          // No more steps configured for this contact — sequence finished.
+          await supabase.from('campaign_contacts').update({ status: 'completed', next_send_at: null }).eq('id', contact.id)
+          campaignCompleted++
+          continue
+        }
+        templateSubject = step.subject
+        templateBody = step.body_html
+      }
+
       // Find next inbox that still has capacity
       let slot = null
       for (let i = 0; i < inboxSlots.length; i++) {
@@ -226,15 +252,19 @@ info@mylandlordcertificate.co.uk`
 
         await supabase.from('email_sends').insert({
           campaign_id: campaign.id, contact_id: contact.id, inbox_id: account.id,
-          step_number: (contact.current_step || 0) + 1,
+          step_number: nextStepNumber,
           subject, body: emailBody, from_email: account.gmail_address, to_email: contact.email,
           status: 'sent', sent_at: new Date().toISOString(),
           gmail_message_id: gmailMsgId, tracking_id: trackingId,
         })
 
+        // If there's a further step, keep the contact active and schedule
+        // it for that step's delay; otherwise the sequence is complete.
+        const followUpStep: any = usesSteps ? stepByNumber.get(nextStepNumber + 1) : null
         await supabase.from('campaign_contacts').update({
-          current_step: (contact.current_step || 0) + 1,
-          status: 'sent', next_send_at: null,
+          current_step: nextStepNumber,
+          status: followUpStep ? 'active' : (usesSteps ? 'completed' : 'sent'),
+          next_send_at: followUpStep ? new Date(Date.now() + (followUpStep.delay_days || 0) * 86400000).toISOString() : null,
         }).eq('id', contact.id)
 
         if (contact.lead_id) {
@@ -274,7 +304,8 @@ info@mylandlordcertificate.co.uk`
 
     results.push({
       campaign: campaign.name,
-      sent: campaignSent, failed: campaignFailed,
+      sent: campaignSent, failed: campaignFailed, sequence_completed: campaignCompleted,
+      uses_steps: usesSteps,
       per_inbox_limit: perInboxLimit,
       inboxes: inboxSlots.map((s: any) => ({ email: s.account.gmail_address, remaining: s.remaining })),
     })
