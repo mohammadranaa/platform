@@ -121,8 +121,6 @@ export default function JobDetail() {
   const [selectedQuote, setSelectedQuote] = useState(null)
   const [invoices, setInvoices] = useState([])
   const [jobActivity, setJobActivity] = useState([])
-  const [invoiceTpl, setInvoiceTpl] = useState({ subject: '', body: '' })
-  const [certTpl, setCertTpl] = useState({ subject: '', body: '' })
 
   useEffect(() => { if (id) fetchAll() }, [id])
 
@@ -180,14 +178,6 @@ export default function JobDetail() {
       setJob(data)
       setClient(data.clients)
       setRemarksText(data.engineer_remarks || '')
-
-      // Load templates once job is loaded so fillJobVars has access to job data
-      const [invT, certT] = await Promise.all([
-        supabase.from('email_templates').select('subject,body').eq('name','Invoice Email').single(),
-        supabase.from('email_templates').select('subject,body').eq('name','Certificate Delivery').single(),
-      ])
-      if (invT.data) setInvoiceTpl(invT.data)
-      if (certT.data) setCertTpl(certT.data)
     }
 
     const [{ data: clientsData }, { data: profilesData }] = await Promise.all([
@@ -395,6 +385,15 @@ export default function JobDetail() {
   if (!job)    return <div style={{ color: C.red,   padding: 40, textAlign: 'center' }}>Job not found.</div>
 
   const sm = STATUS_STYLE[job.status] || { color: C.muted, bg: C.surface }
+
+  // Direct email copy — built from job data, no email_templates fetch and
+  // no {{var}} substitution, so nobody can change the wording except by
+  // editing this file.
+  const jobClientName = job.clients?.company_name ||
+    [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
+    'Customer'
+  const co = getCompany(detectCompanyKey({ serviceTypes: job.service_types, title: job.title }))
+  const greeting = new Date().getHours() < 12 ? 'Good Morning' : 'Good Afternoon'
 
   return (
     <div>
@@ -1172,7 +1171,7 @@ export default function JobDetail() {
           title="Send Email"
           to={job.clients?.email || ''}
           subject={''}
-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\n\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+          body={`${greeting} ${jobClientName},\n\n\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={{}}
           onClose={() => setShowEmailCompose(false)}
           onSent={() => { showToast('Email sent'); setShowEmailCompose(false) }}
@@ -1183,8 +1182,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Invoice"
           to={job.clients?.email || ''}
-          subject={fillJobVars(invoiceTpl.subject)}
-          body={fillJobVars(invoiceTpl.body)}
+          subject={`Invoice ${invoices[0].invoice_number} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          body={`${greeting} ${jobClientName},\n\nPlease find your invoice attached for the ${(job.service_types||[]).join(', ') || 'services'} at ${job.site_address || 'your property'}.\n\nInvoice Number: ${invoices[0].invoice_number}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nBank Transfer Details:\nAccount Name: ${co.bankAccountName}\nAccount Number: ${co.accountNumber}\nSort Code: ${co.sortCode}\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding the invoice, please don't hesitate to get in touch.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
@@ -1232,8 +1231,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Certificate"
           to={job.clients?.email || ''}
-          subject={fillJobVars(certTpl.subject)}
-          body={fillJobVars(certTpl.body)}
+          subject={`Your Certificate${(job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          body={`${greeting} ${jobClientName},\n\nPlease find your ${(job.service_types||[]).join(', ') || 'certificate'} attached for ${job.site_address || 'your property'}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe'd really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
@@ -1259,8 +1258,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Quote"
           to={job.clients?.email || ''}
-          subject={fillJobVars('Quote ' + (selectedQuote?.quote_number || '') + ' -- {{inspection_name}} at {{property_address}}')}
-          body={fillJobVars('Good Morning/Afternoon {{name}},\n\nPlease find attached your quote for services at {{property_address}}.\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\n\nKind regards,\n{{rep_name}}\nMy Landlord Certificate\n020 3996 1070')}
+          subject={`Quote ${selectedQuote?.quote_number || ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          body={`${greeting} ${jobClientName},\n\nPlease find attached your quote for services at ${job.site_address || 'your property'}.\n\nTo accept this quote, please reply to this email or call us on ${co.phone}.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={{ name: job.clients?.company_name ||
             [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
             'Customer' }}
