@@ -395,6 +395,23 @@ export default function JobDetail() {
   const co = getCompany(detectCompanyKey({ serviceTypes: job.service_types, title: job.title }))
   const greeting = new Date().getHours() < 12 ? 'Good Morning' : 'Good Afternoon'
 
+  // Full variable set for the "Use Template" dropdown inside SendEmailModal
+  // (Invoice Email, Payment Confirmation, Booking Confirmation, Certificate
+  // Delivery, etc.) — every {{key}} those stored templates reference must
+  // be present here, or fillTemplate silently blanks it out.
+  const jobVars = {
+    name: jobClientName,
+    first_name: job.clients?.first_name || jobClientName,
+    inspection_name: (job.service_types || []).join(', ') || 'Property Inspection',
+    property_address: job.site_address || '',
+    date: job.scheduled_date || 'TBC',
+    time_slot: job.scheduled_slot || 'TBC',
+    time_window: job.scheduled_slot || 'TBC',
+    certificate_holder: jobClientName,
+    rep_name: profile?.full_name || 'My Landlord Certificate',
+    renewal_date: '',
+  }
+
   return (
     <div>
       {/* Header */}
@@ -1172,7 +1189,7 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={''}
           body={`${greeting} ${jobClientName},\n\n\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
-          variables={{}}
+          variables={jobVars}
           onClose={() => setShowEmailCompose(false)}
           onSent={() => { showToast('Email sent'); setShowEmailCompose(false) }}
         />
@@ -1184,9 +1201,7 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={`Invoice ${invoices[0].invoice_number} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
           body={`${greeting} ${jobClientName},\n\nPlease find your invoice attached for the ${(job.service_types||[]).join(', ') || 'services'} at ${job.site_address || 'your property'}.\n\nInvoice Number: ${invoices[0].invoice_number}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nBank Transfer Details:\nAccount Name: ${co.bankAccountName}\nAccount Number: ${co.accountNumber}\nSort Code: ${co.sortCode}\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding the invoice, please don't hesitate to get in touch.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
-          variables={{ name: job.clients?.company_name ||
-            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
-            'Customer' }}
+          variables={jobVars}
           buildAttachment={() => {
             const inv = invoices[0]
             const fullClientName = job.clients?.company_name ||
@@ -1233,9 +1248,7 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={`Your Certificate${(job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
           body={`${greeting} ${jobClientName},\n\nPlease find your ${(job.service_types||[]).join(', ') || 'certificate'} attached for ${job.site_address || 'your property'}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe'd really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
-          variables={{ name: job.clients?.company_name ||
-            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
-            'Customer' }}
+          variables={jobVars}
           buildAttachments={async () => {
             const certFiles = (job.job_files || []).filter(f => f.file_type === 'certificate')
             if (certFiles.length === 0) {
@@ -1260,9 +1273,7 @@ export default function JobDetail() {
           to={job.clients?.email || ''}
           subject={`Quote ${selectedQuote?.quote_number || ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
           body={`${greeting} ${jobClientName},\n\nPlease find attached your quote for services at ${job.site_address || 'your property'}.\n\nTo accept this quote, please reply to this email or call us on ${co.phone}.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
-          variables={{ name: job.clients?.company_name ||
-            [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
-            'Customer' }}
+          variables={jobVars}
           buildAttachment={() => {
             const fullClientName = job.clients?.company_name ||
               [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') ||
