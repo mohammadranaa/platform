@@ -254,6 +254,47 @@ export default function JobDetail() {
   // these so we don't create a duplicate entry for the same change.
   const TRIGGER_LOGGED_FIELDS = ['status', 'payment_status', 'certificate_status', 'site_address', 'scheduled_date', 'engineer_name', 'assigned_to', 'invoice_amount', 'amount_received']
 
+  function formatJobCardDate(d) {
+    if (!d) return ''
+    const [y, m, day] = d.split('-')
+    return `${day}/${m}/${y.slice(2)}`
+  }
+
+  // Builds the exact Job Card text format to float to engineers -- always
+  // computed live from the job's current fields, so it never goes stale
+  // and needs no separate data entry.
+  function buildJobCard(job) {
+    const services = (job.service_types || []).filter(Boolean)
+    const contactParts = [job.tenant_name, job.tenant_phone].filter(Boolean)
+    return [
+      `Job Card ${job.job_number || ''}`,
+      '',
+      'Service:',
+      services.length ? services.map(s => `- ${s}`).join('\n') : '- ',
+      '',
+      `Address: ${job.site_address || ''}`,
+      '',
+      `Date: ${formatJobCardDate(job.scheduled_date)}`,
+      '',
+      `Time Slot: ${job.scheduled_slot || ''}`,
+      '',
+      `Name on Certificate: ${job.name_on_certificate || ''}`,
+      '',
+      `Contact For Access: ${contactParts.join(', ')}`,
+      '',
+      `Notes: ${job.job_card_notes || ''}`,
+    ].join('\n')
+  }
+
+  async function copyJobCard() {
+    try {
+      await navigator.clipboard.writeText(buildJobCard(job))
+      showToast('Job card copied ✓')
+    } catch {
+      showToast('Could not copy -- select and copy manually', 'error')
+    }
+  }
+
   async function saveField(field, value) {
     const { error } = await supabase.from('jobs').update({ [field]: value }).eq('id', id)
     if (error) { showToast(error.message, 'error'); return }
@@ -714,11 +755,26 @@ export default function JobDetail() {
             <SiteField label="Postcode"     field="site_postcode" value={job.site_postcode} save={saveField} />
             <SiteField label="Tenant Name"  field="tenant_name"   value={job.tenant_name}   save={saveField} />
             <SiteField label="Tenant Phone" field="tenant_phone"  value={job.tenant_phone}  type="tel" save={saveField} />
+            <SiteField label="Name on Certificate" field="name_on_certificate" value={job.name_on_certificate} save={saveField} />
+            <SiteField label="Job Card Notes" field="job_card_notes" value={job.job_card_notes} save={saveField} />
             {job.access_notes && (
               <div style={{ marginTop: 10, padding: '10px 14px', background: C.amberSoft, border: `1px solid ${C.amber}44`, borderRadius: 8, fontSize: 13, color: C.amber, fontWeight: 600 }}>
                 ⚠ {job.access_notes}
               </div>
             )}
+          </div>
+
+          {/* Job Card -- auto-generated from the fields above, ready to float to the engineer */}
+          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Job Card</div>
+              <button onClick={copyJobCard}
+                style={{ background: C.accentSoft, color: C.accent, border: 'none', borderRadius: 8, padding: '6px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                📋 Copy Job Card
+              </button>
+            </div>
+            <textarea readOnly value={buildJobCard(job)}
+              style={{ width: '100%', minHeight: 220, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.6, color: C.text, resize: 'vertical' }} />
           </div>
 
           {/* Engineer Remarks */}
