@@ -16,6 +16,10 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
+const BOUNCE_SENDER_RE = /mailer-daemon|postmaster|mail-daemon|delivery-notification/i
+const BOUNCE_SUBJECT_RE = /delivery status notification|undeliverable|undelivered mail|delivery failed|failure notice|returned mail/i
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+
 Deno.serve(async (req) => {
   // Google Pub/Sub sends a POST with a base64-encoded message
   if (req.method !== 'POST') {
@@ -174,6 +178,14 @@ async function processIncomingMessage(gmailMessage: any, account: any, accessTok
   const bodyText = extractBody(gmailMessage.payload, 'text/plain')
   const bodyHtml = extractBody(gmailMessage.payload, 'text/html')
 
+  // Bounce notifications (mailer-daemon etc) aren't real replies from a
+  // contact -- track them against the sending inbox's health and stop,
+  // rather than trying to thread them as a normal inbound message.
+  if (account.account_type === 'cold' && (BOUNCE_SENDER_RE.test(fromAddress) || BOUNCE_SUBJECT_RE.test(subject || ''))) {
+    await handleBounce(account, subject, gmailMessage.snippet || '', bodyText)
+    return
+  }
+
   // Find or create the thread in our DB
   let thread = await findOrCreateThread({
     account,
@@ -287,10 +299,12 @@ async function findOrCreateThread({ account, gmailThreadId, subject, fromAddress
 // ── Handle a reply to a campaign email ───────────────────────
 async function handleCampaignReply(campaignContactId: string, fromAddress: string, bodyText: string) {
   // Mark contact as replied — this pauses their sequence
-  await supabase
+  const { data: contact } = await supabase
     .from('campaign_contacts')
-    .update({ status: 'replied' })
+    .update({ status: 'replied', next_send_at: null })
     .eq('id', campaignContactId)
+    .select('campaign_id')
+    .single()
 
   // Log to email_sends
   const { data: latestSend } = await supabase
@@ -311,7 +325,63 @@ async function handleCampaignReply(campaignContactId: string, fromAddress: strin
       .eq('id', latestSend.id)
   }
 
+  if (contact?.campaign_id) {
+    const { data: camp } = await supabase.from('campaigns').select('name, total_replied').eq('id', contact.campaign_id).single()
+    if (camp) {
+      await supabase.from('campaigns').update({ total_replied: (camp.total_replied || 0) + 1 }).eq('id', contact.campaign_id)
+      try {
+        await supabase.from('notifications').insert({
+          type: 'campaign_reply',
+          title: `↩ Reply from ${fromAddress}`,
+          body: `${fromAddress} replied to "${camp.name}" — sequence paused for this contact.`,
+          link: '/campaigns',
+        })
+      } catch (e) { /* non-critical */ }
+    }
+  }
+
   console.log(`Reply detected from ${fromAddress} — sequence paused`)
+}
+
+// ── Handle a bounce notification for a cold-outreach inbox ──────
+// Mirrors gmail-fetch's handleCampaignSignal bounce branch, so behavior
+// is consistent whether a bounce is caught by real-time push (here) or
+// by the gmail-fetch polling cron.
+async function handleBounce(account: any, subject: string, snippet: string, bodyText: string) {
+  const newBounceCount = (account.bounce_count || 0) + 1
+  const patch: any = { bounce_count: newBounceCount }
+  // Simple health rule: 5+ bounces auto-pauses the inbox. A human still has
+  // to actively resume it from the Campaigns inbox panel.
+  if (newBounceCount >= 5 && !account.is_paused) {
+    patch.is_paused = true
+    patch.paused_reason = `Auto-paused: ${newBounceCount} bounces detected`
+    patch.paused_at = new Date().toISOString()
+  }
+  await supabase.from('user_email_accounts').update(patch).eq('id', account.id)
+
+  if (patch.is_paused) {
+    try {
+      await supabase.from('notifications').insert({
+        type: 'campaign_bounce',
+        title: `⚠ Inbox auto-paused: ${account.gmail_address}`,
+        body: `${newBounceCount} bounces detected — sending paused for this inbox. Resume it from the Campaigns page once resolved.`,
+        link: '/campaigns',
+      })
+    } catch (e) { /* non-critical */ }
+  }
+
+  // Best-effort: find which contact actually bounced by scanning the
+  // notification body/subject for an email address we recognise.
+  const candidates = [...(subject || '').matchAll(EMAIL_RE), ...(snippet || '').matchAll(EMAIL_RE), ...(bodyText || '').matchAll(EMAIL_RE)].map(m => m[0])
+  if (candidates.length) {
+    const { data: hit } = await supabase.from('campaign_contacts')
+      .select('id, campaign_id').in('email', candidates).neq('status', 'bounced').limit(1)
+    if (hit?.length) {
+      await supabase.from('campaign_contacts').update({ status: 'bounced', next_send_at: null }).eq('id', hit[0].id)
+      await supabase.from('email_sends').update({ status: 'bounced' })
+        .eq('contact_id', hit[0].id).order('sent_at', { ascending: false }).limit(1)
+    }
+  }
 }
 
 // ── Extract email body from Gmail payload ─────────────────────

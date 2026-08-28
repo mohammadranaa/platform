@@ -93,7 +93,8 @@
       "mcp__claude_ai_Vercel__list_projects",
       "mcp__claude_ai_Vercel__list_deployments",
       "Bash(grep *)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(gcloud config *)"
     ]
   }
 }
