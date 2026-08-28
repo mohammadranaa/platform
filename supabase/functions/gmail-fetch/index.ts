@@ -96,6 +96,19 @@ async function handleCampaignSignal(account: any, fromEmail: string, subject: st
     }
     await supabase.from('user_email_accounts').update(patch).eq('id', account.id)
 
+    // Only notify on the actionable event (auto-pause) — not every single
+    // bounce, which would be noisy for a cold-outreach inbox.
+    if (patch.is_paused) {
+      try {
+        await supabase.from('notifications').insert({
+          type: 'campaign_bounce',
+          title: `⚠ Inbox auto-paused: ${account.gmail_address}`,
+          body: `${newBounceCount} bounces detected — sending paused for this inbox. Resume it from the Campaigns page once resolved.`,
+          link: '/campaigns',
+        })
+      } catch (e) { /* non-critical */ }
+    }
+
     // Best-effort: find which contact actually bounced by scanning the
     // notification body/subject for an email address we recognise.
     const candidates = [...(subject || '').matchAll(EMAIL_RE), ...(snippet || '').matchAll(EMAIL_RE), ...(bodyText || '').matchAll(EMAIL_RE)].map(m => m[0])
@@ -123,8 +136,17 @@ async function handleCampaignSignal(account: any, fromEmail: string, subject: st
     await supabase.from('campaign_contacts').update({ status: 'replied', next_send_at: null }).eq('id', contact.id)
     await supabase.from('email_sends').update({ replied_at: new Date().toISOString() })
       .eq('contact_id', contact.id).is('replied_at', null).order('sent_at', { ascending: false }).limit(1)
-    const { data: camp } = await supabase.from('campaigns').select('total_replied').eq('id', contact.campaign_id).single()
+    const { data: camp } = await supabase.from('campaigns').select('name, total_replied').eq('id', contact.campaign_id).single()
     if (camp) await supabase.from('campaigns').update({ total_replied: (camp.total_replied || 0) + 1 }).eq('id', contact.campaign_id)
+
+    try {
+      await supabase.from('notifications').insert({
+        type: 'campaign_reply',
+        title: `↩ Reply from ${fromEmail}`,
+        body: `${fromEmail} replied to "${camp?.name || 'a campaign'}" — sequence paused for this contact.`,
+        link: '/campaigns',
+      })
+    } catch (e) { /* non-critical */ }
   }
 }
 
@@ -136,7 +158,12 @@ Deno.serve(async (req: Request) => {
   let body: any
   try { body = await req.json() } catch { body = {} }
 
-  const { account_type, client_id, max_results } = body
+  const { account_type, max_results } = body
+  // client_id isn't sensitive (OAuth client IDs are meant to be public) --
+  // frontend callers pass their own, but server-side callers (the cron job
+  // driving reply/bounce detection) have no frontend context to pass one
+  // from, so fall back to the server-side secret.
+  const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
   const type = account_type || 'personal'
   const limit = max_results || 30
 

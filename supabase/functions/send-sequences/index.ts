@@ -107,6 +107,26 @@ function isWithinSendWindow(campaign: any, now: Date): boolean {
   return nowMinutes >= startMinutes && nowMinutes <= endMinutes
 }
 
+// Midnight *in the campaign's own timezone*, expressed as a UTC Date. Used
+// to reset the per-inbox daily send count at local midnight rather than at
+// UTC midnight, which would be off by up to an hour for non-UTC campaigns
+// (and inconsistent with isWithinSendWindow, which is already tz-aware).
+function todayStartInTimezone(now: Date, tz: string): Date {
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)
+  const y = Number(dateParts.find(p => p.type === 'year')?.value)
+  const m = Number(dateParts.find(p => p.type === 'month')?.value)
+  const d = Number(dateParts.find(p => p.type === 'day')?.value)
+
+  const offsetParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' }).formatToParts(now)
+  const offsetStr = offsetParts.find(p => p.type === 'timeZoneName')?.value || 'GMT+00:00'
+  const offsetMatch = offsetStr.match(/GMT([+-])(\d{2}):(\d{2})/)
+  const offsetMinutes = offsetMatch ? (offsetMatch[1] === '-' ? -1 : 1) * (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3])) : 0
+
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMinutes * 60000)
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
@@ -118,8 +138,8 @@ Deno.serve(async (req: Request) => {
 
   const targetCampaignId = body.campaign_id || null
   const dryRun = body.dry_run || false
-  const now = new Date().toISOString()
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const nowDate = new Date()
+  const now = nowDate.toISOString()
 
   let campaignsQuery = supabase.from('campaigns').select('*').in('status', ['active', 'running'])
   if (targetCampaignId) campaignsQuery = campaignsQuery.eq('id', targetCampaignId)
@@ -144,7 +164,10 @@ Deno.serve(async (req: Request) => {
     const { data: accounts } = await supabase.from('user_email_accounts').select('*').in('id', inboxIds).eq('is_active', true)
     if (!accounts?.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no active inboxes' }); continue }
 
-    // Check per-inbox sends today and build available slots
+    // Check per-inbox sends today (in the campaign's own timezone, so the
+    // daily limit resets at local midnight, not UTC midnight) and build
+    // available slots
+    const todayStart = todayStartInTimezone(nowDate, campaign.timezone || 'Europe/London')
     const inboxSlots: { account: any; remaining: number }[] = []
     for (const account of accounts) {
       const { count: sentTodayFromInbox } = await supabase
@@ -227,6 +250,19 @@ info@mylandlordcertificate.co.uk`
       }
       if (!slot) break // all inboxes full
 
+      // Atomically claim this contact so an overlapping invocation (e.g. a
+      // slow hourly run still going when the next tick fires, or a manual
+      // call overlapping the cron) can't send to it twice. Only succeeds if
+      // it's still active AND still due — matches the selection criteria
+      // above exactly, so a contact re-activated for a later step by a
+      // concurrent run can't be falsely claimed as "due now" here.
+      const { data: claimed } = await supabase.from('campaign_contacts')
+        .update({ status: 'sending' })
+        .eq('id', contact.id).eq('status', 'active')
+        .or(`next_send_at.is.null,next_send_at.lte.${now}`)
+        .select('id')
+      if (!claimed?.length) continue
+
       const account = slot.account
       const fromName = account.display_name || account.gmail_address.split('@')[0]
       const vars = {
@@ -243,6 +279,7 @@ info@mylandlordcertificate.co.uk`
 
       if (dryRun) {
         console.log(`[DRY RUN] ${contact.email} from ${account.gmail_address}`)
+        await supabase.from('campaign_contacts').update({ status: 'active' }).eq('id', contact.id) // release the claim
         campaignSent++; slot.remaining--; continue
       }
 
