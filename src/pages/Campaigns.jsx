@@ -85,6 +85,7 @@ export default function Campaigns() {
   const [selected, setSelected]     = useState(null)
   const [contacts, setContacts]     = useState([])
   const [steps, setSteps]           = useState([])
+  const [variants, setVariants]     = useState([])
   const [sends, setSends]           = useState([])
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
@@ -131,14 +132,16 @@ export default function Campaigns() {
 
   async function openCampaign(c) {
     setSelected(c)
-    const [{ data: ct }, { data: st }, { data: sn }] = await Promise.all([
+    const [{ data: ct }, { data: st }, { data: sn }, { data: vr }] = await Promise.all([
       supabase.from('campaign_contacts').select('*').eq('campaign_id', c.id).order('enrolled_at', { ascending: false }),
       supabase.from('sequence_steps').select('*').eq('campaign_id', c.id).order('step_number'),
       supabase.from('email_sends').select('*').eq('campaign_id', c.id).order('sent_at', { ascending: false }).limit(200),
+      supabase.from('email_variants').select('*').eq('campaign_id', c.id).order('label'),
     ])
     setContacts(ct || [])
     setSteps(st || [])
     setSends(sn || [])
+    setVariants(vr || [])
     setView('detail')
   }
 
@@ -257,6 +260,36 @@ export default function Campaigns() {
     setShowNewStep(false)
     setNewStep(blankStep)
     showToast('Step added ✓')
+  }
+
+  async function addVariant(stepId) {
+    if (!selected) return
+    const existing = variants.filter(v => (v.step_id || null) === (stepId || null))
+    const nextLabel = String.fromCharCode(65 + existing.length) // A, B, C...
+    const base = stepId ? steps.find(s => s.id === stepId) : null
+    const { data, error } = await supabase.from('email_variants').insert({
+      campaign_id: selected.id, step_id: stepId || null, label: nextLabel,
+      subject: base?.subject || '', body_html: base?.body_html || '', weight: 1,
+    }).select().single()
+    if (error) { showToast(error.message, 'error'); return }
+    setVariants(p => [...p, data])
+  }
+
+  async function updateVariant(id, patch) {
+    setVariants(p => p.map(v => v.id === id ? { ...v, ...patch } : v))
+    await supabase.from('email_variants').update(patch).eq('id', id)
+  }
+
+  async function deleteVariant(id) {
+    await supabase.from('email_variants').delete().eq('id', id)
+    setVariants(p => p.filter(v => v.id !== id))
+  }
+
+  function variantStats(variantId) {
+    const rows = sends.filter(s => s.variant_id === variantId)
+    const opened = rows.filter(s => s.open_count > 0).length
+    const replied = rows.filter(s => s.replied_at).length
+    return { sent: rows.length, openRate: rows.length ? Math.round(opened / rows.length * 100) : 0, replyRate: rows.length ? Math.round(replied / rows.length * 100) : 0 }
   }
 
   async function updateStep(stepId, patch) {
@@ -382,6 +415,44 @@ export default function Campaigns() {
     const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0
     return { total, opens, clicks, replied, bounced, openRate: pct(opens, total), clickRate: pct(clicks, total), replyRate: pct(replied, contacts.length) }
   }, [sends, contacts])
+
+  function renderVariants(stepId) {
+    const pool = variants.filter(v => (v.step_id || null) === (stepId || null))
+    return (
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #E5E7EB' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 6 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:'#7C3AED', textTransform:'uppercase' }}>A/B Variants ({pool.length})</span>
+          <button onClick={() => addVariant(stepId)} style={{ background:'none', border:'none', color:'#7C3AED', cursor:'pointer', fontSize:12, fontWeight:600 }}>+ Add Variant</button>
+        </div>
+        {pool.length === 0 ? (
+          <div style={{ fontSize:11, color:'#9CA3AF' }}>No variants -- every contact gets the email above. Add a variant to start A/B testing this step.</div>
+        ) : pool.map(v => {
+          const stats = variantStats(v.id)
+          return (
+            <div key={v.id} style={{ background:'#FAFAFF', border:'1px solid #EDE9FE', borderRadius:6, padding:8, marginBottom:6 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                <span style={{ fontSize:12, fontWeight:700, color:'#7C3AED' }}>Variant {v.label}</span>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <span style={{ fontSize:10, color:'#9CA3AF' }}>{stats.sent} sent · {stats.openRate}% open · {stats.replyRate}% reply</span>
+                  <label style={{ fontSize:10, color:'#9CA3AF' }}>Weight
+                    <input type="number" min="1" value={v.weight} onChange={e => updateVariant(v.id, { weight: Number(e.target.value) || 1 })}
+                      style={{ width:36, marginLeft:4, border:'1px solid #E5E7EB', borderRadius:4, padding:'1px 4px', fontSize:11 }} />
+                  </label>
+                  <button onClick={() => deleteVariant(v.id)} style={{ background:'none', border:'none', color:'#DC2626', cursor:'pointer', fontSize:12 }}>✕</button>
+                </div>
+              </div>
+              <input value={v.subject} onChange={e => setVariants(p => p.map(x => x.id === v.id ? { ...x, subject: e.target.value } : x))}
+                onBlur={e => updateVariant(v.id, { subject: e.target.value })} placeholder="Subject"
+                style={{ width:'100%', marginBottom:4, border:'1px solid #E5E7EB', borderRadius:4, padding:'5px 8px', fontSize:12 }} />
+              <textarea value={v.body_html} rows={3} onChange={e => setVariants(p => p.map(x => x.id === v.id ? { ...x, body_html: e.target.value } : x))}
+                onBlur={e => updateVariant(v.id, { body_html: e.target.value })} placeholder="Body"
+                style={{ width:'100%', border:'1px solid #E5E7EB', borderRadius:4, padding:'6px 8px', fontSize:11, fontFamily:'inherit', resize:'vertical' }} />
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   const th = { textAlign: 'left', padding: '9px 14px', color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: '1px solid #E5E7EB', background: '#F5F7FA' }
   const td = { padding: '10px 14px', borderBottom: `1px solid ${C.border}18`, fontSize: 14, verticalAlign: 'middle' }
@@ -582,6 +653,7 @@ export default function Campaigns() {
                           style={{ width:60, background:'#F5F7FA', border:'1px solid #E5E7EB', borderRadius:6, padding:'4px 8px', fontSize:12 }} />
                         <Btn small variant="success" onClick={() => setEditingStepId(null)}>Done</Btn>
                       </div>
+                      {renderVariants(step.id)}
                     </div>
                   ) : (
                     <>
