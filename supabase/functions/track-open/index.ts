@@ -68,6 +68,18 @@ Deno.serve(async (req: Request) => {
               email_open_count: (lead.email_open_count || 0) + 1,
             }).eq('id', contact.lead_id)
           }
+
+          const { data: sendRow } = await supabase
+            .from('email_sends').select('subject').eq('id', send.id).single()
+
+          await supabase.from('activities').insert({
+            lead_id: contact.lead_id,
+            rep_name: 'System',
+            activity_type: 'system',
+            title: `📬 Email opened: ${sendRow?.subject || 'campaign email'}`,
+            body: 'The lead opened this email.',
+            metadata: { campaign_id: send.campaign_id, email_send_id: send.id },
+          })
         }
 
         // Update campaign total

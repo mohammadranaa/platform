@@ -190,8 +190,8 @@ export default function Campaigns() {
   }
 
   async function launchCampaign(campaign) {
-    if (!campaign.subject) { showToast('Add an email subject before launching', 'error'); return }
-    if (!campaign.body) { showToast('Write an email body before launching', 'error'); return }
+    const { count: stepCount } = await supabase.from('sequence_steps').select('id', { count: 'exact', head: true }).eq('campaign_id', campaign.id)
+    if (!stepCount) { showToast('Add at least one email to the sequence before launching', 'error'); return }
     if (!campaign.inbox_ids || campaign.inbox_ids.length === 0) { showToast('Select at least one sending inbox', 'error'); return }
     const contactCount = campaign.campaign_contacts?.length || 0
     if (contactCount === 0) { showToast('Add contacts to the campaign first', 'error'); return }
@@ -477,43 +477,8 @@ export default function Campaigns() {
           </div>
         </div>
 
-        {/* Inline subject + body editor, and sending inbox selector */}
+        {/* Sending inbox selector */}
         <div style={{ marginTop:12, marginBottom:20, padding:16, background:'#F5F7FA', borderRadius:10 }}>
-          <div style={{ marginBottom:10 }}>
-            <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>Subject Line</label>
-            <input
-              value={selected.subject || ''}
-              onChange={e => {
-                const v = e.target.value
-                setSelected(p => ({ ...p, subject: v }))
-                setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, subject: v } : c))
-              }}
-              onBlur={e => supabase.from('campaigns').update({ subject: e.target.value }).eq('id', selected.id)}
-              placeholder="e.g. Partnership Opportunity -- My Landlord Certificate"
-              style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}
-            />
-          </div>
-          <div style={{ marginBottom:10 }}>
-            <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:4 }}>
-              Email Body
-              <span style={{ fontWeight:400, color:'#9CA3AF', marginLeft:8, textTransform:'none' }}>
-                Variables: {'{{first_name}}'} {'{{company}}'} {'{{sender_name}}'}
-              </span>
-            </label>
-            <textarea
-              value={selected.body || ''}
-              onChange={e => {
-                const v = e.target.value
-                setSelected(p => ({ ...p, body: v }))
-                setCampaigns(p => p.map(c => c.id === selected.id ? { ...c, body: v } : c))
-              }}
-              onBlur={e => supabase.from('campaigns').update({ body: e.target.value }).eq('id', selected.id)}
-              rows={10}
-              placeholder={'Dear {{first_name}},\n\nI hope this email finds you well.\n\nMy name is {{sender_name}} from My Landlord Certificate. We provide EICR, Gas Safety Certificates, EPCs, Fire Risk Assessments and all property compliance certificates across London.\n\nWe work with many estate agents and would love to support your landlord clients with fast, reliable certificates.\n\nWould you be open to a quick call this week?\n\nKind regards,\n{{sender_name}}\nMy Landlord Certificate\n020 3996 1070'}
-              style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', lineHeight:1.6, resize:'vertical' }}
-            />
-          </div>
-
           {/* Inbox selector */}
           <div>
             <label style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', display:'block', marginBottom:6 }}>

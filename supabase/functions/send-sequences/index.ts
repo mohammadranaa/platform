@@ -317,7 +317,8 @@ Deno.serve(async (req: Request) => {
       if (!claimed?.length) continue
 
       const account = slot.account
-      const fromName = account.display_name || account.gmail_address.split('@')[0]
+      const localPart = account.gmail_address.split('@')[0]
+      const fromName = account.display_name || (localPart.charAt(0).toUpperCase() + localPart.slice(1))
       const vars = {
         first_name: contact.first_name || contact.company?.split(' ')[0] || contact.email.split('@')[0],
         last_name: contact.last_name || '',

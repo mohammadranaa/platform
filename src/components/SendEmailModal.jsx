@@ -53,25 +53,23 @@ export default function SendEmailModal({
     supabase.from('user_email_accounts')
       .select('id, gmail_address, display_name, account_type, token_expiry')
       .eq('is_active', true)
+      .eq('account_type', 'personal')
       .order('account_type')
       .then(({ data }) => {
         setAccounts(data || [])
-        // Prefer the personal account if its token is still valid. If it's
-        // expired, fall back to any account with a valid token rather than
-        // silently picking an account that will fail to send — a personal
-        // account with a lapsed refresh needs reconnecting in Email Inbox,
-        // but that shouldn't block sending from a working cold account.
+        // Job/Invoice/Quote emails only ever go from the main business
+        // inbox -- cold-outreach accounts are a separate sending identity
+        // and shouldn't be selectable here, even as a fallback.
         const now = new Date()
         const hasValidToken = a => a.token_expiry && new Date(a.token_expiry) > now
-        const personal = (data || []).find(a => a.account_type === 'personal' && hasValidToken(a))
-        const anyValid = (data || []).find(hasValidToken)
-        const preferred = preferPersonal ? personal : null
-        if (preferred) setAccountId(preferred.id)
-        else if (anyValid) setAccountId(anyValid.id)
+        const personal = (data || []).find(a => hasValidToken(a))
+        if (personal) setAccountId(personal.id)
         else if (data?.length) setAccountId(data[0].id)
       })
 
-    supabase.from('email_templates').select('id, name, subject, body').then(({ data }) => setTemplates(data || []))
+    // Job/Invoice/Quote emails are process communications only -- cold
+    // outreach templates don't belong in this picker.
+    supabase.from('email_templates').select('id, name, subject, body').eq('category', 'process').then(({ data }) => setTemplates(data || []))
   }, [])
 
   // Pre-build the attachment(s) as soon as the modal opens, so the user

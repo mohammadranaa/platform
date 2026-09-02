@@ -409,6 +409,20 @@ export default function JobDetail() {
     showToast('Entry added ✓')
   }
 
+  // Auto-logs any email/certificate sent from this job -- called from every
+  // SendEmailModal's onSent below, so there's a record in the diary without
+  // anyone having to remember to add one manually.
+  async function logSendToDiary(label, toEmail) {
+    await supabase.from('job_diary').insert({
+      job_id: id,
+      author_id: profile?.id,
+      author_name: profile?.full_name || 'System',
+      entry_type: 'email',
+      content: `${label} sent to ${toEmail || 'client'}`,
+    })
+    await fetchDiary()
+  }
+
   async function deleteJob() {
     if (!window.confirm('Delete this job? This cannot be undone.')) return
     await supabase.from('job_files').delete().eq('job_id', id)
@@ -1247,7 +1261,7 @@ export default function JobDetail() {
           body={`${greeting} ${jobClientName},\n\n\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={jobVars}
           onClose={() => setShowEmailCompose(false)}
-          onSent={() => { showToast('Email sent'); setShowEmailCompose(false) }}
+          onSent={() => { logSendToDiary('Email', job.clients?.email); showToast('Email sent'); setShowEmailCompose(false) }}
         />
       )}
 
@@ -1291,6 +1305,7 @@ export default function JobDetail() {
           onClose={() => setShowSendInvoice(false)}
           onSent={async () => {
             await supabase.from('invoices').update({ status: 'Sent', sent_at: new Date().toISOString() }).eq('id', invoices[0].id)
+            await logSendToDiary(`Invoice ${invoices[0].invoice_number}`, job.clients?.email)
             showToast('Invoice sent')
             setShowSendInvoice(false)
             fetchJob()
@@ -1319,7 +1334,7 @@ export default function JobDetail() {
             }))
           }}
           onClose={() => setShowSendCert(false)}
-          onSent={() => { showToast('Certificate sent'); setShowSendCert(false) }}
+          onSent={() => { logSendToDiary('Certificate', job.clients?.email); showToast('Certificate sent'); setShowSendCert(false) }}
         />
       )}
 
@@ -1355,6 +1370,7 @@ export default function JobDetail() {
           onClose={() => { setShowSendQuote(false); setSelectedQuote(null) }}
           onSent={async () => {
             await supabase.from('quotes').update({ status: 'Sent', sent_at: new Date().toISOString() }).eq('id', selectedQuote.id)
+            await logSendToDiary(`Quote ${selectedQuote.quote_number}`, job.clients?.email)
             showToast('Quote sent')
             setShowSendQuote(false)
             setSelectedQuote(null)
