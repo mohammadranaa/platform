@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast'
@@ -79,6 +80,7 @@ const Field = ({ label, value, onChange, type = 'text', placeholder, rows, optio
 
 export default function Campaigns() {
   const { profile } = useAuth()
+  const navigate = useNavigate()
   const { toast, showToast } = useToast()
 
   const [campaigns, setCampaigns]   = useState([])
@@ -650,9 +652,16 @@ export default function Campaigns() {
               {contacts.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '24px 0', color: C.dim, fontSize: 13 }}>No contacts enrolled yet.</div>
               ) : contacts.map(c => (
-                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}18` }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{c.first_name} {c.last_name}</div>
+                <div key={c.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px',
+                  borderBottom: `1px solid ${C.border}18`,
+                  background: c.status === 'replied' ? C.tealSoft : 'transparent',
+                  borderRadius: c.status === 'replied' ? 6 : 0,
+                }}>
+                  <div style={c.lead_id ? { cursor: 'pointer' } : {}} onClick={() => c.lead_id && navigate(`/leads/${c.lead_id}`)}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: c.lead_id ? C.accent : C.text }}>
+                      {c.status === 'replied' && '↩ '}{c.first_name} {c.last_name}{c.lead_id ? ' ↗' : ''}
+                    </div>
                     <div style={{ color: C.dim, fontSize: 12 }}>{c.email} {c.company ? `· ${c.company}` : ''}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -671,18 +680,32 @@ export default function Campaigns() {
             <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Send Log</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr>{['Subject','Step','Status','Opens','Clicks','Sent'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <thead><tr>{['Contact','Subject','Step','Status','Opens','Clicks','Sent'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {sends.slice(0, 50).map(s => (
-                    <tr key={s.id}>
-                      <td style={td}><span style={{ fontSize: 13 }}>{s.subject}</span></td>
-                      <td style={td}><span style={{ color: C.accent }}>{s.step_number}</span></td>
-                      <td style={td}><Badge status={s.status} /></td>
-                      <td style={td}><span style={{ color: s.open_count > 0 ? C.teal : C.dim }}>{s.open_count}</span></td>
-                      <td style={td}><span style={{ color: s.click_count > 0 ? C.accent : C.dim }}>{s.click_count}</span></td>
-                      <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{new Date(s.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span></td>
-                    </tr>
-                  ))}
+                  {sends.slice(0, 50).map(s => {
+                    const contact = contacts.find(c => c.id === s.contact_id)
+                    const replied = !!s.replied_at
+                    return (
+                      <tr key={s.id} style={{ background: replied ? C.tealSoft : 'transparent' }}>
+                        <td style={td}>
+                          {contact?.lead_id ? (
+                            <span onClick={() => navigate(`/leads/${contact.lead_id}`)}
+                              style={{ fontSize: 13, color: C.accent, cursor: 'pointer', fontWeight: 600 }}>
+                              {replied && '↩ '}{contact.first_name || contact.company || contact.email} ↗
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 13, color: C.dim }}>{replied && '↩ '}{contact?.email || s.to_email || '—'}</span>
+                          )}
+                        </td>
+                        <td style={td}><span style={{ fontSize: 13 }}>{s.subject}</span></td>
+                        <td style={td}><span style={{ color: C.accent }}>{s.step_number}</span></td>
+                        <td style={td}><Badge status={s.status} /></td>
+                        <td style={td}><span style={{ color: s.open_count > 0 ? C.teal : C.dim }}>{s.open_count}</span></td>
+                        <td style={td}><span style={{ color: s.click_count > 0 ? C.accent : C.dim }}>{s.click_count}</span></td>
+                        <td style={td}><span style={{ color: C.dim, fontSize: 12 }}>{new Date(s.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span></td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
