@@ -85,7 +85,8 @@ export default function Campaigns() {
 
   const [campaigns, setCampaigns]   = useState([])
   const [selected, setSelected]     = useState(null)
-  const [contacts, setContacts]     = useState([])
+  const [contacts, setContacts]           = useState([])
+  const [contactFilter, setContactFilter] = useState('all')
   const [steps, setSteps]           = useState([])
   const [variants, setVariants]     = useState([])
   const [sends, setSends]           = useState([])
@@ -144,6 +145,7 @@ export default function Campaigns() {
     setSteps(st || [])
     setSends(sn || [])
     setVariants(vr || [])
+    setContactFilter('all')
     setView('detail')
   }
 
@@ -641,35 +643,72 @@ export default function Campaigns() {
 
           {/* Contacts */}
           <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Contacts ({contacts.length})</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn small variant="teal" onClick={openImportLeads}>📋 Import from Leads</Btn>
                 <Btn small onClick={() => setShowAddContacts(true)}>+ Add</Btn>
               </div>
             </div>
-            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-              {contacts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 0', color: C.dim, fontSize: 13 }}>No contacts enrolled yet.</div>
-              ) : contacts.map(c => (
-                <div key={c.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px',
-                  borderBottom: `1px solid ${C.border}18`,
-                  background: c.status === 'replied' ? C.tealSoft : 'transparent',
-                  borderRadius: c.status === 'replied' ? 6 : 0,
-                }}>
-                  <div style={c.lead_id ? { cursor: 'pointer' } : {}} onClick={() => c.lead_id && navigate(`/leads/${c.lead_id}`)}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: c.lead_id ? C.accent : C.text }}>
-                      {c.status === 'replied' && '↩ '}{c.first_name} {c.last_name}{c.lead_id ? ' ↗' : ''}
-                    </div>
-                    <div style={{ color: C.dim, fontSize: 12 }}>{c.email} {c.company ? `· ${c.company}` : ''}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ color: C.dim, fontSize: 12 }}>Step {c.current_step}</span>
-                    <Badge status={c.status} map={CONTACT_STATUS_META} />
-                  </div>
+
+            {/* Filter tabs */}
+            {(() => {
+              const counts = {
+                all: contacts.length,
+                replied: contacts.filter(c => c.status === 'replied').length,
+                active: contacts.filter(c => c.status === 'active').length,
+                bounced: contacts.filter(c => c.status === 'bounced').length,
+                completed: contacts.filter(c => c.status === 'completed').length,
+              }
+              const tabs = [
+                { key: 'all', label: 'All', color: C.muted },
+                { key: 'replied', label: '↩ Replied', color: C.teal },
+                { key: 'active', label: 'Active', color: C.accent },
+                { key: 'bounced', label: 'Bounced', color: C.red },
+                { key: 'completed', label: 'Completed', color: C.green },
+              ]
+              return (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {tabs.map(t => counts[t.key] > 0 || t.key === 'all' ? (
+                    <button key={t.key} onClick={() => setContactFilter(t.key)}
+                      style={{ padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${contactFilter === t.key ? t.color : C.border}`,
+                        background: contactFilter === t.key ? t.color + '18' : 'transparent',
+                        color: contactFilter === t.key ? t.color : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {t.label} ({counts[t.key]})
+                    </button>
+                  ) : null)}
                 </div>
-              ))}
+              )
+            })()}
+
+            <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+              {(() => {
+                const filtered = contactFilter === 'all' ? contacts : contacts.filter(c => c.status === contactFilter)
+                if (filtered.length === 0) return (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: C.dim, fontSize: 13 }}>
+                    {contactFilter === 'replied' ? 'No replies yet — check back after the next send.' : 'No contacts with this status.'}
+                  </div>
+                )
+                return filtered.map(c => (
+                  <div key={c.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px',
+                    borderBottom: `1px solid ${C.border}18`,
+                    background: c.status === 'replied' ? C.tealSoft : 'transparent',
+                    borderRadius: c.status === 'replied' ? 6 : 0,
+                  }}>
+                    <div style={c.lead_id ? { cursor: 'pointer' } : {}} onClick={() => c.lead_id && navigate(`/leads/${c.lead_id}`)}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: c.lead_id ? C.accent : C.text }}>
+                        {c.status === 'replied' && '↩ '}{c.first_name} {c.last_name}{c.lead_id ? ' ↗' : ''}
+                      </div>
+                      <div style={{ color: C.dim, fontSize: 12 }}>{c.email} {c.company ? `· ${c.company}` : ''}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ color: C.dim, fontSize: 12 }}>Step {c.current_step}</span>
+                      <Badge status={c.status} map={CONTACT_STATUS_META} />
+                    </div>
+                  </div>
+                ))
+              })()}
             </div>
           </div>
         </div>
