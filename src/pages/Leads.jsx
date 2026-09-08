@@ -81,6 +81,7 @@ const TABS = [
   { key: 'all', label: 'All Leads' },
   { key: 'inbound', label: 'Inbound' },
   { key: 'cold_agent', label: 'Estate Agents' },
+  { key: 'email_opened', label: '👁 Opened Email' },
 ]
 
 export default function Leads() {
@@ -93,7 +94,7 @@ export default function Leads() {
   const [leads, setLeads]         = useState([])
   const [profiles, setProfiles]   = useState([])
   const [totalCount, setTotalCount] = useState(0)
-  const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0 })
+  const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0, email_opened: 0 })
   const [page, setPage]           = useState(Number(searchParams.get('page')) || 0)
   const PAGE_SIZE = 100
   const [loading, setLoading]     = useState(true)
@@ -178,7 +179,7 @@ export default function Leads() {
       .order(sortField || 'created_at', { ascending: sortDir === 'asc' })
       .range(from, to)
 
-    if (tab !== 'all') q = q.eq('lead_type', tab)
+    if (tab === 'email_opened') { q = q.gt('email_open_count', 0) } else if (tab !== 'all') { q = q.eq('lead_type', tab) }
     if (filterStatus !== 'All') q = q.eq('status', filterStatus)
     if (filterVerified !== 'All') q = q.eq('email_verified', filterVerified)
 
@@ -206,13 +207,14 @@ export default function Leads() {
       // Get counts per type (one lightweight query)
       supabase.from('leads').select('lead_type', { count: 'exact', head: false })
         .then(async () => {
-          const [a, b, c, d] = await Promise.all([
+          const [a, b, c, d, e] = await Promise.all([
             supabase.from('leads').select('id', { count: 'exact', head: true }),
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound'),
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified'),
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent'),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).gt('email_open_count', 0),
           ])
-          return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0 }
+          return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0 }
         })
     ])
 
@@ -259,7 +261,7 @@ export default function Leads() {
     let p = 0
     while (true) {
       let q = supabase.from('leads').select('id')
-      if (tab !== 'all') q = q.eq('lead_type', tab)
+      if (tab === 'email_opened') { q = q.gt('email_open_count', 0) } else if (tab !== 'all') { q = q.eq('lead_type', tab) }
       if (filterStatus !== 'All') q = q.eq('status', filterStatus)
       const { data } = await q.range(p * 500, (p + 1) * 500 - 1)
       if (!data || data.length === 0) break
@@ -915,18 +917,20 @@ export default function Leads() {
 
   const renderHeaders = () => {
     const typeSpecific = {
-      inbound:    [{ label: 'Address' }, { label: 'Property' }, { label: 'Services' }, { label: 'Price', field: 'total_price' }, { label: 'Payment' }],
-      verified:   [{ label: 'Address' }, { label: 'Work Done' }, { label: 'Last Payment' }, { label: 'Renewal Due' }],
-      cold_agent: [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
+      inbound:      [{ label: 'Address' }, { label: 'Property' }, { label: 'Services' }, { label: 'Price', field: 'total_price' }, { label: 'Payment' }],
+      verified:     [{ label: 'Address' }, { label: 'Work Done' }, { label: 'Last Payment' }, { label: 'Renewal Due' }],
+      cold_agent:   [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
+      email_opened: [{ label: 'Company' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Opened', field: 'last_email_opened_at' }],
     }
     const headers = [
       { label: 'Date', field: 'created_at' },
       { label: 'Name', field: 'inbound_name' },
       ...(tab === 'all' ? [{ label: 'Type' }] : []),
       { label: 'Email' }, { label: 'Phone' },
-      ...(tab !== 'all' ? (typeSpecific[tab] || []) : []),
+      ...(typeSpecific[tab] || []),
       { label: 'Assigned To' }, { label: 'Status', field: 'status' },
-      { label: 'Engagement' }, { label: 'Last Contact', field: 'last_contacted_at' },
+      ...(tab !== 'email_opened' ? [{ label: 'Engagement' }] : []),
+      { label: 'Last Contact', field: 'last_contacted_at' },
       { label: 'Change Status' },
     ]
     return (
@@ -957,7 +961,6 @@ export default function Leads() {
           <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{totalCount} found · page {page + 1} of {totalPages || 1}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Btn small variant="danger" onClick={deleteAllShown}>🗑 Delete Shown</Btn>
           {isAdmin && <Btn small variant="ghost" onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>}
           <Btn small onClick={() => setShowAdd(true)}>+ Add Lead</Btn>
         </div>
