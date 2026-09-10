@@ -861,30 +861,44 @@ export default function Leads() {
 
         {/* Engagement */}
         <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB', whiteSpace:'nowrap' }}>
-          <div style={{ display:'flex', gap:4, alignItems:'center' }}>
-            {l.email_reply_count > 0 ? (
-              <span title={'Replied ' + new Date(l.last_email_replied_at).toLocaleDateString('en-GB')}
-                style={{ background:'#F0FAE0', color:'#3d7a00', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:700 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+            {/* Campaign status — top line */}
+            {l.in_campaign ? (
+              l.email_reply_count > 0 ? (
+                <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
+                  ↩ Replied
+                </span>
+              ) : l.email_open_count > 0 ? (
+                <span title={`Opened ${l.email_open_count}× · last ${new Date(l.last_email_opened_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}`}
+                  style={{ background:'#FEF3C7', color:'#B45309', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
+                  👁 Opened ×{l.email_open_count}
+                </span>
+              ) : l.email_send_count > 0 ? (
+                <span title={`${l.email_send_count} emails sent`}
+                  style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
+                  📧 In Campaign
+                </span>
+              ) : (
+                <span style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
+                  📧 In Campaign
+                </span>
+              )
+            ) : l.email_reply_count > 0 ? (
+              <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
                 ↩ Replied
               </span>
             ) : l.email_open_count > 0 ? (
-              <span title={'Opened ' + new Date(l.last_email_opened_at).toLocaleDateString('en-GB')}
-                style={{ background:'#FEF3C7', color:'#D97706', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:700 }}>
-                👁 Opened{l.email_open_count > 1 ? ' ×' + l.email_open_count : ''}
+              <span title={`Opened ${l.email_open_count}× · last ${new Date(l.last_email_opened_at).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}`}
+                style={{ background:'#FEF3C7', color:'#B45309', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:700 }}>
+                👁 Opened ×{l.email_open_count}
               </span>
             ) : l.email_send_count > 0 ? (
-              <span title={'Sent ' + new Date(l.last_email_sent_at).toLocaleDateString('en-GB')}
-                style={{ background:'#E6F4FC', color:'#0093DB', borderRadius:5, padding:'2px 6px', fontSize:10, fontWeight:600 }}>
-                ✉ Sent{l.email_send_count > 1 ? ' ×' + l.email_send_count : ''}
+              <span title={`${l.email_send_count} emails sent`}
+                style={{ background:'#E6F4FC', color:'#0093DB', borderRadius:5, padding:'2px 7px', fontSize:10, fontWeight:600 }}>
+                ✉ Sent ×{l.email_send_count}
               </span>
             ) : (
               <span style={{ color:'#D1D5DB', fontSize:11 }}>—</span>
-            )}
-            {l.in_campaign && (
-              <span title="In an active campaign"
-                style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 5px', fontSize:9, fontWeight:700 }}>
-                CAMP
-              </span>
             )}
           </div>
         </td>

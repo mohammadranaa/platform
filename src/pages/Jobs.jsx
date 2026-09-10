@@ -39,7 +39,7 @@ export default function Jobs() {
   const [sortField, setSortField] = useState(searchParams.get('sort') || 'created_at')
   const [sortDir, setSortDir] = useState(searchParams.get('dir') || 'desc')
   const [showNew, setShowNew] = useState(false)
-  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',site_postcode:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
+  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',site_postcode:'',detail_of_service:'',tenant_name:'',tenant_phone:'',name_on_certificate:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
   const [form, setForm] = useState(blank)
   const sf = (k,v) => setForm(p=>({...p,[k]:v}))
 
@@ -194,6 +194,7 @@ export default function Jobs() {
     if(form.detail_of_service) p.detail_of_service=form.detail_of_service
     if(form.tenant_name) p.tenant_name=form.tenant_name
     if(form.tenant_phone) p.tenant_phone=form.tenant_phone
+    if(form.name_on_certificate) p.name_on_certificate=form.name_on_certificate
     if(form.job_source_type) p.job_source_type=form.job_source_type
     if(form.engineer_name) p.engineer_name=form.engineer_name
     const {data:job,error}=await supabase.from('jobs').insert(p).select('id,job_number').single()
@@ -544,6 +545,12 @@ export default function Jobs() {
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Detail of Service</label><input value={form.detail_of_service} onChange={e=>sf('detail_of_service',e.target.value)} placeholder="Additional details…" style={inp}/></div>
               <div><label style={lbl}>Tenant Name</label><input value={form.tenant_name} onChange={e=>sf('tenant_name',e.target.value)} style={inp}/></div>
               <div><label style={lbl}>Tenant Phone</label><input value={form.tenant_phone} onChange={e=>sf('tenant_phone',e.target.value)} style={inp}/></div>
+              <div style={{gridColumn:'span 2'}}>
+                <label style={lbl}>Name on Certificate</label>
+                <input value={form.name_on_certificate||''} onChange={e=>sf('name_on_certificate',e.target.value)}
+                  placeholder="Full name to appear on the compliance certificate…" style={inp}/>
+                <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>Leave blank if not yet confirmed — can be updated from the job page</div>
+              </div>
             </div>
             <div style={{display:'flex',gap:10,marginTop:24}}>
               <button onClick={createJob} disabled={saving} style={{background:C.accent,color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',fontWeight:700,fontSize:14,cursor:'pointer',opacity:saving?0.7:1}}>{saving?'Creating…':'Create Job'}</button>
