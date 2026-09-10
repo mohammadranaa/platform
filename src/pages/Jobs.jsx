@@ -39,9 +39,13 @@ export default function Jobs() {
   const [sortField, setSortField] = useState(searchParams.get('sort') || 'created_at')
   const [sortDir, setSortDir] = useState(searchParams.get('dir') || 'desc')
   const [showNew, setShowNew] = useState(false)
-  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
+  const blank = { title:'',service_types:[],scheduled_date:'',scheduled_slot:'',site_address:'',site_postcode:'',detail_of_service:'',tenant_name:'',tenant_phone:'',job_source_type:'inbound',client_id:'',assigned_to:'',engineer_name:'' }
   const [form, setForm] = useState(blank)
   const sf = (k,v) => setForm(p=>({...p,[k]:v}))
+
+  // Properties for the selected client (Change 5 — portal integration)
+  const [clientProperties, setClientProperties] = useState([])
+  const [selectedPropertyId, setSelectedPropertyId] = useState('')
   const tog = s => sf('service_types', form.service_types.includes(s) ? form.service_types.filter(x=>x!==s) : [...form.service_types,s])
 
   const [clientSearch, setClientSearch] = useState('')
@@ -186,6 +190,7 @@ export default function Jobs() {
     if(form.scheduled_date) p.scheduled_date=form.scheduled_date
     if(form.scheduled_slot) p.scheduled_slot=form.scheduled_slot
     if(form.site_address) p.site_address=form.site_address
+    if(form.site_postcode) p.site_postcode=form.site_postcode
     if(form.detail_of_service) p.detail_of_service=form.detail_of_service
     if(form.tenant_name) p.tenant_name=form.tenant_name
     if(form.tenant_phone) p.tenant_phone=form.tenant_phone
@@ -193,7 +198,23 @@ export default function Jobs() {
     if(form.engineer_name) p.engineer_name=form.engineer_name
     const {data:job,error}=await supabase.from('jobs').insert(p).select('id,job_number').single()
     if(error){setSaving(false);showToast(error.message,'error');return}
-    setSaving(false);setShowNew(false);setForm(blank);await load()
+
+    // If a new address was typed (not an existing property), save it to the
+    // properties table so it appears in the dropdown for future jobs
+    if(form.client_id && form.site_address && !selectedPropertyId) {
+      const alreadyExists = clientProperties.some(
+        prop => (prop.address||'').toLowerCase().trim() === (form.site_address||'').toLowerCase().trim()
+      )
+      if(!alreadyExists) {
+        await supabase.from('properties').insert({
+          client_id: form.client_id,
+          address: form.site_address,
+          postcode: form.site_postcode || null,
+        }).catch(() => {}) // non-critical
+      }
+    }
+
+    setSaving(false);setShowNew(false);setForm(blank);setClientProperties([]);setSelectedPropertyId('');await load()
     showToast('Job '+job.job_number+' created ✓')
   }
 
@@ -393,7 +414,7 @@ export default function Jobs() {
                 <label style={lbl}>Client</label>
                 <input
                   value={clientSearch || (form.client_id ? cName(clients.find(c=>c.id===form.client_id)) : '')}
-                  onChange={e => { setClientSearch(e.target.value); setShowClientDrop(true); if(!e.target.value) sf('client_id','') }}
+                  onChange={e => { setClientSearch(e.target.value); setShowClientDrop(true); if(!e.target.value) { sf('client_id',''); setClientProperties([]); setSelectedPropertyId('') } }}
                   onFocus={() => setShowClientDrop(true)}
                   placeholder="Search or add new client…"
                   style={inp}
@@ -409,7 +430,21 @@ export default function Jobs() {
                       .slice(0,20)
                       .map(c => (
                         <button key={c.id} type="button"
-                          onClick={() => { sf('client_id',c.id); sf('site_address',[c.street_address,c.city,c.postcode].filter(Boolean).join(', ')); setClientSearch(cName(c)); setShowClientDrop(false) }}
+                          onClick={async () => {
+                            sf('client_id',c.id)
+                            sf('site_address',[c.street_address,c.city,c.postcode].filter(Boolean).join(', '))
+                            sf('site_postcode', c.postcode || '')
+                            setClientSearch(cName(c))
+                            setShowClientDrop(false)
+                            setSelectedPropertyId('')
+                            // Fetch existing properties for this client
+                            const { data: props } = await supabase
+                              .from('properties')
+                              .select('id, address, postcode, property_type')
+                              .eq('client_id', c.id)
+                              .order('address')
+                            setClientProperties(props || [])
+                          }}
                           style={{ display:'block', width:'100%', textAlign:'left', padding:'8px 14px', border:'none', borderBottom:'1px solid #F5F7FA', background:'none', cursor:'pointer', fontSize:13 }}
                           onMouseEnter={e=>e.currentTarget.style.background='#F5F7FA'}
                           onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -464,7 +499,48 @@ export default function Jobs() {
               </div>
               <div><label style={lbl}>Scheduled Date</label><input type="date" value={form.scheduled_date} onChange={e=>sf('scheduled_date',e.target.value)} style={inp}/></div>
               <div><label style={lbl}>Time Slot</label><select value={form.scheduled_slot} onChange={e=>sf('scheduled_slot',e.target.value)} style={inp}><option value="">—</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–6pm)</option></select></div>
-              <div style={{gridColumn:'span 2'}}><label style={lbl}>Site Address</label><input value={form.site_address} onChange={e=>sf('site_address',e.target.value)} style={inp}/></div>
+
+              {/* Property selector — appears only when client has existing properties */}
+              {clientProperties.length > 0 && (
+                <div style={{gridColumn:'span 2'}}>
+                  <label style={lbl}>Property</label>
+                  <select value={selectedPropertyId}
+                    onChange={e => {
+                      const pid = e.target.value
+                      setSelectedPropertyId(pid)
+                      if (pid) {
+                        const prop = clientProperties.find(p => p.id === pid)
+                        if (prop) {
+                          sf('site_address', [prop.address, prop.postcode].filter(Boolean).join(', ').replace(/,\s*,/, ',').trim())
+                          sf('site_postcode', prop.postcode || '')
+                        }
+                      } else {
+                        sf('site_address', '')
+                        sf('site_postcode', '')
+                      }
+                    }}
+                    style={inp}>
+                    <option value="">— Select existing property or type new address below —</option>
+                    {clientProperties.map(prop => (
+                      <option key={prop.id} value={prop.id}>
+                        {prop.address}{prop.postcode ? ` (${prop.postcode})` : ''}{prop.property_type ? ` · ${prop.property_type}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>
+                    Selecting a property auto-fills the address. A new address typed below is saved to this client's property list automatically.
+                  </div>
+                </div>
+              )}
+
+              <div style={{gridColumn:'span 2'}}>
+                <label style={lbl}>Site Address</label>
+                <input value={form.site_address} onChange={e=>{ sf('site_address',e.target.value); setSelectedPropertyId('') }} style={inp}/>
+              </div>
+              <div style={{gridColumn:'span 2'}}>
+                <label style={lbl}>Site Postcode</label>
+                <input value={form.site_postcode||''} onChange={e=>sf('site_postcode',e.target.value)} placeholder="e.g. SW19 7LW" style={inp}/>
+              </div>
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Detail of Service</label><input value={form.detail_of_service} onChange={e=>sf('detail_of_service',e.target.value)} placeholder="Additional details…" style={inp}/></div>
               <div><label style={lbl}>Tenant Name</label><input value={form.tenant_name} onChange={e=>sf('tenant_name',e.target.value)} style={inp}/></div>
               <div><label style={lbl}>Tenant Phone</label><input value={form.tenant_phone} onChange={e=>sf('tenant_phone',e.target.value)} style={inp}/></div>

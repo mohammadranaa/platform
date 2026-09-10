@@ -262,7 +262,15 @@ export default function Clients() {
                     onMouseEnter={e => e.currentTarget.style.background = C.surface}
                     onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                     <td style={td}>
-                      <div style={{ fontWeight: 600, color: C.text, cursor: 'pointer' }} onClick={() => navigate(`/clients/${c.id}`)}>{clientName(c)}{c.auto_generated && <span style={{ background: '#CCFBF1', color: '#0D9488', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700, marginLeft: 6 }}>AUTO</span>}</div>
+                      <div style={{ fontWeight: 600, color: C.text, cursor: 'pointer' }} onClick={() => navigate(`/clients/${c.id}`)}>
+                        {clientName(c)}
+                        {c.auto_generated && <span style={{ background: '#CCFBF1', color: '#0D9488', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700, marginLeft: 6 }}>AUTO</span>}
+                        {c.client_type === 'Estate Agent' && (
+                          c.portal_user_id
+                            ? <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:4, padding:'1px 6px', fontSize:9, fontWeight:700, marginLeft:6 }}>🟢 PORTAL</span>
+                            : <span style={{ background:'#F3F4F6', color:'#9CA3AF', borderRadius:4, padding:'1px 6px', fontSize:9, fontWeight:700, marginLeft:6 }}>NO PORTAL</span>
+                        )}
+                      </div>
                       {c.email && <div style={{ fontSize: 12, color: C.muted }}>{c.email}</div>}
                     </td>
                     <td style={td}>

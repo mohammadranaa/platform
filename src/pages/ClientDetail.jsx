@@ -103,6 +103,9 @@ export default function ClientDetail() {
   const [showEmail, setShowEmail] = useState(false)
   const [editAssign, setEditAssign] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
+  const [showPortalModal, setShowPortalModal] = useState(false)
+  const [portalIdInput, setPortalIdInput] = useState('')
+  const [savingPortal, setSavingPortal] = useState(false)
 
   useEffect(() => { fetchAll() }, [id])
 
@@ -165,6 +168,11 @@ export default function ClientDetail() {
             <span style={{ background: client.is_active !== false ? C.greenSoft : C.redSoft, color: client.is_active !== false ? C.greenDark : C.red, borderRadius: 6, padding: '2px 9px', fontSize: 11, fontWeight: 600 }}>
               {client.is_active !== false ? 'Active' : 'Inactive'}
             </span>
+            {client.client_type === 'Estate Agent' && (
+              client.portal_user_id
+                ? <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:700 }}>🟢 Portal Active</span>
+                : <span style={{ background:'#F3F4F6', color:'#6B7280', borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:700 }}>⚫ No Portal</span>
+            )}
           </div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{clientName()}</h1>
           {client.email && <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{client.email}</div>}
@@ -256,6 +264,67 @@ export default function ClientDetail() {
             <Field label="Billing Email" field="billing_email" value={client.billing_email} type="email" save={saveField} />
             <Field label="Billing Address" field="billing_address" value={client.billing_address} wide={true} save={saveField} />
             <Field label="Notes" field="notes" value={client.notes} type="textarea" wide={true} save={saveField} />
+          </div>
+        </div>
+      )}
+
+      {/* Portal Access section — only shown for Estate Agent clients */}
+      {activeTab === 'overview' && client.client_type === 'Estate Agent' && (
+        <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, padding:20, boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginTop:14 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:'0.07em' }}>Portal Access</div>
+            {client.portal_user_id
+              ? <span style={{ background:'#DCFCE7', color:'#15803D', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700 }}>🟢 Portal Active</span>
+              : <span style={{ background:'#F3F4F6', color:'#6B7280', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700 }}>⚫ No Portal</span>
+            }
+          </div>
+          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:12, color:C.muted, marginBottom:2 }}>Portal User ID</div>
+              <div style={{ fontSize:13, color: client.portal_user_id ? C.text : C.muted, fontFamily:'monospace', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:6, padding:'6px 10px' }}>
+                {client.portal_user_id || 'Not linked'}
+              </div>
+            </div>
+            <button onClick={() => { setPortalIdInput(client.portal_user_id || ''); setShowPortalModal(true) }}
+              style={{ background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:12, cursor:'pointer', whiteSpace:'nowrap' }}>
+              {client.portal_user_id ? 'Update Link' : 'Link Portal Account'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Portal link modal */}
+      {showPortalModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:28, width:420, maxWidth:'95vw', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontWeight:800, fontSize:16, color:'#1F2937', marginBottom:6 }}>Link Portal Account</div>
+            <div style={{ fontSize:12, color:'#6B7280', marginBottom:18 }}>
+              Enter the portal_user_id from the estate agent portal for <strong>{client.company_name || client.first_name}</strong>.
+              Leave blank to remove portal access.
+            </div>
+            <input
+              value={portalIdInput}
+              onChange={e => setPortalIdInput(e.target.value)}
+              placeholder="e.g. a3b4c5d6-e7f8-..."
+              style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'9px 12px', fontSize:13, fontFamily:'monospace', marginBottom:16 }}
+            />
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={async () => {
+                setSavingPortal(true)
+                const val = portalIdInput.trim() || null
+                await supabase.from('clients').update({ portal_user_id: val }).eq('id', client.id)
+                setClient(p => ({ ...p, portal_user_id: val }))
+                setSavingPortal(false)
+                setShowPortalModal(false)
+              }} disabled={savingPortal}
+                style={{ flex:1, background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'10px 0', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+                {savingPortal ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => setShowPortalModal(false)}
+                style={{ background:'#fff', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:8, padding:'10px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

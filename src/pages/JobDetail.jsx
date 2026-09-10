@@ -120,6 +120,9 @@ export default function JobDetail() {
   const [showSendQuote, setShowSendQuote] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState(null)
   const [invoices, setInvoices] = useState([])
+  // Certificate metadata modal (Change 1 — portal integration)
+  const [pendingCertFile, setPendingCertFile] = useState(null)
+  const [certMeta, setCertMeta] = useState({ cert_type: '', issue_date: '', expiry_date: '', result: 'N/A' })
   const [jobActivity, setJobActivity] = useState([])
 
   useEffect(() => { if (id) fetchAll() }, [id])
@@ -330,8 +333,123 @@ export default function JobDetail() {
     setFiles(data || [])
   }
 
-  // ── Upload a file (certificate, photo, or video) ───────────────
-  async function uploadFile(file, fileType = 'certificate') {
+  // ── Certificate expiry calculation ────────────────────────────
+  // Used by the portal to show traffic-light status per property
+  const CERT_EXPIRY_YEARS = {
+    'EICR': 5, 'Commercial EICR': 5,
+    'Gas Safety Certificate': 1, 'Gas Safety Certificate (CP12)': 1, 'Gas Safety (CP12)': 1,
+    'Commercial Gas Safety (CP42)': 1,
+    'EPC': 10, 'Commercial EPC': 10,
+    'Fire Risk Assessment': 1, 'Fire Risk Assessment (Commercial)': 1,
+    'PAT Testing': 1,
+    'Fire Safety Certificate': 1, 'Fire Door Certificate': 1,
+    'Emergency Lights': 1, 'Emergency Lighting': 1,
+    'Asbestos Survey': 2,
+    'Legionella': 2, 'Legionella Risk Assessment': 2,
+  }
+
+  function calcExpiryDate(certType, issueDateStr) {
+    if (!issueDateStr || !certType) return ''
+    const years = CERT_EXPIRY_YEARS[certType] || 1
+    const d = new Date(issueDateStr)
+    d.setFullYear(d.getFullYear() + years)
+    return d.toISOString().slice(0, 10)
+  }
+
+  // Derive default cert type from job.service_types
+  function defaultCertType(j) {
+    if (!j?.service_types?.length) return ''
+    // Map common service_type strings to certificate type names
+    const raw = j.service_types[0]
+    const MAP = {
+      'EICR': 'EICR', 'Commercial EICR': 'Commercial EICR',
+      'Gas Safety Certificate': 'Gas Safety Certificate',
+      'Gas Safety Certificate (CP12)': 'Gas Safety Certificate (CP12)',
+      'Gas Safety': 'Gas Safety Certificate', 'CP12': 'Gas Safety Certificate (CP12)',
+      'EPC': 'EPC', 'Commercial EPC': 'Commercial EPC',
+      'Fire Risk Assessment': 'Fire Risk Assessment',
+      'PAT Testing': 'PAT Testing',
+      'Fire Safety Certificate': 'Fire Safety Certificate',
+      'Fire Door Certificate': 'Fire Door Certificate',
+      'Emergency Lights': 'Emergency Lights',
+      'Asbestos Survey': 'Asbestos Survey',
+      'Legionella': 'Legionella',
+    }
+    return MAP[raw] || raw
+  }
+
+  // Called when user picks a certificate file — open modal first, upload after
+  function handleCertFileSelected(file) {
+    if (!file) return
+    const today = new Date().toISOString().slice(0, 10)
+    const type = defaultCertType(job)
+    setCertMeta({
+      cert_type: type,
+      issue_date: today,
+      expiry_date: calcExpiryDate(type, today),
+      result: 'N/A',
+    })
+    setPendingCertFile(file)
+  }
+
+  // Confirm metadata and run the actual upload + both inserts
+  async function confirmCertUpload() {
+    if (!pendingCertFile || !certMeta.cert_type) return
+    setUploading(true)
+    setPendingCertFile(null)
+
+    const file = pendingCertFile
+    const ext = file.name.split('.').pop()
+    const path = `${id}/certificate_${Date.now()}.${ext}`
+
+    const { error } = await supabase.storage
+      .from('job-files')
+      .upload(path, file, { cacheControl: '3600', upsert: false })
+
+    if (error) {
+      showToast('Upload failed: ' + error.message, 'error')
+      setUploading(false)
+      return
+    }
+
+    const { data: fileRow } = await supabase.from('job_files').insert({
+      job_id: id,
+      file_name: file.name,
+      storage_path: path,
+      file_type: 'certificate',
+      file_size: file.size,
+      mime_type: file.type,
+      uploaded_by: profile?.id,
+      uploader_name: profile?.full_name,
+      caption: certMeta.cert_type,
+    }).select('id').single()
+
+    // Public URL for the portal to use directly
+    const { data: urlData } = supabase.storage.from('job-files').getPublicUrl(path)
+    const publicUrl = urlData?.publicUrl || ''
+
+    // Insert structured certificate metadata for the estate agent portal
+    await supabase.from('certificates').insert({
+      job_id: id,
+      job_file_id: fileRow?.id || null,
+      client_id: job?.client_id || null,
+      certificate_type: certMeta.cert_type,
+      site_address: job?.site_address || null,
+      site_postcode: job?.site_postcode || null,
+      issue_date: certMeta.issue_date || null,
+      expiry_date: certMeta.expiry_date || null,
+      result: certMeta.result || 'N/A',
+      storage_path: path,
+      public_url: publicUrl,
+    })
+
+    setUploading(false)
+    showToast('Certificate uploaded ✓')
+    await fetchFiles()
+  }
+
+  // ── Upload a file (photo, video, payment — NOT certificate) ────
+  async function uploadFile(file, fileType = 'photo') {
     setUploading(true)
     const ext = file.name.split('.').pop()
     const path = `${id}/${fileType}_${Date.now()}.${ext}`
@@ -391,7 +509,7 @@ export default function JobDetail() {
   async function updateStatus(status) {
     setSaving(true)
     await supabase.from('jobs').update({ status }).eq('id', id)
-    await supabase.from('job_diary').insert({ job_id: id, author_id: profile.id, author_name: profile.full_name, entry_type: 'status_change', content: `Status changed to "${status}"` })
+    await supabase.from('job_diary').insert({ job_id: id, author_id: profile.id, author_name: profile.full_name, entry_type: 'status_change', content: `Status changed to "${status}"`, is_internal: false })
     setSaving(false)
     setJob(p => ({ ...p, status }))
     await fetchDiary()
@@ -402,7 +520,7 @@ export default function JobDetail() {
   async function addDiaryEntry() {
     if (!diaryInput.content.trim()) return
     setSaving(true)
-    await supabase.from('job_diary').insert({ job_id: id, author_id: profile.id, author_name: profile.full_name, entry_type: diaryInput.type, content: diaryInput.content })
+    await supabase.from('job_diary').insert({ job_id: id, author_id: profile.id, author_name: profile.full_name, entry_type: diaryInput.type, content: diaryInput.content, is_internal: true })
     setSaving(false)
     setDiaryInput({ type: 'note', content: '' })
     await fetchDiary()
@@ -419,6 +537,7 @@ export default function JobDetail() {
       author_name: profile?.full_name || 'System',
       entry_type: 'email',
       content: `${label} sent to ${toEmail || 'client'}`,
+      is_internal: false,
     })
     await fetchDiary()
   }
@@ -849,7 +968,7 @@ export default function JobDetail() {
                 <label style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:6, padding:'5px 14px', fontSize:12, cursor:'pointer', fontWeight:600 }}>
                   + Upload Certificate
                   <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden
-                    onChange={e => e.target.files[0] && uploadFile(e.target.files[0], 'certificate')} />
+                    onChange={e => handleCertFileSelected(e.target.files[0])} />
                 </label>
               )}
               {fileTab === 'photos' && (
@@ -1377,6 +1496,85 @@ export default function JobDetail() {
             fetchJob()
           }}
         />
+      )}
+
+      {/* Certificate metadata modal — appears when uploading a certificate file */}
+      {pendingCertFile && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:28, width:420, maxWidth:'95vw', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontWeight:800, fontSize:16, color:'#1F2937', marginBottom:4 }}>Certificate Details</div>
+            <div style={{ fontSize:12, color:'#6B7280', marginBottom:20 }}>
+              {pendingCertFile.name} — these details are used by the estate agent portal to show expiry status.
+            </div>
+
+            <div style={{ marginBottom:14 }}>
+              <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#6B7280', textTransform:'uppercase', marginBottom:4 }}>
+                Certificate Type *
+              </label>
+              <select value={certMeta.cert_type}
+                onChange={e => {
+                  const t = e.target.value
+                  setCertMeta(p => ({ ...p, cert_type: t, expiry_date: calcExpiryDate(t, p.issue_date) }))
+                }}
+                style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}>
+                <option value="">— Select type —</option>
+                {['EICR','Commercial EICR','Gas Safety Certificate (CP12)','Commercial Gas Safety (CP42)',
+                  'EPC','Commercial EPC','Fire Risk Assessment','Fire Risk Assessment (Commercial)',
+                  'PAT Testing','Fire Safety Certificate','Fire Door Certificate',
+                  'Emergency Lights','Asbestos Survey','Legionella Risk Assessment','Other'].map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+              <div>
+                <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#6B7280', textTransform:'uppercase', marginBottom:4 }}>Issue Date</label>
+                <input type="date" value={certMeta.issue_date}
+                  onChange={e => {
+                    const d = e.target.value
+                    setCertMeta(p => ({ ...p, issue_date: d, expiry_date: calcExpiryDate(p.cert_type, d) }))
+                  }}
+                  style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 10px', fontSize:13 }} />
+              </div>
+              <div>
+                <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#6B7280', textTransform:'uppercase', marginBottom:4 }}>Expiry Date</label>
+                <input type="date" value={certMeta.expiry_date}
+                  onChange={e => setCertMeta(p => ({ ...p, expiry_date: e.target.value }))}
+                  style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 10px', fontSize:13 }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom:22 }}>
+              <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#6B7280', textTransform:'uppercase', marginBottom:4 }}>Result</label>
+              <select value={certMeta.result}
+                onChange={e => setCertMeta(p => ({ ...p, result: e.target.value }))}
+                style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}>
+                {['Satisfactory','Unsatisfactory','Pass','Fail','N/A'].map(r => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Calculated expiry info */}
+            {certMeta.expiry_date && (
+              <div style={{ background:'#F0FAE0', border:'1px solid #80D10044', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#3d7a00', marginBottom:16 }}>
+                ✓ Expiry auto-calculated from certificate type — edit above if needed
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={confirmCertUpload} disabled={!certMeta.cert_type}
+                style={{ flex:1, background:'#0093DB', color:'#fff', border:'none', borderRadius:8, padding:'10px 0', fontWeight:700, fontSize:13, cursor: certMeta.cert_type ? 'pointer' : 'not-allowed', opacity: certMeta.cert_type ? 1 : 0.5 }}>
+                Upload Certificate
+              </button>
+              <button onClick={() => setPendingCertFile(null)}
+                style={{ background:'#fff', color:'#6B7280', border:'1px solid #E5E7EB', borderRadius:8, padding:'10px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Toast toast={toast} />
