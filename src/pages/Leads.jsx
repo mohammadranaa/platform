@@ -82,6 +82,7 @@ const TABS = [
   { key: 'inbound', label: 'Inbound' },
   { key: 'cold_agent', label: 'Estate Agents' },
   { key: 'email_opened', label: '👁 Opened Email' },
+  { key: 'in_sequence', label: '📧 In Sequence' },
 ]
 
 export default function Leads() {
@@ -94,7 +95,7 @@ export default function Leads() {
   const [leads, setLeads]         = useState([])
   const [profiles, setProfiles]   = useState([])
   const [totalCount, setTotalCount] = useState(0)
-  const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0, email_opened: 0 })
+  const [tabCounts, setTabCounts] = useState({ all: 0, inbound: 0, verified: 0, cold_agent: 0, email_opened: 0, in_sequence: 0 })
   const [page, setPage]           = useState(Number(searchParams.get('page')) || 0)
   const PAGE_SIZE = 100
   const [loading, setLoading]     = useState(true)
@@ -179,7 +180,14 @@ export default function Leads() {
       .order(sortField || 'created_at', { ascending: sortDir === 'asc' })
       .range(from, to)
 
-    if (tab === 'email_opened') { q = q.gt('email_open_count', 0) } else if (tab !== 'all') { q = q.eq('lead_type', tab) }
+    if (tab === 'email_opened') {
+      q = q.gt('email_open_count', 0)
+    } else if (tab === 'in_sequence') {
+      q = q.eq('in_campaign', true).gt('email_open_count', 0)
+    } else if (tab !== 'all') {
+      q = q.eq('lead_type', tab)
+    }
+    q = q.is('deleted_at', null)
     if (filterStatus !== 'All') q = q.eq('status', filterStatus)
     if (filterVerified !== 'All') q = q.eq('email_verified', filterVerified)
 
@@ -207,14 +215,15 @@ export default function Leads() {
       // Get counts per type (one lightweight query)
       supabase.from('leads').select('lead_type', { count: 'exact', head: false })
         .then(async () => {
-          const [a, b, c, d, e] = await Promise.all([
-            supabase.from('leads').select('id', { count: 'exact', head: true }),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound'),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified'),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent'),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).gt('email_open_count', 0),
+          const [a, b, c, d, e, f] = await Promise.all([
+            supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound').is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified').is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent').is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).gt('email_open_count', 0).is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('in_campaign', true).gt('email_open_count', 0).is('deleted_at', null),
           ])
-          return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0 }
+          return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0, in_sequence: f.count || 0 }
         })
     ])
 
@@ -249,31 +258,13 @@ export default function Leads() {
   }
 
   async function deleteLead(leadId) {
-    if (!window.confirm('Delete this lead permanently?')) return
-    await supabase.from('leads').delete().eq('id', leadId)
+    if (!window.confirm('Archive this lead? It will be hidden but can be restored by an admin.')) return
+    await supabase.from('leads').update({ deleted_at: new Date().toISOString() }).eq('id', leadId)
     await fetchLeads()
-    showToast('Lead deleted')
+    showToast('Lead archived')
   }
 
-  async function deleteAllShown() {
-    if (!window.confirm('Delete all ' + totalCount + ' leads shown? This cannot be undone.')) return
-    const allIds = []
-    let p = 0
-    while (true) {
-      let q = supabase.from('leads').select('id')
-      if (tab === 'email_opened') { q = q.gt('email_open_count', 0) } else if (tab !== 'all') { q = q.eq('lead_type', tab) }
-      if (filterStatus !== 'All') q = q.eq('status', filterStatus)
-      const { data } = await q.range(p * 500, (p + 1) * 500 - 1)
-      if (!data || data.length === 0) break
-      allIds.push(...data.map(l => l.id))
-      p++
-    }
-    for (let i = 0; i < allIds.length; i += 100) {
-      await supabase.from('leads').delete().in('id', allIds.slice(i, i + 100))
-    }
-    await fetchLeads()
-    showToast(allIds.length + ' leads deleted')
-  }
+  // deleteAllShown intentionally removed — caused accidental mass deletion
 
   async function assignToMe(leadId) {
     await supabase.from('leads').update({ assigned_to: profile.id }).eq('id', leadId)
@@ -802,6 +793,27 @@ export default function Leads() {
           <td style={td}>{l.website ? <a href={fixUrl(l.website)} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 12 }}>Visit</a> : <span style={{ color: C.dim }}>—</span>}</td>
         </>}
 
+        {(tab === 'email_opened' || tab === 'in_sequence') && <>
+          <td style={td}><span style={{ fontSize: 12, color: C.muted }}>{l.cold_company_name || l.company_name || '—'}</span></td>
+          <td style={td}>
+            <span style={{ fontWeight: 700, color: C.teal, fontSize: 13 }}>
+              👁 {l.email_open_count}
+            </span>
+          </td>
+          <td style={td}>
+            <span style={{ fontSize: 12, color: C.muted }}>
+              {l.last_email_opened_at ? new Date(l.last_email_opened_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+            </span>
+          </td>
+          {tab === 'in_sequence' && (
+            <td style={td}>
+              <span style={{ fontSize: 12, color: C.muted }}>
+                {l.last_contacted_at ? new Date(l.last_contacted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+              </span>
+            </td>
+          )}
+        </>}
+
         {/* Assigned to */}
         <td style={td} onClick={e => e.stopPropagation()}>
           {isAdmin ? (
@@ -921,6 +933,7 @@ export default function Leads() {
       verified:     [{ label: 'Address' }, { label: 'Work Done' }, { label: 'Last Payment' }, { label: 'Renewal Due' }],
       cold_agent:   [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
       email_opened: [{ label: 'Company' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Opened', field: 'last_email_opened_at' }],
+      in_sequence:  [{ label: 'Company' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Opened', field: 'last_email_opened_at' }, { label: 'Last Contacted', field: 'last_contacted_at' }],
     }
     const headers = [
       { label: 'Date', field: 'created_at' },
