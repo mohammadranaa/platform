@@ -87,6 +87,7 @@ export default function Campaigns() {
   const [selected, setSelected]     = useState(null)
   const [contacts, setContacts]           = useState([])
   const [contactFilter, setContactFilter] = useState('all')
+  const [replySnippets, setReplySnippets] = useState({}) // keyed by contact email -> { subject, snippet, date }
   const [steps, setSteps]           = useState([])
   const [variants, setVariants]     = useState([])
   const [sends, setSends]           = useState([])
@@ -146,7 +147,28 @@ export default function Campaigns() {
     setSends(sn || [])
     setVariants(vr || [])
     setContactFilter('all')
+    setReplySnippets({})
     setView('detail')
+
+    // Fetch reply content from gmail_messages for replied contacts so reps
+    // can read the reply directly in the campaign view
+    const repliedEmails = (ct || []).filter(x => x.status === 'replied').map(x => x.email)
+    if (repliedEmails.length) {
+      const { data: msgs } = await supabase
+        .from('gmail_messages')
+        .select('from_email, subject, snippet, body_text, date')
+        .in('from_email', repliedEmails)
+        .eq('is_reply', true)
+        .order('date', { ascending: false })
+      if (msgs?.length) {
+        // Keep the most recent reply per sender
+        const byEmail = {}
+        for (const m of msgs) {
+          if (!byEmail[m.from_email]) byEmail[m.from_email] = m
+        }
+        setReplySnippets(byEmail)
+      }
+    }
   }
 
   function openNewCampaign() {
@@ -691,21 +713,46 @@ export default function Campaigns() {
                 )
                 return filtered.map(c => (
                   <div key={c.id} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px',
+                    padding: '10px 10px',
                     borderBottom: `1px solid ${C.border}18`,
                     background: c.status === 'replied' ? C.tealSoft : 'transparent',
                     borderRadius: c.status === 'replied' ? 6 : 0,
+                    marginBottom: c.status === 'replied' ? 4 : 0,
                   }}>
-                    <div style={c.lead_id ? { cursor: 'pointer' } : {}} onClick={() => c.lead_id && navigate(`/leads/${c.lead_id}`)}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: c.lead_id ? C.accent : C.text }}>
-                        {c.status === 'replied' && '↩ '}{c.first_name} {c.last_name}{c.lead_id ? ' ↗' : ''}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={c.lead_id ? { cursor: 'pointer' } : {}} onClick={() => c.lead_id && navigate(`/leads/${c.lead_id}`)}>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: c.lead_id ? C.accent : C.text }}>
+                          {c.status === 'replied' && '↩ '}{c.first_name} {c.last_name}{c.lead_id ? ' ↗' : ''}
+                        </div>
+                        <div style={{ color: C.dim, fontSize: 12 }}>{c.email} {c.company ? `· ${c.company}` : ''}</div>
                       </div>
-                      <div style={{ color: C.dim, fontSize: 12 }}>{c.email} {c.company ? `· ${c.company}` : ''}</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ color: C.dim, fontSize: 12 }}>Step {c.current_step}</span>
+                        <Badge status={c.status} map={CONTACT_STATUS_META} />
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ color: C.dim, fontSize: 12 }}>Step {c.current_step}</span>
-                      <Badge status={c.status} map={CONTACT_STATUS_META} />
-                    </div>
+                    {/* Reply content — shown inline so reps can read it without leaving the page */}
+                    {c.status === 'replied' && replySnippets[c.email] && (
+                      <div style={{ marginTop: 8, background: '#fff', border: `1px solid ${C.teal}44`, borderRadius: 8, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 11, color: C.teal, fontWeight: 700, marginBottom: 4 }}>
+                          {replySnippets[c.email].subject || 'Reply'}
+                          <span style={{ fontWeight: 400, color: C.dim, marginLeft: 8 }}>
+                            {new Date(replySnippets[c.email].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                          {(replySnippets[c.email].body_text || replySnippets[c.email].snippet || '').slice(0, 400)}
+                          {(replySnippets[c.email].body_text || replySnippets[c.email].snippet || '').length > 400 && (
+                            <span style={{ color: C.dim }}> … (open inbox for full reply)</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {c.status === 'replied' && !replySnippets[c.email] && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: C.dim, fontStyle: 'italic' }}>
+                        Reply detected — open the inbox to read it
+                      </div>
+                    )}
                   </div>
                 ))
               })()}
