@@ -82,7 +82,7 @@ const TABS = [
   { key: 'inbound', label: 'Inbound' },
   { key: 'cold_agent', label: 'Estate Agents' },
   { key: 'email_opened', label: '👁 Opened Email' },
-  { key: 'in_sequence', label: '📧 In Sequence' },
+  { key: 'in_sequence', label: '📧 In Campaign' },
 ]
 
 export default function Leads() {
@@ -183,7 +183,7 @@ export default function Leads() {
     if (tab === 'email_opened') {
       q = q.gt('email_open_count', 0)
     } else if (tab === 'in_sequence') {
-      q = q.eq('in_campaign', true).gt('email_open_count', 0)
+      q = q.eq('in_campaign', true)
     } else if (tab !== 'all') {
       q = q.eq('lead_type', tab)
     }
@@ -221,7 +221,7 @@ export default function Leads() {
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified').is('deleted_at', null),
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent').is('deleted_at', null),
             supabase.from('leads').select('id', { count: 'exact', head: true }).gt('email_open_count', 0).is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('in_campaign', true).gt('email_open_count', 0).is('deleted_at', null),
+            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('in_campaign', true).is('deleted_at', null),
           ])
           return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0, in_sequence: f.count || 0 }
         })
@@ -795,23 +795,24 @@ export default function Leads() {
 
         {(tab === 'email_opened' || tab === 'in_sequence') && <>
           <td style={td}><span style={{ fontSize: 12, color: C.muted }}>{l.cold_company_name || l.company_name || '—'}</span></td>
+          {tab === 'in_sequence' && (
+            <td style={td}>
+              <span style={{ fontWeight: 600, color: C.accent, fontSize: 13 }}>{l.email_send_count || 0}</span>
+            </td>
+          )}
           <td style={td}>
-            <span style={{ fontWeight: 700, color: C.teal, fontSize: 13 }}>
-              👁 {l.email_open_count}
+            <span style={{ fontWeight: 700, color: l.email_open_count > 0 ? C.teal : C.dim, fontSize: 13 }}>
+              {l.email_open_count > 0 ? `👁 ${l.email_open_count}` : '—'}
             </span>
           </td>
           <td style={td}>
             <span style={{ fontSize: 12, color: C.muted }}>
-              {l.last_email_opened_at ? new Date(l.last_email_opened_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+              {tab === 'email_opened'
+                ? (l.last_email_opened_at ? new Date(l.last_email_opened_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—')
+                : (l.last_contacted_at ? new Date(l.last_contacted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—')
+              }
             </span>
           </td>
-          {tab === 'in_sequence' && (
-            <td style={td}>
-              <span style={{ fontSize: 12, color: C.muted }}>
-                {l.last_contacted_at ? new Date(l.last_contacted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
-              </span>
-            </td>
-          )}
         </>}
 
         {/* Assigned to */}
@@ -947,7 +948,7 @@ export default function Leads() {
       verified:     [{ label: 'Address' }, { label: 'Work Done' }, { label: 'Last Payment' }, { label: 'Renewal Due' }],
       cold_agent:   [{ label: 'Address' }, { label: 'Phone' }, { label: 'Email Verified' }, { label: 'Website' }],
       email_opened: [{ label: 'Company' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Opened', field: 'last_email_opened_at' }],
-      in_sequence:  [{ label: 'Company' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Opened', field: 'last_email_opened_at' }, { label: 'Last Contacted', field: 'last_contacted_at' }],
+      in_sequence:  [{ label: 'Company' }, { label: 'Emails Sent', field: 'email_send_count' }, { label: 'Opens', field: 'email_open_count' }, { label: 'Last Contacted', field: 'last_contacted_at' }],
     }
     const headers = [
       { label: 'Date', field: 'created_at' },
