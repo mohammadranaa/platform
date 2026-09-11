@@ -191,6 +191,10 @@ export default function NuacomDialer() {
     repBreakdown[rep].duration += (c.duration_seconds || 0)
   })
 
+  // Extension → rep name mapping
+  const EXT_NAMES = { '10': 'Asad', '11': 'Moiz', '12': 'Mehwish' }
+  const extName = (ext) => EXT_NAMES[ext] || `Ext. ${ext}`
+
   // Unique extensions/reps from call data
   const repOptions = [...new Set(calls.map(c => c.call_answered_by || c.call_initiated_by).filter(Boolean))]
 
@@ -274,7 +278,7 @@ export default function NuacomDialer() {
               {Object.entries(repBreakdown).sort((a, b) => b[1].total - a[1].total).map(([rep, data]) => (
                 <tr key={rep}>
                   <td style={{ ...td, fontWeight: 600, color: C.text }}>
-                    {rep === 'Unknown' ? <span style={{ color: C.dim }}>Unknown</span> : `Ext. ${rep}`}
+                    {rep === 'Unknown' ? <span style={{ color: C.dim }}>Unknown</span> : extName(rep)}
                   </td>
                   <td style={{ ...td, fontWeight: 700, color: C.accent }}>{data.total}</td>
                   <td style={{ ...td, color: C.accent }}>{data.inbound}</td>
@@ -305,7 +309,7 @@ export default function NuacomDialer() {
         </select>
         <select value={filterRep} onChange={e => setFilterRep(e.target.value)} style={{ ...inp, width: 'auto' }}>
           <option value="all">All Reps</option>
-          {repOptions.map(r => <option key={r} value={r}>Ext. {r}</option>)}
+          {repOptions.map(r => <option key={r} value={r}>{extName(r)}</option>)}
         </select>
       </div>
 
@@ -321,7 +325,7 @@ export default function NuacomDialer() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Direction', 'Caller', 'Callee', 'Rep', 'Status', 'Duration', 'Time', 'Recording', 'Matched'].map(h => (
+                {['Direction', 'Caller', 'Callee', 'Rep', 'Status', 'Duration', 'Time', 'Recording', 'Matched', ...(isAdmin ? [''] : [])].map(h => (
                   <th key={h} style={th}>{h}</th>
                 ))}
               </tr>
@@ -357,7 +361,7 @@ export default function NuacomDialer() {
                     </td>
                     <td style={td}>
                       <span style={{ fontSize: 12, color: C.muted }}>
-                        {call.call_answered_by ? `Ext. ${call.call_answered_by}` : call.call_initiated_by ? `Ext. ${call.call_initiated_by}` : '—'}
+                        {call.call_answered_by ? extName(call.call_answered_by) : call.call_initiated_by ? extName(call.call_initiated_by) : '—'}
                       </span>
                     </td>
                     <td style={td}>
@@ -409,6 +413,19 @@ export default function NuacomDialer() {
                         ))}
                       </div>
                     </td>
+                    {isAdmin && (
+                      <td style={td}>
+                        <button onClick={async () => {
+                          if (!window.confirm('Delete this call log? This cannot be undone.')) return
+                          await supabase.from('nuacom_calls').delete().eq('id', call.id)
+                          setCalls(p => p.filter(c => c.id !== call.id))
+                          showToast('Call log deleted')
+                        }}
+                          style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A544', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                          🗑 Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}

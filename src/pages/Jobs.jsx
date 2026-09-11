@@ -28,8 +28,7 @@ export default function Jobs() {
   const [filterMonth, setFilterMonth] = useState(() => {
     const fromUrl = searchParams.get('month')
     if (fromUrl) return fromUrl
-    const now = new Date()
-    return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+    return 'all'
   })
   const [search, setSearch] = useState(searchParams.get('q') || '')
   const [filterPayment, setFilterPayment] = useState(searchParams.get('payment') || 'All')

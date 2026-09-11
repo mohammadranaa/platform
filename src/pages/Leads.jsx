@@ -146,9 +146,12 @@ export default function Leads() {
     if (loading) return
     const savedScroll = sessionStorage.getItem('leads_scroll')
     if (!savedScroll) return
+    // Double rAF ensures the browser has committed the new layout before we scroll
     requestAnimationFrame(() => {
-      window.scrollTo(0, parseInt(savedScroll, 10) || 0)
-      sessionStorage.removeItem('leads_scroll')
+      requestAnimationFrame(() => {
+        window.scrollTo(0, parseInt(savedScroll, 10) || 0)
+        sessionStorage.removeItem('leads_scroll')
+      })
     })
   }, [loading])
 
