@@ -115,12 +115,30 @@ export default function NuacomDialer() {
     if (range.from) q = q.gte('created_at', range.from)
     if (range.to)   q = q.lt('created_at', range.to)
 
+    // Reps only see their own calls — find their extension from their profile name
+    if (!isAdmin && profile?.full_name) {
+      const repExt = Object.entries(EXT_NAMES).find(([, name]) => name === profile.full_name)?.[0]
+      if (repExt) {
+        q = q.or(`call_initiated_by.eq.${repExt},call_answered_by.eq.${repExt}`)
+      } else {
+        // Rep has no extension mapped — return nothing rather than everything
+        q = q.eq('id', '00000000-0000-0000-0000-000000000000')
+      }
+    }
+
     const [{ data: callData }, { data: profData }] = await Promise.all([
       q,
       supabase.from('profiles').select('id, full_name').eq('is_active', true),
     ])
     setCalls(callData || [])
     setProfiles(profData || [])
+
+    // For reps, lock the filter to their own extension so they can't switch
+    if (!isAdmin && profile?.full_name) {
+      const repExt = Object.entries(EXT_NAMES).find(([, name]) => name === profile.full_name)?.[0]
+      if (repExt) setFilterRep(repExt)
+    }
+
     setLoading(false)
   }
 
@@ -261,7 +279,7 @@ export default function NuacomDialer() {
       </div>
 
       {/* Rep breakdown table */}
-      {Object.keys(repBreakdown).length > 0 && (
+      {isAdmin && Object.keys(repBreakdown).length > 0 && (
         <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 20, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
             Performance by Rep / Extension
@@ -307,10 +325,12 @@ export default function NuacomDialer() {
           <option value="answered">Answered</option>
           <option value="missed">Missed</option>
         </select>
+        {isAdmin && (
         <select value={filterRep} onChange={e => setFilterRep(e.target.value)} style={{ ...inp, width: 'auto' }}>
           <option value="all">All Reps</option>
           {repOptions.map(r => <option key={r} value={r}>{extName(r)}</option>)}
         </select>
+        )}
       </div>
 
       {/* Calls table */}
@@ -325,7 +345,7 @@ export default function NuacomDialer() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Direction', 'Caller', 'Callee', 'Rep', 'Status', 'Duration', 'Time', 'Recording', 'Matched', ...(isAdmin ? [''] : [])].map(h => (
+                {['Direction', 'Caller', 'Callee', 'Rep', 'Status', 'Duration', 'Time', ...(isAdmin ? ['Recording'] : []), 'Matched', ...(isAdmin ? [''] : [])].map(h => (
                   <th key={h} style={th}>{h}</th>
                 ))}
               </tr>
@@ -377,6 +397,7 @@ export default function NuacomDialer() {
                     <td style={td}>
                       <div style={{ fontSize: 12, color: C.dim }}>{fmtTime(call.call_at || call.created_at)}</div>
                     </td>
+                    {isAdmin && (
                     <td style={td}>
                       {call.recording_url ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -396,6 +417,7 @@ export default function NuacomDialer() {
                         <span style={{ color: C.dim, fontSize: 11 }}>No recording</span>
                       )}
                     </td>
+                    )}
                     <td style={td}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {matches.length === 0 ? (

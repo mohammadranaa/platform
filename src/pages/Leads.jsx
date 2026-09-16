@@ -509,6 +509,7 @@ export default function Leads() {
           website: row.website || '',
           status: 'New',
           assigned_to: profile.id,
+          imported_by: profile.id,  // used for rep archive permission
         }
       }
     }).filter(Boolean)
@@ -935,10 +936,12 @@ export default function Leads() {
                 Release
               </button>
             )}
+            {(isAdmin || l.imported_by === profile?.id) && (
             <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }}
               style={{ background: '#FEE2E2', color: '#DC2626', border: '1px solid #DC262644', borderRadius: 6, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>
               ✕
             </button>
+            )}
           </div>
         </td>
       </tr>

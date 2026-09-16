@@ -390,10 +390,12 @@ export default function Jobs() {
                         <Td><span style={{fontSize:11}}>{j.engineer_paid_amount>0?fmt(j.engineer_paid_amount):'—'}</span></Td>
                         <Td><span style={{fontWeight:700,color:Number(j.gross_profit)>0?C.greenDark:Number(j.gross_profit)<0?C.red:C.dim}}>{j.gross_profit!=null?fmt(j.gross_profit):'—'}</span></Td>
                         <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
+                          {isAdmin && (
                           <button onClick={() => deleteJob(j.id)}
                             style={{ background:'#FEE2E2', color:'#DC2626', border:'1px solid #DC262644', borderRadius:6, padding:'4px 8px', fontSize:10, cursor:'pointer', fontWeight:600 }}>
                             ✕
                           </button>
+                          )}
                         </td>
                       </tr>
                     })}
