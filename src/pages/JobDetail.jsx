@@ -271,7 +271,7 @@ export default function JobDetail() {
     const contactParts = [job.tenant_name, job.tenant_phone].filter(Boolean)
     return [
       `Job Card ${job.job_number || ''}`,
-      'My Landlord Certificate',
+      'MLC',
       '',
       'Service:',
       services.length ? services.map(s => `- ${s}`).join('\n') : '- ',
