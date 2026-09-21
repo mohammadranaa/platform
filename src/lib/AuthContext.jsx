@@ -65,6 +65,9 @@ export function AuthProvider({ children }) {
   const isAdmin    = profile?.role === 'admin'
   const isRep      = profile?.role === 'rep'
   const isEngineer = profile?.role === 'engineer'
+  const isFinance  = profile?.role === 'finance'
+  // Finance and admin both see financial/engineer data
+  const canViewFinance = isAdmin || isFinance
 
   return (
     <AuthContext.Provider value={{
@@ -74,6 +77,8 @@ export function AuthProvider({ children }) {
       isAdmin,
       isRep,
       isEngineer,
+      isFinance,
+      canViewFinance,
       signIn,
       signOut,
     }}>

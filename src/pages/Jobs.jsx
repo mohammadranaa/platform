@@ -8,13 +8,26 @@ import { parseLocalDate } from '../lib/dateUtils'
 const C = { surface:'#F5F7FA',border:'#E5E7EB',accent:'#0093DB',accentSoft:'#E6F4FC',green:'#80D100',greenSoft:'#F0FAE0',greenDark:'#3d7a00',amber:'#D97706',amberSoft:'#FEF3C7',red:'#DC2626',redSoft:'#FEE2E2',teal:'#0D9488',tealSoft:'#CCFBF1',text:'#1F2937',muted:'#6B7280',dim:'#9CA3AF' }
 const STATUSES = ['New','In Progress','Confirmed','Completed','Declined']
 const SS = { 'New':{color:'#6B7280',bg:'#F5F7FA'},'In Progress':{color:'#0284C7',bg:'#DBEAFE'},'Confirmed':{color:'#0093DB',bg:'#E6F4FC'},'Completed':{color:'#3d7a00',bg:'#F0FAE0'},'Declined':{color:'#DC2626',bg:'#FEE2E2'} }
-const SVCS = ['EICR','GSC (CP12)','EPC','FRA','FSC','PAT Testing','Remedial Works','Consumer Unit','Diagnostics','Asbestos Survey','Fire Alarm','Boiler Installation','Other']
+const SVCS = [
+  // Electrical
+  'EICR', 'Commercial EICR', 'Consumer Unit Replacement', 'Electrical Remedial Works', 'Electrical Diagnostics', 'Emergency Lights',
+  // Gas
+  'Gas Safety Certificate (CP12)', 'Commercial Gas Safety (CP42)', 'Boiler Service', 'Boiler Installation', 'Gas Remedial Works',
+  // Energy
+  'EPC', 'Commercial EPC',
+  // Fire
+  'Fire Risk Assessment', 'Fire Safety Certificate', 'Fire Door Certificate', 'Fire Alarm Installation', 'Fire Alarm Service',
+  // Other compliance
+  'PAT Testing', 'Asbestos Survey', 'Legionella Risk Assessment',
+  // Other work
+  'Remedial Works', 'Other',
+]
 const fmt = v => '£'+Number(v||0).toLocaleString('en-GB',{minimumFractionDigits:2})
 const fmtD = d => d ? parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : '—'
 const cName = c => c?.company_name||[c?.first_name,c?.last_name].filter(Boolean).join(' ')||'—'
 
 export default function Jobs() {
-  const { profile, isAdmin } = useAuth()
+  const { profile, isAdmin, canViewFinance } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { toast, showToast } = useToast()
@@ -363,8 +376,8 @@ export default function Jobs() {
                       <th style={{padding:'8px 12px',textAlign:'left',fontSize:10,fontWeight:700,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,background:C.surface,color:C.muted}}>Remedial</th>
                       <th style={{padding:'8px 12px',textAlign:'left',fontSize:10,fontWeight:700,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,background:C.surface,color:C.muted}}>⭐</th>
                       <th style={{padding:'8px 12px',textAlign:'left',fontSize:10,fontWeight:700,textTransform:'uppercase',borderBottom:`1px solid ${C.border}`,background:C.surface,color:C.muted}}>Engineer</th>
-                      <Th label="Eng Paid" field="engineer_paid_amount"/>
-                      <Th label="Profit" field="gross_profit"/>
+                      {canViewFinance && <Th label="Eng Paid" field="engineer_paid_amount"/>}
+                      {canViewFinance && <Th label="Profit" field="gross_profit"/>}
                       <th style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, textTransform:'uppercase', borderBottom:'1px solid #E5E7EB', background:'#F5F7FA', color:'#6B7280' }}></th>
                     </tr>
                   </thead>
@@ -386,9 +399,9 @@ export default function Jobs() {
                         <Td><span style={{fontSize:11,color:C.muted}}>{j.certificate_status||'—'}</span></Td>
                         <Td style={{textAlign:'center'}}><span style={{color:j.remedial_quotation_sent?C.greenDark:C.dim}}>{j.remedial_quotation_sent?'✓':'—'}</span></Td>
                         <Td style={{textAlign:'center'}}><span style={{color:j.google_review_requested?C.amber:C.dim}}>{j.google_review_requested?'⭐':'—'}</span></Td>
-                        <Td><span style={{fontSize:11,color:C.muted}}>{j.engineer_name||'—'}</span></Td>
-                        <Td><span style={{fontSize:11}}>{j.engineer_paid_amount>0?fmt(j.engineer_paid_amount):'—'}</span></Td>
-                        <Td><span style={{fontWeight:700,color:Number(j.gross_profit)>0?C.greenDark:Number(j.gross_profit)<0?C.red:C.dim}}>{j.gross_profit!=null?fmt(j.gross_profit):'—'}</span></Td>
+                        {canViewFinance && <Td><span style={{fontSize:11,color:C.muted}}>{j.engineer_name||'—'}</span></Td>}
+                        {canViewFinance && <Td><span style={{fontSize:11}}>{j.engineer_paid_amount>0?fmt(j.engineer_paid_amount):'—'}</span></Td>}
+                        {canViewFinance && <Td><span style={{fontWeight:700,color:Number(j.gross_profit)>0?C.greenDark:Number(j.gross_profit)<0?C.red:C.dim}}>{j.gross_profit!=null?fmt(j.gross_profit):'—'}</span></Td>}
                         <td style={{ padding:'9px 12px', borderBottom:'1px solid #E5E7EB' }} onClick={e => e.stopPropagation()}>
                           {isAdmin && (
                           <button onClick={() => deleteJob(j.id)}

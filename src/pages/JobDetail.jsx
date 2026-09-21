@@ -89,7 +89,7 @@ function SiteField({ label, field, value, type = 'text', save }) {
 export default function JobDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, isAdmin } = useAuth()
+  const { profile, isAdmin, canViewFinance } = useAuth()
   const { toast, showToast } = useToast()
 
   const [job, setJob]             = useState(null)
@@ -802,9 +802,13 @@ export default function JobDetail() {
             </div>
           </div>
 
-          {/* Job Tracking */}
+          {/* Job Tracking — Finance & Admin only */}
+          {canViewFinance && (
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Tracking</div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Finance & Engineer</div>
+              {!isAdmin && <span style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>Finance View</span>}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
                 <label style={lbl}>Engineer Name</label>
@@ -879,8 +883,87 @@ export default function JobDetail() {
                   </a>
                 )}
               </div>
+
+              {/* Engineer Invoice — finance/admin only */}
+              <div style={{ gridColumn:'span 2', borderTop:`1px solid ${C.border}`, paddingTop:14, marginTop:4 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10 }}>Engineer Invoice</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  <div>
+                    <label style={lbl}>Engineer Invoice Amount (£)</label>
+                    <input type="number" defaultValue={job.engineer_invoice_amount || ''}
+                      onBlur={e => saveField('engineer_invoice_amount', Number(e.target.value) || 0)}
+                      placeholder="0.00" style={inp} />
+                  </div>
+                  <div>
+                    <label style={lbl}>Engineer Paid (£)</label>
+                    <input type="number" defaultValue={job.engineer_paid_amount || ''}
+                      onBlur={e => saveField('engineer_paid_amount', Number(e.target.value) || 0)}
+                      placeholder="0.00" style={inp} />
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:C.text }}>
+                      <input type="checkbox" checked={!!job.engineer_invoice_paid}
+                        onChange={e => saveField('engineer_invoice_paid', e.target.checked)}
+                        style={{ width:16, height:16 }} />
+                      Engineer Invoice Paid
+                    </label>
+                    <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:C.text }}>
+                      <input type="checkbox" checked={!!job.payment_proof_received}
+                        onChange={e => saveField('payment_proof_received', e.target.checked)}
+                        style={{ width:16, height:16 }} />
+                      Payment Proof Received (from client)
+                    </label>
+                  </div>
+                  <div>
+                    <label style={lbl}>Gross Profit (£)</label>
+                    <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', fontSize:13, fontWeight:700,
+                      color: (job.invoice_amount - (job.engineer_invoice_amount||0)) > 0 ? C.greenDark : C.red }}>
+                      £{((job.invoice_amount||0) - (job.engineer_invoice_amount||0)).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize:10, color:C.dim, marginTop:3 }}>Invoice − Engineer Invoice</div>
+                  </div>
+                  {/* Upload proof of engineer payment */}
+                  <div style={{ gridColumn:'span 2' }}>
+                    <label style={lbl}>Engineer Payment Proof</label>
+                    {job.engineer_invoice_proof ? (
+                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <a href={`https://fyjgtwupzpeivdedoutj.supabase.co/storage/v1/object/public/job-files/${job.engineer_invoice_proof}`}
+                          target="_blank" rel="noreferrer"
+                          style={{ color:C.accent, fontSize:13, fontWeight:600 }}>
+                          📄 View proof
+                        </a>
+                        <span style={{ color:C.dim, fontSize:11 }}>·</span>
+                        <label style={{ color:C.muted, fontSize:12, cursor:'pointer' }}>
+                          Replace
+                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={async e => {
+                            const file = e.target.files[0]; if (!file) return
+                            const path = `${id}/engineer_proof_${Date.now()}.${file.name.split('.').pop()}`
+                            await supabase.storage.from('job-files').upload(path, file, { upsert:true })
+                            await saveField('engineer_invoice_proof', path)
+                            setJob(p => ({ ...p, engineer_invoice_proof: path }))
+                            showToast('Proof uploaded ✓')
+                          }} />
+                        </label>
+                      </div>
+                    ) : (
+                      <label style={{ background:C.surface, border:`1px dashed ${C.border}`, borderRadius:8, padding:'10px 14px', fontSize:12, color:C.muted, cursor:'pointer', display:'block' }}>
+                        📎 Upload proof of payment
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={async e => {
+                          const file = e.target.files[0]; if (!file) return
+                          const path = `${id}/engineer_proof_${Date.now()}.${file.name.split('.').pop()}`
+                          await supabase.storage.from('job-files').upload(path, file, { upsert:true })
+                          await saveField('engineer_invoice_proof', path)
+                          setJob(p => ({ ...p, engineer_invoice_proof: path }))
+                          showToast('Proof uploaded ✓')
+                        }} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+          )}{/* end canViewFinance */}
 
           {/* Site & Access */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -911,7 +994,8 @@ export default function JobDetail() {
               style={{ width: '100%', minHeight: 220, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.6, color: C.text, resize: 'vertical' }} />
           </div>
 
-          {/* Engineer Remarks */}
+          {/* Engineer Remarks — finance/admin only */}
+          {canViewFinance && (
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Engineer Remarks</div>
@@ -938,6 +1022,7 @@ export default function JobDetail() {
               <p style={{ color: C.dim, fontSize: 13, margin: 0 }}>No remarks added yet.</p>
             )}
           </div>
+          )}{/* end canViewFinance */}
 
           {/* Files & Certificates */}
           <div style={{ background:'#fff', border:'1px solid #E5E7EB', borderRadius:12, padding:20, marginBottom:16 }}>
