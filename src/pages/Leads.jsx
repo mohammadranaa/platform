@@ -128,15 +128,27 @@ export default function Leads() {
   const didMountRef = useRef(false)
   useEffect(() => {
     if (!didMountRef.current) {
-      // First render: respect whatever page came from the URL (e.g. the
-      // user hit "back" after paging through the list) instead of forcing
-      // page 0.
       didMountRef.current = true
-      fetchLeads(page)
+      // On first mount, check if we're restoring from a lead/job navigation.
+      // If so, restore the page from sessionStorage (URL may not have updated yet).
+      const saved = sessionStorage.getItem('leads_nav')
+      if (saved) {
+        try {
+          const nav = JSON.parse(saved)
+          // Page is already set from URL, but ensure it matches saved state
+          const restoredPage = nav.page || 0
+          if (restoredPage !== page) setPage(restoredPage)
+          fetchLeads(restoredPage)
+        } catch {
+          fetchLeads(page)
+        }
+      } else {
+        fetchLeads(page)
+      }
       return
     }
     setPage(0)
-    fetchLeads(0) // explicit 0, not the (still-stale) `page` state
+    fetchLeads(0)
   }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
 
   // Restore scroll position after returning from a lead's detail page.
@@ -144,19 +156,31 @@ export default function Leads() {
   // thing not covered is scroll offset, which we save in openLead() below.
   useEffect(() => {
     if (loading) return
-    const savedScroll = sessionStorage.getItem('leads_scroll')
-    if (!savedScroll) return
-    // Double rAF ensures the browser has committed the new layout before we scroll
-    requestAnimationFrame(() => {
+    const saved = sessionStorage.getItem('leads_nav')
+    if (!saved) return
+    try {
+      const nav = JSON.parse(saved)
+      // Wait two paint cycles so the list rows are fully in the DOM
       requestAnimationFrame(() => {
-        window.scrollTo(0, parseInt(savedScroll, 10) || 0)
-        sessionStorage.removeItem('leads_scroll')
+        requestAnimationFrame(() => {
+          window.scrollTo(0, nav.scroll || 0)
+          sessionStorage.removeItem('leads_nav')
+        })
       })
-    })
+    } catch {}
   }, [loading])
 
   function openLead(leadId) {
-    sessionStorage.setItem('leads_scroll', String(window.scrollY))
+    // Save complete navigation state so we can restore exactly where the rep was
+    sessionStorage.setItem('leads_nav', JSON.stringify({
+      scroll: window.scrollY,
+      page,
+      tab,
+      search,
+      filterStatus,
+      sortField,
+      sortDir,
+    }))
     navigate('/leads/' + leadId)
   }
 
