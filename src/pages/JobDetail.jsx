@@ -86,6 +86,114 @@ function SiteField({ label, field, value, type = 'text', save }) {
   )
 }
 
+// ── EngineerEntries — multi-engineer invoice manager ─────────────────────────
+function EngineerEntries({ jobId, job, setJob, saveField, supabase, showToast, C, inp, lbl }) {
+  const entries = Array.isArray(job.engineer_entries) ? job.engineer_entries : []
+
+  function updateEntries(newEntries) {
+    setJob(p => ({ ...p, engineer_entries: newEntries }))
+    saveField('engineer_entries', newEntries)
+  }
+
+  function updateEntry(idx, patch) {
+    const next = entries.map((e, i) => i === idx ? { ...e, ...patch } : e)
+    updateEntries(next)
+  }
+
+  function addEntry() {
+    updateEntries([...entries, { name: '', invoice_amount: 0, paid: false, proof_path: '', notes: '' }])
+  }
+
+  function removeEntry(idx) {
+    updateEntries(entries.filter((_, i) => i !== idx))
+  }
+
+  async function uploadProof(idx, file) {
+    const ext = file.name.split('.').pop()
+    const path = `${jobId}/eng_proof_${idx}_${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('job-files').upload(path, file, { upsert: true })
+    if (error) { showToast('Upload failed: ' + error.message, 'error'); return }
+    updateEntry(idx, { proof_path: path })
+    showToast('Proof uploaded ✓')
+  }
+
+  const proofUrl = path => `https://fyjgtwupzpeivdedoutj.supabase.co/storage/v1/object/public/job-files/${path}`
+
+  return (
+    <div>
+      {entries.length === 0 ? (
+        <div style={{ color: C.dim, fontSize: 13, fontStyle: 'italic', marginBottom: 12 }}>
+          No engineer entries yet. Click "Add Engineer" to record invoice details.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
+          {entries.map((entry, idx) => (
+            <div key={idx} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Engineer {idx + 1}
+                </div>
+                <button onClick={() => removeEntry(idx)}
+                  style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                  Remove
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={lbl}>Engineer Name</label>
+                  <input value={entry.name || ''}
+                    onChange={e => updateEntry(idx, { name: e.target.value })}
+                    placeholder="Full name" style={inp} />
+                </div>
+                <div>
+                  <label style={lbl}>Invoice Amount (£)</label>
+                  <input type="number" value={entry.invoice_amount || ''}
+                    onChange={e => updateEntry(idx, { invoice_amount: Number(e.target.value) || 0 })}
+                    placeholder="0.00" style={inp} />
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={lbl}>Notes</label>
+                  <input value={entry.notes || ''}
+                    onChange={e => updateEntry(idx, { notes: e.target.value })}
+                    placeholder="Optional notes about this engineer's work" style={inp} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: C.text }}>
+                    <input type="checkbox" checked={!!entry.paid}
+                      onChange={e => updateEntry(idx, { paid: e.target.checked })}
+                      style={{ width: 16, height: 16 }} />
+                    Invoice Paid
+                  </label>
+                </div>
+                <div>
+                  {entry.proof_path ? (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <a href={proofUrl(entry.proof_path)} target="_blank" rel="noreferrer"
+                        style={{ color: C.accent, fontSize: 12, fontWeight: 600 }}>📄 View proof</a>
+                      <label style={{ color: C.muted, fontSize: 12, cursor: 'pointer' }}>
+                        Replace <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={e => e.target.files[0] && uploadProof(idx, e.target.files[0])} />
+                      </label>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: C.muted, fontSize: 12, cursor: 'pointer', border: `1px dashed ${C.border}`, borderRadius: 6, padding: '6px 12px', background: '#fff' }}>
+                      📎 Upload payment proof
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={e => e.target.files[0] && uploadProof(idx, e.target.files[0])} />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <button onClick={addEntry}
+        style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 8, padding: '7px 16px', fontSize: 12, cursor: 'pointer', fontWeight: 700 }}>
+        + Add Engineer
+      </button>
+    </div>
+  )
+}
+
 export default function JobDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -802,166 +910,103 @@ export default function JobDetail() {
             </div>
           </div>
 
-          {/* Job Tracking — Finance & Admin only */}
-          {canViewFinance && (
+          {/* ── PART 1: Financials & Certificate — visible to everyone ── */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Finance & Engineer</div>
-              {!isAdmin && <span style={{ background:'#EDE9FE', color:'#7C3AED', borderRadius:5, padding:'2px 8px', fontSize:10, fontWeight:700 }}>Finance View</span>}
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Financials & Certificate</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+
+              {/* Amount Closed */}
               <div>
-                <label style={lbl}>Engineer Name</label>
-                <input value={job.engineer_name || ''}
-                  onChange={e => setJob(p=>({...p, engineer_name: e.target.value}))}
-                  onBlur={e => saveField('engineer_name', e.target.value)}
-                  placeholder="Name of the engineer who did the work"
-                  style={inp} />
+                <label style={lbl}>Amount Closed (£)</label>
+                <input type="number" defaultValue={job.amount_received || ''}
+                  onBlur={e => saveField('amount_received', Number(e.target.value) || 0)}
+                  placeholder="0.00" style={inp} />
               </div>
+
+              {/* Payment Status */}
               <div>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Engineer Paid (£)</label>
-                <input type="number" defaultValue={job.engineer_paid_amount || ''} onBlur={e => saveField('engineer_paid_amount', Number(e.target.value) || 0)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Work Done</label>
-                <input defaultValue={job.work_done || ''} onBlur={e => saveField('work_done', e.target.value)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Amount Received (£)</label>
-                <input type="number" defaultValue={job.amount_received || ''} onBlur={e => saveField('amount_received', Number(e.target.value) || 0)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Payment Status</label>
-                <select value={job.payment_status || ''} onChange={e => saveField('payment_status', e.target.value)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }}>
+                <label style={lbl}>Payment Status</label>
+                <select value={job.payment_status || ''} onChange={e => saveField('payment_status', e.target.value)} style={inp}>
                   <option value="">—</option>
                   {PAYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+
+              {/* Certificate Result */}
               <div>
-                <label style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Certificate Status</label>
-                <select value={job.certificate_status || ''} onChange={e => saveField('certificate_status', e.target.value)}
-                  style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '7px 10px', fontSize: 13, width: '100%' }}>
+                <label style={lbl}>Certificate Result</label>
+                <select value={job.certificate_result || ''} onChange={e => saveField('certificate_result', e.target.value)} style={inp}>
+                  <option value="">—</option>
+                  <option>Satisfactory</option>
+                  <option>Unsatisfactory</option>
+                  <option>Pass</option>
+                  <option>Fail</option>
+                  <option>N/A</option>
+                </select>
+              </div>
+
+              {/* Certificate Status */}
+              <div>
+                <label style={lbl}>Certificate Status</label>
+                <select value={job.certificate_status || ''} onChange={e => saveField('certificate_status', e.target.value)} style={inp}>
                   <option value="">—</option>
                   {CERT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
-                <input type="checkbox" checked={!!job.certificate_sent} onChange={e => saveField('certificate_sent', e.target.checked)} id="certificate_sent" />
-                <label htmlFor="certificate_sent" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Certificate Sent</label>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 18 }}>
-                <input type="checkbox" checked={!!job.remedial_quotation_sent} onChange={e => saveField('remedial_quotation_sent', e.target.checked)} id="remedial_quotation_sent" />
-                <label htmlFor="remedial_quotation_sent" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Remedial Quotation Sent</label>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={!!job.google_review_requested} onChange={e => saveField('google_review_requested', e.target.checked)} id="google_review_requested" />
-                <label htmlFor="google_review_requested" style={{ color: C.text, fontSize: 13, cursor: 'pointer' }}>Google Review Requested</label>
-              </div>
-              <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-                <input type="checkbox" checked={!!job.payment_proof_received}
-                  onChange={e => saveField('payment_proof_received', e.target.checked)}
-                  style={{ width:16, height:16 }} />
-                Payment Proof Received
-              </label>
 
-              <div style={{ gridColumn:'span 2' }}>
-                <label style={lbl}>Certificate Link (external)</label>
-                <input value={job.certificate_file_url || ''}
-                  onChange={e => setJob(p=>({...p, certificate_file_url: e.target.value}))}
-                  onBlur={e => saveField('certificate_file_url', e.target.value)}
-                  placeholder="Paste Google Drive or external link…"
-                  style={inp} />
-                {job.certificate_file_url && (
-                  <a href={job.certificate_file_url.startsWith('http') ? job.certificate_file_url : 'https://' + job.certificate_file_url}
-                    target="_blank" rel="noreferrer"
-                    style={{ fontSize:12, color:'#0093DB', marginTop:4, display:'inline-block' }}>
-                    Open link →
-                  </a>
-                )}
-              </div>
-
-              {/* Engineer Invoice — finance/admin only */}
-              <div style={{ gridColumn:'span 2', borderTop:`1px solid ${C.border}`, paddingTop:14, marginTop:4 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:10 }}>Engineer Invoice</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                  <div>
-                    <label style={lbl}>Engineer Invoice Amount (£)</label>
-                    <input type="number" defaultValue={job.engineer_invoice_amount || ''}
-                      onBlur={e => saveField('engineer_invoice_amount', Number(e.target.value) || 0)}
-                      placeholder="0.00" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Engineer Paid (£)</label>
-                    <input type="number" defaultValue={job.engineer_paid_amount || ''}
-                      onBlur={e => saveField('engineer_paid_amount', Number(e.target.value) || 0)}
-                      placeholder="0.00" style={inp} />
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                    <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:C.text }}>
-                      <input type="checkbox" checked={!!job.engineer_invoice_paid}
-                        onChange={e => saveField('engineer_invoice_paid', e.target.checked)}
-                        style={{ width:16, height:16 }} />
-                      Engineer Invoice Paid
-                    </label>
-                    <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:C.text }}>
-                      <input type="checkbox" checked={!!job.payment_proof_received}
-                        onChange={e => saveField('payment_proof_received', e.target.checked)}
-                        style={{ width:16, height:16 }} />
-                      Payment Proof Received (from client)
-                    </label>
-                  </div>
-                  <div>
-                    <label style={lbl}>Gross Profit (£)</label>
-                    <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px', fontSize:13, fontWeight:700,
-                      color: (job.invoice_amount - (job.engineer_invoice_amount||0)) > 0 ? C.greenDark : C.red }}>
-                      £{((job.invoice_amount||0) - (job.engineer_invoice_amount||0)).toFixed(2)}
-                    </div>
-                    <div style={{ fontSize:10, color:C.dim, marginTop:3 }}>Invoice − Engineer Invoice</div>
-                  </div>
-                  {/* Upload proof of engineer payment */}
-                  <div style={{ gridColumn:'span 2' }}>
-                    <label style={lbl}>Engineer Payment Proof</label>
-                    {job.engineer_invoice_proof ? (
-                      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                        <a href={`https://fyjgtwupzpeivdedoutj.supabase.co/storage/v1/object/public/job-files/${job.engineer_invoice_proof}`}
-                          target="_blank" rel="noreferrer"
-                          style={{ color:C.accent, fontSize:13, fontWeight:600 }}>
-                          📄 View proof
-                        </a>
-                        <span style={{ color:C.dim, fontSize:11 }}>·</span>
-                        <label style={{ color:C.muted, fontSize:12, cursor:'pointer' }}>
-                          Replace
-                          <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={async e => {
-                            const file = e.target.files[0]; if (!file) return
-                            const path = `${id}/engineer_proof_${Date.now()}.${file.name.split('.').pop()}`
-                            await supabase.storage.from('job-files').upload(path, file, { upsert:true })
-                            await saveField('engineer_invoice_proof', path)
-                            setJob(p => ({ ...p, engineer_invoice_proof: path }))
-                            showToast('Proof uploaded ✓')
-                          }} />
-                        </label>
-                      </div>
-                    ) : (
-                      <label style={{ background:C.surface, border:`1px dashed ${C.border}`, borderRadius:8, padding:'10px 14px', fontSize:12, color:C.muted, cursor:'pointer', display:'block' }}>
-                        📎 Upload proof of payment
-                        <input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={async e => {
-                          const file = e.target.files[0]; if (!file) return
-                          const path = `${id}/engineer_proof_${Date.now()}.${file.name.split('.').pop()}`
-                          await supabase.storage.from('job-files').upload(path, file, { upsert:true })
-                          await saveField('engineer_invoice_proof', path)
-                          setJob(p => ({ ...p, engineer_invoice_proof: path }))
-                          showToast('Proof uploaded ✓')
-                        }} />
-                      </label>
-                    )}
-                  </div>
-                </div>
+              {/* Checkboxes row */}
+              <div style={{ gridColumn: 'span 2', display: 'flex', flexWrap: 'wrap', gap: 20, paddingTop: 4 }}>
+                {[
+                  { field: 'certificate_sent',        label: 'Certificate Sent'          },
+                  { field: 'remedial_quotation_sent',  label: 'Remedial Quotation Sent'  },
+                  { field: 'google_review_requested',  label: 'Google Review Requested'  },
+                  { field: 'payment_proof_received',   label: 'Payment Proof Received'   },
+                ].map(({ field, label }) => (
+                  <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: C.text, userSelect: 'none' }}>
+                    <input type="checkbox" checked={!!job[field]}
+                      onChange={e => { saveField(field, e.target.checked); setJob(p => ({ ...p, [field]: e.target.checked })) }}
+                      style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                    {label}
+                  </label>
+                ))}
               </div>
             </div>
+          </div>
+
+          {/* ── PART 2: Finance & Engineer — admin/finance only ── */}
+          {canViewFinance && (
+          <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Finance & Engineer</div>
+              {!isAdmin && <span style={{ background: '#EDE9FE', color: '#7C3AED', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>Finance</span>}
+            </div>
+
+            {/* Engineer entries — expandable multi-engineer */}
+            <EngineerEntries jobId={id} job={job} setJob={setJob} saveField={saveField} supabase={supabase} showToast={showToast} C={C} inp={inp} lbl={lbl} />
+
+            {/* Gross profit summary */}
+            {(() => {
+              const entries = Array.isArray(job.engineer_entries) ? job.engineer_entries : []
+              const totalEngInvoice = entries.reduce((s, e) => s + (Number(e.invoice_amount) || 0), 0)
+              const invoiceAmt = Number(job.invoice_amount) || 0
+              const profit = invoiceAmt - totalEngInvoice
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+                  <div style={{ background: C.surface, borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 3 }}>Job Invoice</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>£{invoiceAmt.toFixed(2)}</div>
+                  </div>
+                  <div style={{ background: C.surface, borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 3 }}>Total Eng. Invoices</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: C.amber }}>£{totalEngInvoice.toFixed(2)}</div>
+                  </div>
+                  <div style={{ background: profit >= 0 ? C.greenSoft : C.redSoft, borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: profit >= 0 ? C.greenDark : C.red, fontWeight: 600, marginBottom: 3 }}>Gross Profit</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: profit >= 0 ? C.greenDark : C.red }}>£{profit.toFixed(2)}</div>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
           )}{/* end canViewFinance */}
 
@@ -1080,7 +1125,7 @@ export default function JobDetail() {
               )}
             </div>
 
-            {/* Certificate link field — only show in certificates tab */}
+            {/* Certificate link — shown in certificates tab */}
             {fileTab === 'certificates' && (
               <div style={{ marginBottom:12 }}>
                 <input value={job.certificate_file_url || ''}
@@ -1101,16 +1146,22 @@ export default function JobDetail() {
             {/* File grid filtered by tab */}
             {(() => {
               const tabFiles = files.filter(f => fileTab==='payment' ? (f.file_type==='payment') : f.file_type === fileTab.slice(0, -1))
-              if (tabFiles.length === 0) return (
+
+              // In photos tab, also pull Google Drive / external image links from job diary/files
+              // by extracting direct image URLs already stored on the job
+              const drivePhotos = fileTab === 'photos' ? (job.photo_urls || []).filter(Boolean) : []
+
+              if (tabFiles.length === 0 && drivePhotos.length === 0) return (
                 <div style={{ color:'#9CA3AF', fontSize:13, padding:'24px 0', textAlign:'center', border:'2px dashed #E5E7EB', borderRadius:8 }}>
-                  {fileTab === 'payment' ? 'No payment proof yet. Use the upload button above.' : `No ${fileTab} yet. Use the upload button above.`}
+                  {fileTab === 'payment' ? 'No payment proof yet.' : `No ${fileTab} yet. Use the upload button above.`}
                 </div>
               )
+
               return (
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:10 }}>
                   {tabFiles.map(f => {
                     const url = getFileUrl(f.storage_path)
-                    const isImage = fileTab === 'photos' || (fileTab === 'payment' && f.mime_type?.startsWith('image/'))
+                    const isImage = ['photo','payment'].includes(f.file_type) || f.mime_type?.startsWith('image/')
                     return (
                       <div key={f.id} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
                         {isImage ? (
@@ -1141,9 +1192,43 @@ export default function JobDetail() {
                       </div>
                     )
                   })}
+                  {/* Drive/external photo link cards */}
+                  {drivePhotos.map((url, i) => (
+                    <div key={`drive-${i}`} style={{ border:'1px solid #E5E7EB', borderRadius:8, overflow:'hidden', background:'#FAFBFC' }}>
+                      <a href={url} target="_blank" rel="noreferrer">
+                        <img src={url} alt={`Photo ${i+1}`}
+                          onError={e => { e.target.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:110px;font-size:28px">🔗</div>' }}
+                          style={{ width:'100%', height:110, objectFit:'cover', display:'block' }} />
+                      </a>
+                      <div style={{ padding:'6px 8px', borderTop:'1px solid #E5E7EB', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <span style={{ fontSize:10, color:'#0093DB' }}>Drive link</span>
+                        <button onClick={() => {
+                          const updated = (job.photo_urls||[]).filter((_, j) => j !== i)
+                          setJob(p => ({ ...p, photo_urls: updated }))
+                          saveField('photo_urls', updated)
+                        }} style={{ background:'#FEE2E2', color:'#DC2626', border:'none', borderRadius:4, padding:'2px 6px', fontSize:10, cursor:'pointer' }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )
             })()}
+            {/* Add Drive/external photo link */}
+            {fileTab === 'photos' && (
+              <div style={{ marginTop:12 }}>
+                <input placeholder="Or paste a Google Drive / Dropbox photo link…"
+                  style={{ width:'100%', background:'#fff', border:'1px dashed #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:12, color:'#6B7280' }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      const updated = [...(job.photo_urls||[]), e.target.value.trim()]
+                      setJob(p => ({ ...p, photo_urls: updated }))
+                      saveField('photo_urls', updated)
+                      e.target.value = ''
+                    }
+                  }} />
+                <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3 }}>Press Enter to add a link</div>
+              </div>
+            )}
           </div>
         </div>
 
