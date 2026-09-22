@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ServicePicker from '../components/ServicePicker.jsx'
+import { CERT_EXPIRY_YEARS } from '../lib/services.js'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import SendEmailModal from '../components/SendEmailModal'
@@ -442,20 +444,7 @@ export default function JobDetail() {
     setFiles(data || [])
   }
 
-  // ── Certificate expiry calculation ────────────────────────────
-  // Used by the portal to show traffic-light status per property
-  const CERT_EXPIRY_YEARS = {
-    'EICR': 5, 'Commercial EICR': 5,
-    'Gas Safety Certificate': 1, 'Gas Safety Certificate (CP12)': 1, 'Gas Safety (CP12)': 1,
-    'Commercial Gas Safety (CP42)': 1,
-    'EPC': 10, 'Commercial EPC': 10,
-    'Fire Risk Assessment': 1, 'Fire Risk Assessment (Commercial)': 1,
-    'PAT Testing': 1,
-    'Fire Safety Certificate': 1, 'Fire Door Certificate': 1,
-    'Emergency Lights': 1, 'Emergency Lighting': 1,
-    'Asbestos Survey': 2,
-    'Legionella': 2, 'Legionella Risk Assessment': 2,
-  }
+  // CERT_EXPIRY_YEARS imported from services.js — single source of truth
 
   function calcExpiryDate(certType, issueDateStr) {
     if (!issueDateStr || !certType) return ''
@@ -470,21 +459,20 @@ export default function JobDetail() {
     if (!j?.service_types?.length) return ''
     // Map common service_type strings to certificate type names
     const raw = j.service_types[0]
+    // canonical mapping — service label → certificate type
     const MAP = {
       'EICR': 'EICR', 'Commercial EICR': 'Commercial EICR',
-      'Gas Safety Certificate': 'Gas Safety Certificate',
-      'Gas Safety Certificate (CP12)': 'Gas Safety Certificate (CP12)',
-      'Gas Safety': 'Gas Safety Certificate', 'CP12': 'Gas Safety Certificate (CP12)',
+      'GSC (CP12)': 'GSC (CP12)', 'Commercial Gas (CP42)': 'Commercial Gas (CP42)',
       'EPC': 'EPC', 'Commercial EPC': 'Commercial EPC',
-      'Fire Risk Assessment': 'Fire Risk Assessment',
-      'PAT Testing': 'PAT Testing',
-      'Fire Safety Certificate': 'Fire Safety Certificate',
+      'Fire Risk Assessment (FRA)': 'Fire Risk Assessment (FRA)',
+      'Fire Safety Certificate (FSC)': 'Fire Safety Certificate (FSC)',
       'Fire Door Certificate': 'Fire Door Certificate',
-      'Emergency Lights': 'Emergency Lights',
+      'Emergency Lights Certificate (ELC)': 'Emergency Lights Certificate (ELC)',
+      'PAT Testing': 'PAT Testing',
       'Asbestos Survey': 'Asbestos Survey',
-      'Legionella': 'Legionella',
+      'Legionella Risk Assessment': 'Legionella Risk Assessment',
     }
-    return MAP[raw] || raw
+    return MAP[raw] || null
   }
 
   // Called when user picks a certificate file — open modal first, upload after
@@ -850,11 +838,10 @@ export default function JobDetail() {
               {/* Services */}
               <div style={{ gridColumn:'span 2' }}>
                 <label style={lbl}>Services</label>
-                <input value={(job.service_types || []).join(', ')}
-                  onChange={e => setJob(p=>({...p, service_types: e.target.value.split(',').map(s=>s.trim()).filter(Boolean)}))}
-                  onBlur={e => saveField('service_types', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))}
-                  placeholder="e.g. EICR, FRA, GSC"
-                  style={inp} />
+                <ServicePicker
+                  selected={job.service_types || []}
+                  onChange={v => { setJob(p=>({...p, service_types: v})); saveField('service_types', v) }}
+                />
               </div>
 
               {/* Detail of Service */}
@@ -1689,10 +1676,11 @@ export default function JobDetail() {
                 }}
                 style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}>
                 <option value="">— Select type —</option>
-                {['EICR','Commercial EICR','Gas Safety Certificate (CP12)','Commercial Gas Safety (CP42)',
-                  'EPC','Commercial EPC','Fire Risk Assessment','Fire Risk Assessment (Commercial)',
-                  'PAT Testing','Fire Safety Certificate','Fire Door Certificate',
-                  'Emergency Lights','Asbestos Survey','Legionella Risk Assessment','Other'].map(t => (
+                {['EICR','Commercial EICR','GSC (CP12)','Commercial Gas (CP42)',
+                  'EPC','Commercial EPC','Fire Risk Assessment (FRA)','Fire Safety Certificate (FSC)',
+                  'Fire Door Certificate','Emergency Lights Certificate (ELC)',
+                  'PAT Testing','Asbestos Survey','Legionella Risk Assessment',
+                  'Remedial Works','Other'].map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>

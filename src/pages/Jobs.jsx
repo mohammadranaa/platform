@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import ServicePicker from '../components/ServicePicker.jsx'
+import { SERVICE_LABELS } from '../lib/services.js'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { parseLocalDate } from '../lib/dateUtils'
@@ -8,20 +10,7 @@ import { parseLocalDate } from '../lib/dateUtils'
 const C = { surface:'#F5F7FA',border:'#E5E7EB',accent:'#0093DB',accentSoft:'#E6F4FC',green:'#80D100',greenSoft:'#F0FAE0',greenDark:'#3d7a00',amber:'#D97706',amberSoft:'#FEF3C7',red:'#DC2626',redSoft:'#FEE2E2',teal:'#0D9488',tealSoft:'#CCFBF1',text:'#1F2937',muted:'#6B7280',dim:'#9CA3AF' }
 const STATUSES = ['New','In Progress','Confirmed','Completed','Declined']
 const SS = { 'New':{color:'#6B7280',bg:'#F5F7FA'},'In Progress':{color:'#0284C7',bg:'#DBEAFE'},'Confirmed':{color:'#0093DB',bg:'#E6F4FC'},'Completed':{color:'#3d7a00',bg:'#F0FAE0'},'Declined':{color:'#DC2626',bg:'#FEE2E2'} }
-const SVCS = [
-  // Electrical
-  'EICR', 'Commercial EICR', 'Consumer Unit Replacement', 'Electrical Remedial Works', 'Electrical Diagnostics', 'Emergency Lights',
-  // Gas
-  'Gas Safety Certificate (CP12)', 'Commercial Gas Safety (CP42)', 'Boiler Service', 'Boiler Installation', 'Gas Remedial Works',
-  // Energy
-  'EPC', 'Commercial EPC',
-  // Fire
-  'Fire Risk Assessment', 'Fire Safety Certificate', 'Fire Door Certificate', 'Fire Alarm Installation', 'Fire Alarm Service',
-  // Other compliance
-  'PAT Testing', 'Asbestos Survey', 'Legionella Risk Assessment',
-  // Other work
-  'Remedial Works', 'Other',
-]
+const SVCS = SERVICE_LABELS // canonical list from services.js
 const fmt = v => '£'+Number(v||0).toLocaleString('en-GB',{minimumFractionDigits:2})
 const fmtD = d => d ? parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : '—'
 const cName = c => c?.company_name||[c?.first_name,c?.last_name].filter(Boolean).join(' ')||'—'
@@ -548,7 +537,7 @@ export default function Jobs() {
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Job Title *</label><input value={form.title} onChange={e=>sf('title',e.target.value)} placeholder="e.g. EICR + GSC — 2-bed flat" style={inp}/></div>
               <div style={{gridColumn:'span 2'}}><label style={lbl}>Services</label>
                 <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                  {SVCS.map(s=><button key={s} type="button" onClick={()=>tog(s)} style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${form.service_types.includes(s)?C.accent:C.border}`,background:form.service_types.includes(s)?C.accentSoft:'#fff',color:form.service_types.includes(s)?C.accent:C.muted,cursor:'pointer',fontSize:12,fontWeight:form.service_types.includes(s)?700:400}}>{s}</button>)}
+                  <ServicePicker selected={form.service_types||[]} onChange={v=>sf('service_types',v)} compact />
                 </div></div>
               <div><label style={lbl}>Assigned BDL</label><select value={form.assigned_to} onChange={e=>sf('assigned_to',e.target.value)} style={inp}><option value="">— Select —</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select></div>
               <div><label style={lbl}>Type</label><select value={form.job_source_type} onChange={e=>sf('job_source_type',e.target.value)} style={inp}><option value="inbound">Inbound</option><option value="outbound">Outbound</option></select></div>
