@@ -246,6 +246,15 @@ export default function ActivityFeed({ leadId, clientId, jobId, compact = false 
                         {renderBody(a.body)}
                       </div>
                     )}
+                    {/* Call recording link — shown when nuacom logs a call with a recording */}
+                    {a.activity_type === 'call' && a.metadata?.recording_url && (
+                      <div style={{ marginTop: 6 }}>
+                        <a href={a.metadata.recording_url} target="_blank" rel="noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#FEF3C7', color: '#D97706', border: '1px solid #D9770633', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                          🎙 Listen to recording
+                        </a>
+                      </div>
+                    )}
                     <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>
                       {a.rep_name}
                       {a.mentioned_users?.length > 0 && (

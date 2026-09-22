@@ -22,7 +22,10 @@ export function AuthProvider({ children }) {
 
     // 2. Listen for login / logout events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        // TOKEN_REFRESHED fires every time the tab regains focus — ignore it
+        // to prevent full re-render cascades when reps switch tabs
+        if (event === 'TOKEN_REFRESHED') return
         setSession(session)
         if (session) {
           fetchProfile(session.user.id)

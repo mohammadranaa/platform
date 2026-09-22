@@ -4,6 +4,7 @@ import { useAuth } from '../lib/AuthContext'
 import { supabase } from '../lib/supabase'
 import AISidebar from './AISidebar'
 import IncomingCallPopup from './IncomingCallPopup'
+import GlobalSearch from './GlobalSearch'
 
 const S = {
   sidebarBg:      '#1F2937',
@@ -77,6 +78,11 @@ export default function Layout() {
             <span style={{ fontSize: 18 }}>◈</span> MLC Platform
           </div>
           <div style={{ color: S.sidebarMuted, fontSize: 10, marginTop: 2 }}>CRM · Jobs · Cold Email</div>
+        </div>
+
+        {/* Global search */}
+        <div style={{ padding: '6px 10px', borderBottom: `1px solid ${S.sidebarBorder}22` }}>
+          <GlobalSearch />
         </div>
 
         {/* Nav */}

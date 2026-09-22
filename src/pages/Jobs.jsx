@@ -227,8 +227,14 @@ export default function Jobs() {
       }
     }
 
-    setSaving(false);setShowNew(false);setForm(blank);setClientProperties([]);setSelectedPropertyId('');await load()
+    // Close modal immediately so UI doesn't feel frozen, reload in background
+    setSaving(false)
+    setShowNew(false)
+    setForm(blank)
+    setClientProperties([])
+    setSelectedPropertyId('')
     showToast('Job '+job.job_number+' created ✓')
+    load() // no await — runs in background
   }
 
   return (
@@ -240,7 +246,7 @@ export default function Jobs() {
         </div>
         <div style={{display:'flex',gap:8}}>
           <div style={{display:'flex',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
-            {[['list','☰ List'],['board','▦ Board'],['monthly','📅 Monthly']].map(([k,l])=>(
+            {[['list','☰ List'],['board','▦ Board'],['monthly','📅 Monthly'],['certs','📜 Certificates']].map(([k,l])=>(
               <button key={k} onClick={()=>setTab(k)} style={{padding:'7px 14px',border:'none',background:tab===k?C.accent:'transparent',color:tab===k?'#fff':C.muted,cursor:'pointer',fontSize:12,fontWeight:tab===k?700:400}}>{l}</button>
             ))}
           </div>
@@ -418,6 +424,45 @@ export default function Jobs() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Certificates view ──────────────────────────────────────── */}
+      {tab === 'certs' && (
+        <div style={{ background:'#fff', border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', boxShadow:'0 1px 4px rgba(0,0,0,0.06)' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+            <thead>
+              <tr style={{ background:C.surface }}>
+                {['Job #','Client','Address','Services','Cert Status','Result','Scheduled',''].map(h=>(
+                  <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedJobs.map(j => {
+                const cs = j.certificate_status || 'Not Issued'
+                const certCol = cs==='Sent' ? {bg:'#DCFCE7',c:'#15803D'} : cs==='Issued' ? {bg:'#FEF3C7',c:'#B45309'} : {bg:'#F3F4F6',c:'#6B7280'}
+                const cr = j.certificate_result
+                const resCol = cr==='Satisfactory'||cr==='Pass' ? {bg:'#DCFCE7',c:'#15803D'} : cr==='Unsatisfactory'||cr==='Fail' ? {bg:'#FEE2E2',c:'#DC2626'} : {bg:'#F3F4F6',c:'#9CA3AF'}
+                return (
+                  <tr key={j.id} onClick={()=>navigate('/jobs/'+j.id)}
+                    style={{ cursor:'pointer', borderBottom:`1px solid ${C.border}` }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface}
+                    onMouseLeave={e=>e.currentTarget.style.background=''}>
+                    <td style={{padding:'10px 14px',fontSize:12,fontWeight:700,color:C.accent}}>{j.job_number}</td>
+                    <td style={{padding:'10px 14px',fontSize:12,color:C.text}}>{j.clients?(j.clients.company_name||`${j.clients.first_name||''} ${j.clients.last_name||''}`.trim()):'—'}</td>
+                    <td style={{padding:'10px 14px',fontSize:11,color:C.muted,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{j.site_address||'—'}</td>
+                    <td style={{padding:'10px 14px',fontSize:11,color:C.muted}}>{(j.service_types||[]).slice(0,2).join(', ')||'—'}</td>
+                    <td style={{padding:'10px 14px'}}><span style={{background:certCol.bg,color:certCol.c,borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:700}}>{cs}</span></td>
+                    <td style={{padding:'10px 14px'}}>{cr?<span style={{background:resCol.bg,color:resCol.c,borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:700}}>{cr}</span>:<span style={{color:C.dim,fontSize:11}}>—</span>}</td>
+                    <td style={{padding:'10px 14px',fontSize:11,color:C.muted}}>{j.scheduled_date||'—'}</td>
+                    <td style={{padding:'10px 14px',color:C.dim,fontSize:12}}>→</td>
+                  </tr>
+                )
+              })}
+              {sortedJobs.length===0&&<tr><td colSpan={8} style={{padding:'40px',textAlign:'center',color:C.muted}}>No jobs match current filters.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {showNew&&(
