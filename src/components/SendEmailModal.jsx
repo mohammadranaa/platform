@@ -51,20 +51,18 @@ export default function SendEmailModal({
 
   useEffect(() => {
     supabase.from('user_email_accounts')
-      .select('id, gmail_address, display_name, account_type, token_expiry')
-      .eq('is_active', true)
-      .eq('account_type', 'personal')
-      .order('account_type')
+      .select('id, gmail_address, display_name, account_type, token_expiry, profile_id')
+      .eq('is_active', true).eq('account_type', 'personal')
+      .neq('access_token', 'NOT_CONNECTED')
+      .order('gmail_address')
       .then(({ data }) => {
-        setAccounts(data || [])
-        // Job/Invoice/Quote emails only ever go from the main business
-        // inbox -- cold-outreach accounts are a separate sending identity
-        // and shouldn't be selectable here, even as a fallback.
-        const now = new Date()
-        const hasValidToken = a => a.token_expiry && new Date(a.token_expiry) > now
-        const personal = (data || []).find(a => hasValidToken(a))
-        if (personal) setAccountId(personal.id)
-        else if (data?.length) setAccountId(data[0].id)
+        // Reps/finance send only from their own inbox; admins may pick any connected personal inbox (own first)
+        const isAdminUser = profile?.role === 'admin'
+        const mine = (data || []).filter(a => a.profile_id === profile?.id)
+        const list = isAdminUser ? [...mine, ...(data || []).filter(a => a.profile_id !== profile?.id)] : mine
+        setAccounts(list)
+        setAccountId(list[0]?.id || '')
+        if (!list.length) setError(`Your inbox (${profile?.email || 'personal email'}) isn't connected yet. Go to Email Inbox and click "Connect" first.`)
       })
 
     // Job/Invoice/Quote emails are process communications only -- cold

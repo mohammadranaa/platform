@@ -47,8 +47,10 @@ export default function EmailInbox() {
       supabase.from('gmail_messages').select('*, user_email_accounts(gmail_address)')
         .order('date', { ascending: false }).limit(500),
     ])
-    setAccounts(accs || [])
-    const personalIds = new Set((accs || []).map(a => a.id))
+    // Reps only see their own inbox; admins see every connected personal inbox
+    const visible = isAdmin ? (accs || []) : (accs || []).filter(a => a.profile_id === profile?.id)
+    setAccounts(visible)
+    const personalIds = new Set(visible.map(a => a.id))
     setMessages((msgs || []).filter(m => personalIds.has(m.account_id)))
     setLoading(false)
   }
@@ -57,7 +59,7 @@ export default function EmailInbox() {
     if (!GOOGLE_CLIENT_ID) { showToast('VITE_GOOGLE_CLIENT_ID not set in Vercel', 'error'); return }
     localStorage.setItem('oauth_account_type', 'personal')
     const scopes = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify'
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent${profile?.email ? `&login_hint=${encodeURIComponent(profile.email)}` : ''}`
   }
 
   async function fetchNewEmails() {
@@ -133,7 +135,7 @@ export default function EmailInbox() {
             style={{ background:C.accentSoft, color:C.accent, border:`1px solid ${C.accent}44`, borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer', opacity:fetching?0.7:1 }}>
             {fetching ? '⏳ Fetching…' : '🔄 Fetch Emails'}
           </button>
-          {isAdmin && <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>+ Connect Account</button>}
+          {(isAdmin || !accounts.length) && <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:600, fontSize:13, cursor:'pointer' }}>{isAdmin ? '+ Connect Account' : `Connect ${profile?.email || 'my inbox'}`}</button>}
         </div>
       </div>
 
@@ -155,9 +157,9 @@ export default function EmailInbox() {
       {!loading && !accounts.length && (
         <div style={{ background:C.amberSoft, border:`1px solid ${C.amber}44`, borderRadius:12, padding:24, textAlign:'center', marginBottom:20 }}>
           <div style={{ fontSize:32, marginBottom:8 }}>📨</div>
-          <div style={{ fontWeight:700, color:C.text, fontSize:16, marginBottom:8 }}>No business email accounts connected</div>
-          <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>Connect your Gmail accounts to read and reply to business email.</div>
-          {isAdmin && <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontWeight:700, fontSize:14, cursor:'pointer' }}>Connect First Account →</button>}
+          <div style={{ fontWeight:700, color:C.text, fontSize:16, marginBottom:8 }}>{isAdmin ? 'No business email accounts connected' : `Connect your inbox — ${profile?.email || ''}`}</div>
+          <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>{isAdmin ? 'Connect Gmail accounts to read and reply to business email.' : 'All emails you send from the platform (quotes, certificates, invoices, follow-ups) will go out from this address.'}</div>
+          <button onClick={connectAccount} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontWeight:700, fontSize:14, cursor:'pointer' }}>{isAdmin ? 'Connect First Account →' : `Connect ${profile?.email || 'my inbox'} →`}</button>
         </div>
       )}
 

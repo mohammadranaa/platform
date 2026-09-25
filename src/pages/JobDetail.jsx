@@ -396,7 +396,7 @@ export default function JobDetail() {
       '',
       `Contact For Access: ${contactParts.join(', ')}`,
       '',
-      `Notes: ${job.job_card_notes || ''}`,
+      `Notes: Please call the engineer and mention you are attending on behalf of My Landlord Certificate ${job.job_card_notes || ''}`,
     ].join('\n')
   }
 

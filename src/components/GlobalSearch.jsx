@@ -49,7 +49,7 @@ export default function GlobalSearch() {
     const [leads, clients, jobs, calls] = await Promise.all([
       // Leads — search by name, email, company, phone, postcode
       supabase.from('leads').select('id, lead_type, cold_company_name, cold_contact_name, cold_email, inbound_name, inbound_email, inbound_phone, status, postcode, city')
-        .or(`cold_company_name.ilike.%${q}%,cold_contact_name.ilike.%${q}%,cold_email.ilike.%${q}%,inbound_name.ilike.%${q}%,inbound_email.ilike.%${q}%,inbound_phone.ilike.%${q}%,postcode.ilike.%${q}%`)
+        .or(`cold_company_name.ilike.%${q}%,cold_contact_name.ilike.%${q}%,cold_email.ilike.%${q}%,inbound_name.ilike.%${q}%,inbound_email.ilike.%${q}%,inbound_phone.ilike.%${q}%,direct_number.ilike.%${q}%,landline_number.ilike.%${q}%,postcode.ilike.%${q}%`)
         .is('deleted_at', null).limit(5),
 
       // Clients — search by name, email, phone, company, postcode
@@ -69,19 +69,32 @@ export default function GlobalSearch() {
     ])
 
     const out = []
+    const seen = new Set()
+
+    // Phone numbers are stored in every format (07…, +44 7…, 020 8…). If the query looks like a
+    // number, match on digits only so "07825 264740" finds "+447825264740".
+    const digits = q.replace(/\D/g, '')
+    if (digits.length >= 6 && digits.length >= q.replace(/\s/g, '').length - 2) {
+      const { data: phoneHits } = await supabase.rpc('search_by_phone', { p_digits: digits })
+      for (const h of (phoneHits || [])) {
+        const path = h.kind === 'Lead' ? `/leads/${h.id}` : h.kind === 'Client' ? `/clients/${h.id}` : `/jobs/${h.id}`
+        seen.add(path)
+        out.push({ type: h.kind, icon: h.kind === 'Lead' ? '📋' : h.kind === 'Client' ? '👤' : '🔧', label: h.label, sub: h.sub, status: h.status, path })
+      }
+    }
 
     for (const l of (leads.data || [])) {
       const name = l.cold_company_name || l.cold_contact_name || l.inbound_name || l.inbound_email || '—'
       const sub  = l.cold_email || l.inbound_email || l.inbound_phone || l.postcode || ''
-      out.push({ type: 'Lead', icon: '📋', label: name, sub, status: l.status, path: `/leads/${l.id}` })
+      if (!seen.has(`/leads/${l.id}`)) out.push({ type: 'Lead', icon: '📋', label: name, sub, status: l.status, path: `/leads/${l.id}` })
     }
     for (const c of (clients.data || [])) {
       const name = c.company_name || `${c.first_name||''} ${c.last_name||''}`.trim() || '—'
       const sub  = c.email || c.phone || c.postcode || ''
-      out.push({ type: 'Client', icon: '👤', label: name, sub, status: c.client_type, path: `/clients/${c.id}` })
+      if (!seen.has(`/clients/${c.id}`)) out.push({ type: 'Client', icon: '👤', label: name, sub, status: c.client_type, path: `/clients/${c.id}` })
     }
     for (const j of (jobs.data || [])) {
-      out.push({ type: 'Job', icon: '🔧', label: `${j.job_number} — ${j.title||''}`, sub: j.site_address || j.site_postcode || '', status: j.status, path: `/jobs/${j.id}` })
+      if (!seen.has(`/jobs/${j.id}`)) out.push({ type: 'Job', icon: '🔧', label: `${j.job_number} — ${j.title||''}`, sub: j.site_address || j.site_postcode || '', status: j.status, path: `/jobs/${j.id}` })
     }
     for (const c of (calls.data || [])) {
       const num  = c.call_caller_number_local || c.call_caller_number || '—'

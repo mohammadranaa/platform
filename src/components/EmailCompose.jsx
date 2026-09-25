@@ -65,18 +65,18 @@ export default function EmailCompose({ onClose, context = {} }) {
   }
 
   async function fetchInboxes() {
+    // Personal inboxes only. Reps/finance: their own. Admins: any connected personal inbox, own first.
     const { data } = await supabase.from('user_email_accounts')
-      .select('id, gmail_address, display_name, account_type, token_expiry')
-      .eq('is_active', true)
-      .order('account_type')
-    setInboxes(data || [])
-    const now = new Date()
-    const hasValidToken = a => a.token_expiry && new Date(a.token_expiry) > now
-    const personal = (data || []).find(a => a.account_type === 'personal' && hasValidToken(a))
-    const anyValid = (data || []).find(hasValidToken)
-    if (personal) setSelectedInbox(personal.id)
-    else if (anyValid) setSelectedInbox(anyValid.id)
-    else if (data?.length) setSelectedInbox(data[0].id)
+      .select('id, gmail_address, display_name, account_type, token_expiry, profile_id')
+      .eq('is_active', true).eq('account_type', 'personal')
+      .neq('access_token', 'NOT_CONNECTED')
+      .order('gmail_address')
+    const isAdminUser = profile?.role === 'admin'
+    const mine = (data || []).filter(a => a.profile_id === profile?.id)
+    const list = isAdminUser ? [...mine, ...(data || []).filter(a => a.profile_id !== profile?.id)] : mine
+    setInboxes(list)
+    setSelectedInbox(list[0]?.id || '')
+    if (!list.length) setError(`Your inbox (${profile?.email || 'personal email'}) isn't connected yet. Go to Email Inbox and click "Connect" first.`)
   }
 
   function applyTemplate(templateId) {

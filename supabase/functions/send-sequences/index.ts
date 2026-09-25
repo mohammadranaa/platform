@@ -1,423 +1,293 @@
+// send-sequences v14 (v13 + fair campaign ordering)
+// Fixes: follow-ups always go from the SAME inbox as the earlier email (Gmail threads are
+// per-mailbox — the old round-robin caused "Requested entity was not found" on ~5/6 follow-ups);
+// 50/day cap is per INBOX across all campaigns; failures retry instead of dying; stuck "sending"
+// rows are recovered; runs stay inside the edge-function time limit.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-)
-const CLIENT_ID     = Deno.env.get('GOOGLE_CLIENT_ID') || ''
+const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+const RUN_INTERVAL_MIN = 10          // cron cadence
+const TIME_BUDGET_MS = 110_000       // stay well under the edge wall-clock limit
+const DEFAULT_DAILY_CAP = 50
+const MAX_FAILS = 3
+const CLOSED = ['In Discussion', 'Accepted', 'Declined']
 
-async function getValidToken(account: any): Promise<string> {
-  const expiry = new Date(account.token_expiry)
-  if (new Date() < expiry) return account.access_token
-  if (!account.refresh_token) throw new Error(`No refresh token for ${account.gmail_address}`)
+class InboxAuthError extends Error {}
+
+async function getValidToken(a: any): Promise<string> {
+  if (a.token_expiry && new Date() < new Date(a.token_expiry) && a.access_token !== 'NOT_CONNECTED') return a.access_token
+  if (!a.refresh_token || a.refresh_token === 'NOT_CONNECTED') throw new InboxAuthError('no refresh token')
   const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: account.refresh_token, grant_type: 'refresh_token' }),
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: a.refresh_token, grant_type: 'refresh_token' }),
   })
-  const data = await res.json()
-  if (!data.access_token) throw new Error(`Token refresh failed: ${JSON.stringify(data)}`)
-  await supabase.from('user_email_accounts').update({
-    access_token: data.access_token,
-    token_expiry: new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString(),
-  }).eq('id', account.id)
-  return data.access_token
+  const d = await res.json()
+  if (!d.access_token) throw new InboxAuthError(`token refresh failed: ${d.error}`)
+  const expiry = new Date(Date.now() + (d.expires_in || 3600) * 1000).toISOString()
+  await supabase.from('user_email_accounts').update({ access_token: d.access_token, token_expiry: expiry }).eq('id', a.id)
+  a.access_token = d.access_token; a.token_expiry = expiry
+  return d.access_token
 }
 
-function encodeBase64Url(str: string): string {
-  const bytes = new TextEncoder().encode(str)
-  const binary = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+function b64url(s: string) {
+  const bytes = new TextEncoder().encode(s)
+  let bin = ''; for (const b of bytes) bin += String.fromCharCode(b)
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-// Sends via Gmail. When `replyTo` is provided (step 2+ to a contact we've
-// already emailed), the send is threaded: Gmail's threadId links it into
-// the same conversation, and In-Reply-To/References headers make it thread
-// correctly in non-Gmail clients too. Every send gets its own Message-ID,
-// generated up front, referenced by the *next* step to this same contact.
-async function sendGmail(
-  token: string, from: string, fromName: string, to: string, subject: string, body: string,
-  trackingId: string, supabaseUrl: string,
-  replyTo?: { threadId: string; messageIdHeader: string } | null
-): Promise<{ id: string; threadId: string; messageIdHeader: string }> {
-  const trackingPixel = `\n\n<img src="${supabaseUrl}/functions/v1/track-open?t=${trackingId}" width="1" height="1" style="display:none" />`
-  const htmlBody = body.replace(/\n/g, '<br>') + trackingPixel
-
+async function sendGmail(token: string, from: string, fromName: string, to: string, subject: string, body: string,
+  trackingId: string, reply: { threadId: string; messageIdHeader: string } | null) {
+  const base = Deno.env.get('SUPABASE_URL')
+  const pixel = `<img src="${base}/functions/v1/track-open?t=${trackingId}" width="1" height="1" style="display:none" alt="" />`
+  const html = body.replace(/\n/g, '<br>') + pixel
   const domain = from.split('@')[1] || 'mylandlordcertificate.co.uk'
   const messageIdHeader = `<${crypto.randomUUID()}@${domain}>`
-
   const boundary = 'mlc_' + Date.now()
   const headers = [
-    `From: ${fromName} <${from}>`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    `Message-ID: ${messageIdHeader}`,
-    ...(replyTo ? [`In-Reply-To: ${replyTo.messageIdHeader}`, `References: ${replyTo.messageIdHeader}`] : []),
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    `From: ${fromName} <${from}>`, `To: ${to}`, `Subject: ${subject}`, `Message-ID: ${messageIdHeader}`,
+    ...(reply?.messageIdHeader ? [`In-Reply-To: ${reply.messageIdHeader}`, `References: ${reply.messageIdHeader}`] : []),
+    'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ]
-
-  const raw = [
-    ...headers,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    body,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/html; charset=UTF-8',
-    '',
-    `<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6">${htmlBody}</body></html>`,
-    '',
-    `--${boundary}--`,
-  ].join('\r\n')
-
-  const payload: any = { raw: encodeBase64Url(raw) }
-  if (replyTo?.threadId) payload.threadId = replyTo.threadId
-
+  const raw = [...headers, '', `--${boundary}`, 'Content-Type: text/plain; charset=UTF-8', '', body, '',
+    `--${boundary}`, 'Content-Type: text/html; charset=UTF-8', '',
+    `<html><body style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6">${html}</body></html>`,
+    '', `--${boundary}--`].join('\r\n')
+  const payload: any = { raw: b64url(raw) }
+  if (reply?.threadId) payload.threadId = reply.threadId
   const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   })
-  const data = await res.json()
-  if (data.error) throw new Error(`Gmail send failed: ${data.error.message}`)
-  return { id: data.id, threadId: data.threadId, messageIdHeader }
+  const d = await res.json()
+  if (res.status === 401 || res.status === 403) throw new InboxAuthError(d.error?.message || `HTTP ${res.status}`)
+  if (d.error) throw new Error(d.error.message || 'Gmail send failed')
+  return { id: d.id, threadId: d.threadId, messageIdHeader }
 }
 
-function personalise(text: string, vars: Record<string, string>): string {
-  return text
-    .replace(/\{\{first_name\}\}/gi, vars.first_name || '')
-    .replace(/\{\{last_name\}\}/gi, vars.last_name || '')
-    .replace(/\{\{company\}\}/gi, vars.company || '')
-    .replace(/\{\{email\}\}/gi, vars.email || '')
-    .replace(/\{\{full_name\}\}/gi, [vars.first_name, vars.last_name].filter(Boolean).join(' ') || vars.company || '')
-    .replace(/\{\{sender_name\}\}/gi, vars.sender_name || '')
+const personalise = (t: string, v: Record<string, string>) => t
+  .replace(/\{\{first_name\}\}/gi, v.first_name || '').replace(/\{\{last_name\}\}/gi, v.last_name || '')
+  .replace(/\{\{company\}\}/gi, v.company || '').replace(/\{\{email\}\}/gi, v.email || '')
+  .replace(/\{\{full_name\}\}/gi, [v.first_name, v.last_name].filter(Boolean).join(' ') || v.company || '')
+  .replace(/\{\{sender_name\}\}/gi, v.sender_name || '')
+
+function londonParts(now: Date, tz: string) {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now)
+  const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return { dow: WD[p.find(x => x.type === 'weekday')!.value] ?? 1, mins: Number(p.find(x => x.type === 'hour')!.value) * 60 + Number(p.find(x => x.type === 'minute')!.value) }
 }
-
-// Checks whether "now" falls inside the campaign's allowed sending window,
-// and reports how far into today's window we are -- used to pace sends
-// across the day rather than releasing the whole daily quota in one burst.
-function checkSendWindow(campaign: any, now: Date): { ok: boolean; minutesIntoWindow: number; windowMinutes: number } {
-  const tz = campaign.timezone || 'Europe/London'
-  const days: number[] = campaign.send_days?.length ? campaign.send_days : [1, 2, 3, 4, 5]
-  const startStr: string = (campaign.send_time_start || '09:00').slice(0, 5)
-  const endStr: string = (campaign.send_time_end || '17:30').slice(0, 5)
-
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(now)
-  const weekdayShort = parts.find(p => p.type === 'weekday')?.value || 'Mon'
-  const hour = Number(parts.find(p => p.type === 'hour')?.value || '0')
-  const minute = Number(parts.find(p => p.type === 'minute')?.value || '0')
-
-  const WEEKDAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  const todayIdx = WEEKDAY_MAP[weekdayShort] ?? 1
-
-  const [startH, startM] = startStr.split(':').map(Number)
-  const [endH, endM] = endStr.split(':').map(Number)
-  const startMinutes = startH * 60 + startM
-  const endMinutes = endH * 60 + endM
-  const nowMinutes = hour * 60 + minute
-
-  const ok = days.includes(todayIdx) && nowMinutes >= startMinutes && nowMinutes <= endMinutes
-  return { ok, minutesIntoWindow: Math.max(0, nowMinutes - startMinutes), windowMinutes: Math.max(1, endMinutes - startMinutes) }
+function windowFor(c: any, now: Date) {
+  const tz = c.timezone || 'Europe/London'
+  const days: number[] = c.send_days?.length ? c.send_days : [1, 2, 3, 4, 5]
+  const [sh, sm] = (c.send_time_start || '09:00').slice(0, 5).split(':').map(Number)
+  const [eh, em] = (c.send_time_end || '17:30').slice(0, 5).split(':').map(Number)
+  const { dow, mins } = londonParts(now, tz)
+  const start = sh * 60 + sm, end = eh * 60 + em
+  return { open: days.includes(dow) && mins >= start && mins <= end, minutesLeft: Math.max(1, end - mins) }
 }
-
-// Midnight *in the campaign's own timezone*, expressed as a UTC Date. Used
-// to reset the per-inbox daily send count at local midnight, not UTC.
-function todayStartInTimezone(now: Date, tz: string): Date {
-  const dateParts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(now)
-  const y = Number(dateParts.find(p => p.type === 'year')?.value)
-  const m = Number(dateParts.find(p => p.type === 'month')?.value)
-  const d = Number(dateParts.find(p => p.type === 'day')?.value)
-
-  const offsetParts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' }).formatToParts(now)
-  const offsetStr = offsetParts.find(p => p.type === 'timeZoneName')?.value || 'GMT+00:00'
-  const offsetMatch = offsetStr.match(/GMT([+-])(\d{2}):(\d{2})/)
-  const offsetMinutes = offsetMatch ? (offsetMatch[1] === '-' ? -1 : 1) * (Number(offsetMatch[2]) * 60 + Number(offsetMatch[3])) : 0
-
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMinutes * 60000)
+function todayStart(now: Date, tz = 'Europe/London') {
+  const d = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+  const off = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'longOffset' }).formatToParts(now).find(p => p.type === 'timeZoneName')?.value || 'GMT+00:00'
+  const m = off.match(/GMT([+-])(\d{2}):(\d{2})/)
+  const offMin = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0
+  const [y, mo, da] = d.split('-').map(Number)
+  return new Date(Date.UTC(y, mo - 1, da) - offMin * 60000)
 }
-
-// Inbox warmup ramp: brand-new (or freshly-recovered-from-pause) inboxes
-// send very little at first and build up over ~3 weeks. Once fully warmed,
-// the inbox's own configured per_inbox_daily_limit applies.
-function warmupCappedLimit(account: any, configuredLimit: number): number {
-  const startedAt = account.warmup_started_at ? new Date(account.warmup_started_at) : new Date()
-  const daysWarming = Math.floor((Date.now() - startedAt.getTime()) / 86400000)
-  let rampCap: number
-  if (daysWarming < 3) rampCap = 8
-  else if (daysWarming < 7) rampCap = 15
-  else if (daysWarming < 14) rampCap = 25
-  else if (daysWarming < 21) rampCap = 40
-  else rampCap = Infinity
-  return Math.min(configuredLimit, rampCap)
+function warmupCap(a: any, cap: number) {
+  const days = Math.floor((Date.now() - new Date(a.warmup_started_at || Date.now()).getTime()) / 86400000)
+  return Math.min(cap, days < 3 ? 8 : days < 7 ? 15 : days < 14 ? 25 : days < 21 ? 40 : Infinity)
 }
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
-function pickVariant(variants: any[]): any | null {
-  if (!variants?.length) return null
-  const totalWeight = variants.reduce((s, v) => s + (v.weight || 1), 0)
-  let r = Math.random() * totalWeight
-  for (const v of variants) {
-    r -= (v.weight || 1)
-    if (r <= 0) return v
-  }
-  return variants[variants.length - 1]
-}
-
-function jitterMs(minMs: number, maxMs: number): number {
-  return minMs + Math.random() * (maxMs - minMs)
-}
+const pick = (vs: any[]) => { if (!vs?.length) return null; let r = Math.random() * vs.reduce((s, v) => s + (v.weight || 1), 0); for (const v of vs) { r -= (v.weight || 1); if (r <= 0) return v } return vs[vs.length - 1] }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } })
+  const started = Date.now()
+  let body: any = {}; try { body = await req.json() } catch { /* cron sends none */ }
+  const nowDate = new Date(), now = nowDate.toISOString()
+  const log: any = { recovered: 0, results: [] }
+
+  // 1. Recover contacts stuck in "sending" (process killed mid-run)
+  const staleBefore = new Date(Date.now() - 15 * 60000).toISOString()
+  const { data: stuck } = await supabase.from('campaign_contacts').select('id, current_step, claimed_at')
+    .eq('status', 'sending').or(`claimed_at.is.null,claimed_at.lt.${staleBefore}`).limit(500)
+  for (const s of stuck || []) {
+    const { data: last } = await supabase.from('email_sends').select('step_number').eq('contact_id', s.id).eq('status', 'sent')
+      .order('sent_at', { ascending: false }).limit(1).maybeSingle()
+    const patch: any = { status: 'active', claimed_at: null, next_send_at: now }
+    if (last && last.step_number > (s.current_step || 0)) patch.current_step = last.step_number // it did send — don't resend
+    await supabase.from('campaign_contacts').update(patch).eq('id', s.id)
+    log.recovered++
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-  let body: any = {}
-  try { body = await req.json() } catch { /* no body */ }
+  // 2. Campaigns + inbox capacity (cap is per inbox per day across ALL campaigns)
+  let cq = supabase.from('campaigns').select('*').in('status', ['active', 'running'])
+  if (body.campaign_id) cq = cq.eq('id', body.campaign_id)
+  const { data: campaignRows } = await cq
+  if (!campaignRows?.length) return json({ ok: true, message: 'No active campaigns', ...log })
+  // Fair share: campaigns go first in proportion to how many active contacts they hold
+  // (weighted random order), so a big campaign isn't starved by a small one that runs earlier.
+  const weighted = await Promise.all(campaignRows.map(async (c: any) => {
+    const { count } = await supabase.from('campaign_contacts').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id).eq('status', 'active')
+    return { c, key: Math.pow(Math.random(), 1 / Math.max(1, count || 0)) }
+  }))
+  const campaigns = weighted.sort((a, b) => b.key - a.key).map(w => w.c)
 
-  const targetCampaignId = body.campaign_id || null
-  const dryRun = body.dry_run || false
-  const nowDate = new Date()
-  const now = nowDate.toISOString()
-
-  let campaignsQuery = supabase.from('campaigns').select('*').in('status', ['active', 'running'])
-  if (targetCampaignId) campaignsQuery = campaignsQuery.eq('id', targetCampaignId)
-  const { data: campaigns, error: cErr } = await campaignsQuery
-  if (cErr) return new Response(JSON.stringify({ error: cErr.message }), { status: 500 })
-  if (!campaigns?.length) return new Response(JSON.stringify({ ok: true, message: 'No active campaigns', sent: 0 }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } })
-
-  let totalSent = 0, totalFailed = 0
-  const results: any[] = []
+  const inboxIds = [...new Set(campaigns.flatMap((c: any) => c.inbox_ids?.length ? c.inbox_ids : (c.from_inbox_id ? [c.from_inbox_id] : [])))]
+  const { data: inboxRows } = await supabase.from('user_email_accounts').select('*').in('id', inboxIds)
+    .eq('is_active', true).eq('is_paused', false).eq('needs_reconnect', false)
+  const dayStart = todayStart(nowDate).toISOString()
+  const inbox = new Map<string, any>()
+  for (const a of inboxRows || []) {
+    const limits = campaigns.filter((c: any) => (c.inbox_ids || []).includes(a.id)).map((c: any) => c.per_inbox_daily_limit || DEFAULT_DAILY_CAP)
+    const cap = warmupCap(a, Math.min(DEFAULT_DAILY_CAP, ...limits))
+    const { count } = await supabase.from('email_sends').select('id', { count: 'exact', head: true })
+      .eq('inbox_id', a.id).eq('status', 'sent').gte('sent_at', dayStart)
+    inbox.set(a.id, { a, dayRemaining: Math.max(0, cap - (count || 0)), runQuota: 0, dead: false })
+  }
 
   for (const campaign of campaigns) {
-    const window = checkSendWindow(campaign, nowDate)
-    if (!body.force && !window.ok) {
-      results.push({ campaign: campaign.name, skipped: true, reason: 'outside allowed sending schedule (days/hours)' })
-      continue
+    const r: any = { campaign: campaign.name, sent: 0, failed: 0, retried: 0, skipped: 0, completed: 0 }
+    log.results.push(r)
+    const w = windowFor(campaign, nowDate)
+    if (!body.force && !w.open) { r.note = 'outside schedule'; continue }
+
+    const myInboxes = (campaign.inbox_ids || []).filter((id: string) => inbox.has(id))
+    // Spread today's remaining sends evenly across the rest of the window
+    for (const id of myInboxes) {
+      const s = inbox.get(id)
+      if (s.quotaSet) continue
+      s.quotaSet = true
+      const share = body.force ? s.dayRemaining : Math.ceil(s.dayRemaining * Math.min(1, RUN_INTERVAL_MIN / w.minutesLeft) * (0.8 + Math.random() * 0.4))
+      s.runQuota = Math.min(s.dayRemaining, share)
+    }
+    if (!myInboxes.some((id: string) => inbox.get(id).runQuota > 0)) { r.note = 'no inbox capacity this run'; continue }
+
+    const { data: steps } = await supabase.from('sequence_steps').select('*').eq('campaign_id', campaign.id).order('step_number')
+    const stepBy = new Map((steps || []).map((s: any) => [s.step_number, s]))
+    const { data: variants } = await supabase.from('email_variants').select('*').eq('campaign_id', campaign.id)
+    const varBy = new Map<string, any[]>()
+    for (const v of variants || []) { const k = v.step_id || 'legacy'; if (!varBy.has(k)) varBy.set(k, []); varBy.get(k)!.push(v) }
+
+    // Follow-ups first so sequences finish; then oldest-waiting first
+    const { data: due } = await supabase.from('campaign_contacts').select('*, leads(status, deleted_at)')
+      .eq('campaign_id', campaign.id).eq('status', 'active').or(`next_send_at.is.null,next_send_at.lte.${now}`)
+      .order('current_step', { ascending: false }).order('next_send_at', { ascending: true, nullsFirst: true }).limit(400)
+    if (!due?.length) { r.note = 'no contacts due'; continue }
+
+    // Previous send per contact -> which inbox + thread to continue in
+    const prev = new Map<string, any>()
+    for (let i = 0; i < due.length; i += 200) {
+      const ids = due.slice(i, i + 200).map((c: any) => c.id)
+      const { data: ps } = await supabase.from('email_sends').select('contact_id, inbox_id, subject, gmail_thread_id, message_id_header, sent_at')
+        .in('contact_id', ids).eq('status', 'sent').order('sent_at', { ascending: false })
+      for (const p of ps || []) if (!prev.has(p.contact_id)) prev.set(p.contact_id, p)
     }
 
-    const inboxIds: string[] = campaign.inbox_ids?.length ? campaign.inbox_ids : (campaign.from_inbox_id ? [campaign.from_inbox_id] : [])
-    if (!inboxIds.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no inboxes configured' }); continue }
+    let rr = 0
+    for (const c of due) {
+      if (Date.now() - started > TIME_BUDGET_MS) { r.note = 'time budget reached — continues next run'; break }
+      if (CLOSED.includes(c.leads?.status)) { await supabase.from('campaign_contacts').update({ status: 'completed', next_send_at: null }).eq('id', c.id); r.skipped++; continue }
+      if (c.leads?.deleted_at) { await supabase.from('campaign_contacts').update({ status: 'skipped', next_send_at: null }).eq('id', c.id); r.skipped++; continue }
 
-    // Skip anything paused (bounce circuit-breaker or manual pause). This
-    // is what makes the auto-pause elsewhere actually mean something.
-    const { data: accountsRaw } = await supabase.from('user_email_accounts').select('*').in('id', inboxIds).eq('is_active', true)
-    const accounts = (accountsRaw || []).filter((a: any) => !a.is_paused)
-    const pausedCount = (accountsRaw?.length || 0) - accounts.length
-    if (!accounts.length) { results.push({ campaign: campaign.name, skipped: true, reason: `no usable inboxes (${pausedCount} paused)` }); continue }
+      const nextStep = (c.current_step || 0) + 1
+      const step: any = stepBy.get(nextStep)
+      if (!step) { await supabase.from('campaign_contacts').update({ status: 'completed', next_send_at: null }).eq('id', c.id); r.completed++; continue }
 
-    const todayStart = todayStartInTimezone(nowDate, campaign.timezone || 'Europe/London')
-    const inboxSlots: { account: any; remaining: number }[] = []
-    for (const account of accounts) {
-      const configuredLimit = campaign.per_inbox_daily_limit || 50
-      const dailyCap = warmupCappedLimit(account, configuredLimit)
-
-      const { count: sentTodayFromInbox } = await supabase
-        .from('email_sends').select('id', { count: 'exact', head: true })
-        .eq('campaign_id', campaign.id).eq('inbox_id', account.id)
-        .eq('status', 'sent').gte('sent_at', todayStart.toISOString())
-
-      const remainingToday = dailyCap - (sentTodayFromInbox || 0)
-      if (remainingToday <= 0) continue
-
-      const minutesLeftInWindow = Math.max(1, window.windowMinutes - window.minutesIntoWindow)
-      const paceFraction = Math.min(1, 60 / minutesLeftInWindow)
-      const jitter = 0.75 + Math.random() * 0.5
-      const paced = body.force ? remainingToday : Math.max(1, Math.ceil(remainingToday * paceFraction * jitter))
-
-      inboxSlots.push({ account, remaining: Math.min(remainingToday, paced) })
-    }
-
-    const totalAvailable = inboxSlots.reduce((s, x) => s + x.remaining, 0)
-    if (totalAvailable === 0) { results.push({ campaign: campaign.name, skipped: true, reason: 'no inbox capacity available this run' }); continue }
-
-    const { data: contactsRaw } = await supabase
-      .from('campaign_contacts').select('*').eq('campaign_id', campaign.id).eq('status', 'active')
-      .or(`next_send_at.is.null,next_send_at.lte.${now}`).limit(totalAvailable * 3)
-    const contacts = shuffle(contactsRaw || []).slice(0, totalAvailable)
-
-    if (!contacts.length) { results.push({ campaign: campaign.name, skipped: true, reason: 'no contacts due' }); continue }
-
-    const { data: stepsData } = await supabase
-      .from('sequence_steps').select('*').eq('campaign_id', campaign.id).order('step_number')
-    const steps = stepsData || []
-    const stepByNumber = new Map(steps.map((s: any) => [s.step_number, s]))
-    const usesSteps = steps.length > 0
-
-    let fallbackSubject = campaign.subject || 'Partnership Opportunity - My Landlord Certificate'
-    let fallbackBody = campaign.body || `Dear {{first_name}},\n\nI hope this email finds you well.\n\nMy name is {{sender_name}} from My Landlord Certificate. We provide EICR, Gas Safety Certificates, EPCs, Fire Risk Assessments and all other property compliance certificates across London and the UK.\n\nWe work with many estate agents and lettings agencies and would love to discuss how we can support your landlord clients with fast, reliable and competitively priced certificates.\n\nWould you be open to a quick call this week?\n\nKind regards,\n{{sender_name}}\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`
-
-    if (!usesSteps && campaign.template_id) {
-      const { data: tpl } = await supabase.from('email_templates').select('subject, body').eq('id', campaign.template_id).single()
-      if (tpl) { fallbackSubject = tpl.subject; fallbackBody = tpl.body }
-    }
-
-    const { data: variantsRaw } = await supabase.from('email_variants').select('*').eq('campaign_id', campaign.id)
-    const variantsByStep = new Map<string, any[]>()
-    for (const v of (variantsRaw || [])) {
-      const key = v.step_id || 'legacy'
-      if (!variantsByStep.has(key)) variantsByStep.set(key, [])
-      variantsByStep.get(key)!.push(v)
-    }
-
-    let campaignSent = 0, campaignFailed = 0, campaignCompleted = 0
-    let slotIndex = 0
-
-    for (const contact of contacts) {
-      const nextStepNumber = (contact.current_step || 0) + 1
-      let templateSubject = fallbackSubject
-      let templateBody = fallbackBody
-      let stepId: string | null = null
-
-      if (usesSteps) {
-        const step: any = stepByNumber.get(nextStepNumber)
-        if (!step) {
-          await supabase.from('campaign_contacts').update({ status: 'completed', next_send_at: null }).eq('id', contact.id)
-          campaignCompleted++
-          continue
+      // Inbox: sticky for follow-ups, round-robin for first touch
+      const p = prev.get(c.id)
+      let slot: any = null
+      if (p) {
+        slot = inbox.get(p.inbox_id)
+        if (!slot || slot.dead || slot.runQuota <= 0) continue // wait for its own inbox; never switch mid-thread
+      } else {
+        for (let i = 0; i < myInboxes.length; i++) {
+          const s = inbox.get(myInboxes[(rr + i) % myInboxes.length])
+          if (!s.dead && s.runQuota > 0) { slot = s; rr = (rr + i + 1) % myInboxes.length; break }
         }
-        templateSubject = step.subject
-        templateBody = step.body_html
-        stepId = step.id
+        if (!slot) break
       }
 
-      const variantPool = variantsByStep.get(stepId || 'legacy')
-      const variant = pickVariant(variantPool || [])
-      if (variant) { templateSubject = variant.subject; templateBody = variant.body_html }
-
-      let slot = null
-      for (let i = 0; i < inboxSlots.length; i++) {
-        const s = inboxSlots[(slotIndex + i) % inboxSlots.length]
-        if (s.remaining > 0) { slot = s; slotIndex = (slotIndex + i + 1) % inboxSlots.length; break }
-      }
-      if (!slot) break
-
-      const { data: claimed } = await supabase.from('campaign_contacts')
-        .update({ status: 'sending' })
-        .eq('id', contact.id).eq('status', 'active')
-        .or(`next_send_at.is.null,next_send_at.lte.${now}`)
-        .select('id')
+      const { data: claimed } = await supabase.from('campaign_contacts').update({ status: 'sending', claimed_at: new Date().toISOString() })
+        .eq('id', c.id).eq('status', 'active').select('id')
       if (!claimed?.length) continue
 
-      const account = slot.account
-      const localPart = account.gmail_address.split('@')[0]
-      const fromName = account.display_name || (localPart.charAt(0).toUpperCase() + localPart.slice(1))
-      const vars = {
-        first_name: contact.first_name || contact.company?.split(' ')[0] || contact.email.split('@')[0],
-        last_name: contact.last_name || '',
-        company: contact.company || '',
-        email: contact.email,
-        sender_name: fromName,
-      }
-
-      const { data: prevSend } = await supabase
-        .from('email_sends')
-        .select('subject, gmail_thread_id, message_id_header')
-        .eq('contact_id', contact.id)
-        .eq('status', 'sent')
-        .not('gmail_thread_id', 'is', null)
-        .order('sent_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      const personalisedSubject = personalise(templateSubject, vars)
-      const subject = prevSend
-        ? (prevSend.subject.match(/^Re:/i) ? prevSend.subject : `Re: ${prevSend.subject}`)
-        : personalisedSubject
-      const emailBody = personalise(templateBody, vars)
+      const a = slot.a
+      const fromName = a.display_name || a.gmail_address.split('@')[0]
+      const v = pick(varBy.get(step.id) || [])
+      const vars = { first_name: c.first_name || c.company?.split(' ')[0] || c.email.split('@')[0], last_name: c.last_name || '', company: c.company || '', email: c.email, sender_name: fromName }
+      const subject = p ? (/^re:/i.test(p.subject) ? p.subject : `Re: ${p.subject}`) : personalise(v?.subject || step.subject, vars)
+      const text = personalise(v?.body_html || step.body_html, vars)
       const trackingId = crypto.randomUUID()
 
-      if (dryRun) {
-        console.log(`[DRY RUN] step ${nextStepNumber} -> ${contact.email} from ${account.gmail_address}${variant ? ` (variant ${variant.label})` : ''}${prevSend ? ' (threaded)' : ''}`)
-        await supabase.from('campaign_contacts').update({ status: 'active' }).eq('id', contact.id)
-        campaignSent++; slot.remaining--; continue
-      }
-
       try {
-        const token = await getValidToken(account)
-        const sendResult = await sendGmail(
-          token, account.gmail_address, fromName, contact.email, subject, emailBody, trackingId, supabaseUrl,
-          prevSend ? { threadId: prevSend.gmail_thread_id, messageIdHeader: prevSend.message_id_header } : null
-        )
-
-        await supabase.from('email_sends').insert({
-          campaign_id: campaign.id, contact_id: contact.id, inbox_id: account.id,
-          step_number: nextStepNumber, variant_id: variant?.id || null,
-          subject, body: emailBody, from_email: account.gmail_address, to_email: contact.email,
-          status: 'sent', sent_at: new Date().toISOString(),
-          gmail_message_id: sendResult.id, gmail_thread_id: sendResult.threadId,
-          message_id_header: sendResult.messageIdHeader, tracking_id: trackingId,
-        })
-
-        const followUpStep: any = usesSteps ? stepByNumber.get(nextStepNumber + 1) : null
-        await supabase.from('campaign_contacts').update({
-          current_step: nextStepNumber,
-          status: followUpStep ? 'active' : (usesSteps ? 'completed' : 'sent'),
-          next_send_at: followUpStep ? new Date(Date.now() + (followUpStep.delay_days || 0) * 86400000).toISOString() : null,
-        }).eq('id', contact.id)
-
-        if (contact.lead_id) {
-          const { data: lead } = await supabase.from('leads').select('email_send_count, status').eq('id', contact.lead_id).single()
-          if (lead) {
-            await supabase.from('leads').update({
-              last_contacted_at: new Date().toISOString(),
-              last_email_sent_at: new Date().toISOString(),
-              email_send_count: (lead.email_send_count || 0) + 1,
-              in_campaign: true,
-              status: lead.status === 'New' ? 'Contacted' : lead.status,
-            }).eq('id', contact.lead_id)
-          }
-          await supabase.from('activities').insert({
-            lead_id: contact.lead_id, rep_name: fromName, activity_type: 'email',
-            title: `Cold email sent (step ${nextStepNumber}): ${subject}`,
-            body: emailBody.slice(0, 300),
-            metadata: { campaign_id: campaign.id, from: account.gmail_address, gmail_message_id: sendResult.id, variant: variant?.label || null }
-          })
+        const token = await getValidToken(a)
+        let sent
+        try {
+          sent = await sendGmail(token, a.gmail_address, fromName, c.email, subject, text, trackingId,
+            p?.gmail_thread_id ? { threadId: p.gmail_thread_id, messageIdHeader: p.message_id_header } : null)
+        } catch (e: any) {
+          if (/not found/i.test(e.message) && p?.gmail_thread_id) {
+            sent = await sendGmail(token, a.gmail_address, fromName, c.email, subject, text, trackingId, null) // thread gone: send standalone
+          } else throw e
         }
-
-        slot.remaining--
-        campaignSent++; totalSent++
-        await new Promise(r => setTimeout(r, jitterMs(2000, 9000)))
-
-      } catch (err: any) {
-        console.error(`Failed ${contact.email}: ${err.message}`)
-        await supabase.from('campaign_contacts').update({ status: 'failed' }).eq('id', contact.id)
-        campaignFailed++; totalFailed++
+        await supabase.from('email_sends').insert({
+          campaign_id: campaign.id, contact_id: c.id, inbox_id: a.id, step_number: nextStep, variant_id: v?.id || null,
+          subject, body: text, from_email: a.gmail_address, to_email: c.email, status: 'sent', sent_at: new Date().toISOString(),
+          gmail_message_id: sent.id, gmail_thread_id: sent.threadId, message_id_header: sent.messageIdHeader, tracking_id: trackingId,
+        })
+        const follow: any = stepBy.get(nextStep + 1)
+        await supabase.from('campaign_contacts').update({
+          current_step: nextStep, status: follow ? 'active' : 'completed', claimed_at: null, fail_count: 0, last_error: null,
+          next_send_at: follow ? new Date(Date.now() + (follow.delay_days || 0) * 86400000).toISOString() : null,
+        }).eq('id', c.id)
+        if (c.lead_id) {
+          const { data: lead } = await supabase.from('leads').select('email_send_count, status').eq('id', c.lead_id).single()
+          if (lead) await supabase.from('leads').update({
+            last_contacted_at: new Date().toISOString(), last_email_sent_at: new Date().toISOString(),
+            email_send_count: (lead.email_send_count || 0) + 1, in_campaign: true,
+            status: lead.status === 'New' ? 'Contacted' : lead.status,
+          }).eq('id', c.lead_id)
+          await supabase.from('activities').insert({ lead_id: c.lead_id, rep_name: fromName, activity_type: 'email',
+            title: `Cold email sent (step ${nextStep}): ${subject}`, body: text.slice(0, 300),
+            metadata: { campaign_id: campaign.id, from: a.gmail_address, gmail_message_id: sent.id } })
+        }
+        slot.runQuota--; slot.dayRemaining--; r.sent++
+        await sleep(1500 + Math.random() * 2500)
+      } catch (e: any) {
+        const msg = String(e.message || e)
+        if (e instanceof InboxAuthError) {
+          slot.dead = true
+          await supabase.from('user_email_accounts').update({ needs_reconnect: true, reconnect_reason: msg }).eq('id', a.id)
+          await supabase.from('campaign_contacts').update({ status: 'active', claimed_at: null }).eq('id', c.id)
+          r.retried++
+        } else if (/invalid to header|invalid address|invalid recipient/i.test(msg)) {
+          await supabase.from('campaign_contacts').update({ status: 'bounced', claimed_at: null, next_send_at: null, last_error: msg }).eq('id', c.id)
+          r.failed++
+        } else {
+          const fails = (c.fail_count || 0) + 1
+          await supabase.from('campaign_contacts').update({
+            status: fails >= MAX_FAILS ? 'failed' : 'active', fail_count: fails, last_error: msg, claimed_at: null,
+            next_send_at: new Date(Date.now() + 2 * 3600000).toISOString(),
+          }).eq('id', c.id)
+          fails >= MAX_FAILS ? r.failed++ : r.retried++
+        }
+        console.error(`Send failed ${c.email}: ${msg}`)
       }
     }
 
-    await supabase.from('campaigns').update({
-      total_sent: (campaign.total_sent || 0) + campaignSent,
-      started_at: campaign.started_at || new Date().toISOString(),
-    }).eq('id', campaign.id)
-
-    results.push({
-      campaign: campaign.name,
-      sent: campaignSent, failed: campaignFailed, sequence_completed: campaignCompleted,
-      uses_steps: usesSteps,
-      paused_inboxes_skipped: pausedCount,
-      inboxes: inboxSlots.map((s: any) => ({ email: s.account.gmail_address, remaining_this_run: s.remaining })),
-    })
+    // Keep headline stats exact
+    const [{ count: sentCount }, { count: openCount }, { count: repCount }] = await Promise.all([
+      supabase.from('email_sends').select('id', { count: 'exact', head: true }).eq('campaign_id', campaign.id).eq('status', 'sent'),
+      supabase.from('email_sends').select('id', { count: 'exact', head: true }).eq('campaign_id', campaign.id).eq('status', 'sent').gt('open_count', 0),
+      supabase.from('campaign_contacts').select('id', { count: 'exact', head: true }).eq('campaign_id', campaign.id).eq('status', 'replied'),
+    ])
+    await supabase.from('campaigns').update({ total_sent: sentCount || 0, total_opened: openCount || 0, total_replied: repCount || 0,
+      started_at: campaign.started_at || new Date().toISOString() }).eq('id', campaign.id)
   }
 
-  return new Response(JSON.stringify({ ok: true, total_sent: totalSent, total_failed: totalFailed, dry_run: dryRun, results }), {
-    status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-  })
+  console.log(JSON.stringify(log))
+  return json({ ok: true, ms: Date.now() - started, ...log })
 })
+
+function json(o: any) { return new Response(JSON.stringify(o), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }) }
