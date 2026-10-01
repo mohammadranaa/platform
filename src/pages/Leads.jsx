@@ -149,7 +149,7 @@ export default function Leads() {
     }
     setPage(0)
     fetchLeads(0)
-  }, [tab, profile, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
+  }, [tab, profile?.id, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
 
   // Restore scroll position after returning from a lead's detail page.
   // Tab/filters/page already survive via the URL params above — the only
@@ -240,8 +240,8 @@ export default function Leads() {
       q,
       supabase.from('profiles').select('id, full_name').eq('is_active', true),
       // Get counts per type (one lightweight query)
-      supabase.from('leads').select('lead_type', { count: 'exact', head: false })
-        .then(async () => {
+      // Head-only counts (no rows downloaded). Previously this first pulled up to 1,000 lead rows and discarded them.
+      (async () => {
           const [a, b, c, d, e, f] = await Promise.all([
             supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null),
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound').is('deleted_at', null),
@@ -251,7 +251,7 @@ export default function Leads() {
             supabase.from('leads').select('id', { count: 'exact', head: true }).eq('in_campaign', true).is('deleted_at', null),
           ])
           return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0, in_sequence: f.count || 0 }
-        })
+      })()
     ])
 
     setLeads(leadsRes.data || [])

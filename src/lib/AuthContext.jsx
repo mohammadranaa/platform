@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from './supabase'
 
 const AuthContext = createContext(null)
@@ -9,46 +9,40 @@ export function AuthProvider({ children }) {
   const [profile, setProfile]   = useState(null)
   const [loading, setLoading]   = useState(true)
 
+  // Which user's profile is currently loaded. Supabase re-emits SIGNED_IN (and
+  // TOKEN_REFRESHED) every time a tab regains focus; if we treated those as new
+  // logins the whole app re-rendered and pages reloaded, wiping half-typed notes.
+  const loadedUserId = useRef(null)
+
   useEffect(() => {
-    // 1. Get the current session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) {
-        fetchProfile(session.user.id)
-      } else {
-        setLoading(false)
-      }
+      if (session) fetchProfile(session.user.id)
+      else setLoading(false)
     })
 
-    // 2. Listen for login / logout events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // TOKEN_REFRESHED fires every time the tab regains focus — ignore it
-        // to prevent full re-render cascades when reps switch tabs
-        if (event === 'TOKEN_REFRESHED') return
-        setSession(session)
-        if (session) {
-          fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
-          setLoading(false)
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!newSession) {
+        // Real sign-out (or session expired): clear everything.
+        loadedUserId.current = null
+        setSession(null); setProfile(null); setLoading(false)
+        return
       }
-    )
+      const sameUser = newSession.user.id === loadedUserId.current
+      // Same person, just a focus/refresh event: keep the existing objects so
+      // nothing downstream re-runs. supabase-js keeps the fresh token internally.
+      if (sameUser) return
+      setSession(newSession)
+      fetchProfile(newSession.user.id)
+    })
 
     return () => subscription.unsubscribe()
   }, [])
 
   async function fetchProfile(userId) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    if (!error && data) {
-      setProfile(data)
-    }
+    if (loadedUserId.current === userId) { setLoading(false); return }
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (!error && data) { loadedUserId.current = userId; setProfile(data) }
     setLoading(false)
   }
 
@@ -72,19 +66,13 @@ export function AuthProvider({ children }) {
   // Finance and admin both see financial/engineer data
   const canViewFinance = isAdmin || isFinance
 
+  // Stable context value: consumers only re-render when something actually changes.
+  const value = useMemo(() => ({
+    session, profile, loading, isAdmin, isRep, isEngineer, isFinance, canViewFinance, signIn, signOut,
+  }), [session, profile, loading])  // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <AuthContext.Provider value={{
-      session,
-      profile,
-      loading,
-      isAdmin,
-      isRep,
-      isEngineer,
-      isFinance,
-      canViewFinance,
-      signIn,
-      signOut,
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

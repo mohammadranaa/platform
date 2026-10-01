@@ -122,7 +122,7 @@ export default function Campaigns() {
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const [{ data: c }, { data: accounts }] = await Promise.all([
       supabase.from('campaigns').select('*, campaign_contacts(id, lead_id)').order('created_at', { ascending: false }),
       supabase.from('user_email_accounts').select('id, gmail_address, display_name').eq('account_type', 'cold').eq('is_active', true).order('gmail_address'),

@@ -107,10 +107,10 @@ export default function ClientDetail() {
   const [portalIdInput, setPortalIdInput] = useState('')
   const [savingPortal, setSavingPortal] = useState(false)
 
-  useEffect(() => { fetchAll() }, [id])
+  useEffect(() => { setLoading(true); fetchAll() }, [id])  // full spinner only when opening a different record
 
   async function fetchAll() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const [{ data: c }, { data: j }, { data: inv }, { data: p }] = await Promise.all([
       supabase.from('clients').select('*, profiles(full_name)').eq('id', id).single(),
       supabase.from('jobs').select('id, job_number, title, status, amount_received, gross_profit, scheduled_date, payment_status, service_types').eq('client_id', id).order('scheduled_date', { ascending: false }),

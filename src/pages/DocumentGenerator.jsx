@@ -237,7 +237,7 @@ export default function DocumentGenerator() {
   }, [location.state])
 
   async function fetchAll() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const [{ data: c }, { data: j }] = await Promise.all([
       supabase.from('clients').select('id, first_name, last_name, company_name, email, street_address, city, postcode, billing_name, billing_email, billing_address').order('company_name'),
       supabase.from('jobs').select('id, job_number, title, service_types, site_address, job_line_items(description, quantity, unit_price)').order('created_at', { ascending: false }).limit(100),

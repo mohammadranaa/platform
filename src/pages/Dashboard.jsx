@@ -111,11 +111,11 @@ export default function Dashboard() {
   const [recentActivity, setRecentActivity] = useState([])
   const [renewalsDue, setRenewalsDue] = useState([])
 
-  useEffect(() => { fetchAll() }, [period, profile])
+  useEffect(() => { fetchAll() }, [period, profile?.id])
 
   async function fetchAll() {
     if (!profile) return
-    setLoading(true)
+    // background refresh: keep current content on screen
     const from = getPeriodStart(period)
     await Promise.all([
       fetchStats(from),
@@ -131,7 +131,7 @@ export default function Dashboard() {
       const [{ data: allJobs }, { data: periodJobs }, { data: leads }, { data: profiles }, { data: activities }, { data: periodPayments }] = await Promise.all([
         supabase.from('jobs').select('status, payment_amount, payment_status'),
         supabase.from('jobs').select('status, assigned_to, payment_amount, payment_status').gte('created_at', from),
-        supabase.from('leads').select('lead_type'),
+        supabase.rpc('lead_type_counts'),  // counted in the DB; was downloading every lead (and capped at 1,000 rows)
         supabase.from('profiles').select('id, full_name, role').eq('is_active', true).neq('role', 'admin'),
         supabase.from('rep_activities').select('rep_id, type').gte('created_at', from),
         supabase.from('jobs').select('assigned_to, payment_amount').eq('payment_status', 'Paid').gte('updated_at', from),
@@ -145,10 +145,10 @@ export default function Dashboard() {
         certDelivered: allJobs?.filter(j => j.status === 'Certificate Delivered').length || 0,
         totalRevenue: allJobs?.filter(j => j.payment_status === 'Paid').reduce((s, j) => s + (j.payment_amount || 0), 0) || 0,
         periodRevenue: periodPayments?.reduce((s, j) => s + (j.payment_amount || 0), 0) || 0,
-        totalLeads: leads?.length || 0,
-        inbound: leads?.filter(l => l.lead_type === 'inbound').length || 0,
-        verified: leads?.filter(l => l.lead_type === 'verified').length || 0,
-        coldAgents: leads?.filter(l => l.lead_type === 'cold_agent').length || 0,
+        totalLeads: (leads || []).reduce((t, r) => t + Number(r.total), 0),
+        inbound: Number((leads || []).find(r => r.lead_type === 'inbound')?.total || 0),
+        verified: Number((leads || []).find(r => r.lead_type === 'verified')?.total || 0),
+        coldAgents: Number((leads || []).find(r => r.lead_type === 'cold_agent')?.total || 0),
         jobsByStatus: allJobs?.reduce((acc, j) => { acc[j.status] = (acc[j.status] || 0) + 1; return acc }, {}) || {},
       })
       const summaries = (profiles || []).map(rep => ({

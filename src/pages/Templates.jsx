@@ -116,7 +116,7 @@ export default function Templates() {
   useEffect(() => { fetchTemplates() }, [])
 
   async function fetchTemplates() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const { data } = await supabase
       .from('email_templates')
       .select('*')
@@ -181,10 +181,9 @@ export default function Templates() {
     : templates.filter(t => t.category === activeTab)
 
   const TABS = [
-    { key: 'all',              label: 'All Templates',     count: templates.length },
-    { key: 'verified_customer', label: 'Verified Customer', count: templates.filter(t => t.category === 'verified_customer').length },
-    { key: 'cold_email',       label: 'Cold Email',        count: templates.filter(t => t.category === 'cold_email').length },
-    { key: 'process',          label: 'Process',           count: templates.filter(t => t.category === 'process').length },
+    { key: 'all',        label: 'All Templates', count: templates.length },
+    { key: 'cold_email', label: 'Cold Email',    count: templates.filter(t => t.category === 'cold_email').length },
+    { key: 'process',    label: 'Process',       count: templates.filter(t => t.category === 'process').length },
   ]
 
   if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading templates…</div>

@@ -235,7 +235,7 @@ export default function JobDetail() {
   const [certMeta, setCertMeta] = useState({ cert_type: '', issue_date: '', expiry_date: '', result: 'N/A' })
   const [jobActivity, setJobActivity] = useState([])
 
-  useEffect(() => { if (id) fetchAll() }, [id])
+  useEffect(() => { if (id) { setLoading(true); fetchAll() } }, [id])  // full spinner only when opening a different job
 
   const fillJobVars = (text) => {
     if (!text || !job) return text || ''
@@ -267,7 +267,7 @@ export default function JobDetail() {
   }
 
   async function fetchAll() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     await Promise.all([fetchJob(), fetchDiary(), fetchFiles()])
     setLoading(false)
   }
@@ -396,7 +396,7 @@ export default function JobDetail() {
       '',
       `Contact For Access: ${contactParts.join(', ')}`,
       '',
-      `Notes: Please call the client prior to arrival and mention that you are attending on behalf of My Landlord Certificate. ${job.job_card_notes || ''}`,
+      `Notes: ${job.job_card_notes || ''}`,
     ].join('\n')
   }
 

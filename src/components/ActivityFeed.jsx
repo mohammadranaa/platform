@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { useDraft } from '../hooks/useDraft'
 import { useAuth } from '../lib/AuthContext'
 
 const C = {
@@ -41,7 +42,8 @@ export default function ActivityFeed({ leadId, clientId, jobId, compact = false 
   const [profiles, setProfiles]     = useState([])
   const [loading, setLoading]       = useState(true)
   const [type, setType]             = useState('note')
-  const [body, setBody]             = useState('')
+  const recordKey = leadId ? `lead:${leadId}` : clientId ? `client:${clientId}` : jobId ? `job:${jobId}` : null
+  const [body, setBody, clearBody] = useDraft(recordKey && `note:${recordKey}`)
   const [saving, setSaving]         = useState(false)
   const [showMentions, setShowMentions] = useState(false)
   const [mentionFilter, setMentionFilter] = useState('')
@@ -50,7 +52,6 @@ export default function ActivityFeed({ leadId, clientId, jobId, compact = false 
   useEffect(() => { fetch(); fetchProfiles() }, [leadId, clientId, jobId])
 
   async function fetch() {
-    setLoading(true)
     let q = supabase.from('activities').select('*').order('created_at', { ascending: false })
     if (leadId)   q = q.eq('lead_id',   leadId)
     if (clientId) q = q.eq('client_id', clientId)
@@ -94,7 +95,7 @@ export default function ActivityFeed({ leadId, clientId, jobId, compact = false 
       mentioned_users: mentionedUsers.length > 0 ? mentionedUsers : null,
     })
     setSaving(false)
-    setBody('')
+    clearBody()
     fetch()
   }
 

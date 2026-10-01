@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { useDraft } from '../hooks/useDraft'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 // Never put the client *secret* in a VITE_ var -- it gets bundled into the
@@ -46,9 +47,10 @@ export default function EmailCompose({ onClose, context = {} }) {
   const [inboxes, setInboxes]       = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [selectedInbox, setSelectedInbox]       = useState('')
-  const [to, setTo]         = useState(context.toEmail || '')
-  const [subject, setSubject] = useState('')
-  const [body, setBody]     = useState('')
+  const draftKey = `email:${context.leadId || context.clientId || context.jobId || 'new'}`
+  const [to, setTo, clearTo]               = useDraft(`${draftKey}:to`, context.toEmail || '')
+  const [subject, setSubject, clearSubject] = useDraft(`${draftKey}:subject`)
+  const [body, setBody, clearBody]          = useDraft(`${draftKey}:body`)
   const [sending, setSending] = useState(false)
   const [sent, setSent]     = useState(false)
   const [error, setError]   = useState('')
@@ -99,6 +101,8 @@ export default function EmailCompose({ onClose, context = {} }) {
     // Actually send it via Gmail first -- this used to skip straight to
     // logging a "sent" row without ever calling gmail-reply, so nothing
     // ever left the outbox even though the UI said "Email logged successfully".
+    // If context.threadId is present (replying from an existing thread) we pass it
+    // so the reply appears in the same Gmail thread.
     const { data, error: fnError } = await supabase.functions.invoke('gmail-reply', {
       body: {
         account_id: selectedInbox,
@@ -106,6 +110,7 @@ export default function EmailCompose({ onClose, context = {} }) {
         subject: subject.replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/\u00a3/g, 'GBP'),
         message: body,
         client_id: CLIENT_ID,
+        ...(context.threadId ? { thread_id: context.threadId } : {}),
       },
     })
 
@@ -154,6 +159,7 @@ export default function EmailCompose({ onClose, context = {} }) {
 
     setSending(false)
     if (logErr) { setError('Email sent, but failed to log to activity feed: ' + logErr.message); return }
+    clearTo(); clearSubject(); clearBody()
     setSent(true)
     setTimeout(() => onClose?.(), 2000)
   }
@@ -197,7 +203,7 @@ export default function EmailCompose({ onClose, context = {} }) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Template (optional)</div>
                 <select value={selectedTemplate} onChange={e => applyTemplate(e.target.value)} style={inputStyle}>
                   <option value="">— Pick a template to auto-fill —</option>
-                  {['verified_customer','cold_email','process'].map(cat => (
+                  {['cold_email','process'].map(cat => (
                     <optgroup key={cat} label={cat.replace(/_/g,' ').toUpperCase()}>
                       {templates.filter(t => t.category === cat).map(t => (
                         <option key={t.id} value={t.id}>{t.name}</option>

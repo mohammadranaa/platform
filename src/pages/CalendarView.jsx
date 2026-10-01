@@ -70,11 +70,11 @@ export default function CalendarView() {
     setSearchParams(params, { replace: true })
   }, [view, current, filterEng])
 
-  useEffect(() => { fetchJobs() }, [current, view, profile])
+  useEffect(() => { fetchJobs() }, [current, view, profile?.id])
   useEffect(() => { fetchEngineers() }, [])
 
   async function fetchJobs() {
-    setLoading(true)
+    // background refresh: keep current content on screen
     const { data: jobData } = await supabase
       .from('jobs')
       .select('id, job_number, title, status, scheduled_date, scheduled_slot, site_address, assigned_to, service_types, clients(first_name, last_name, company_name), profiles!jobs_assigned_to_fkey(full_name)')

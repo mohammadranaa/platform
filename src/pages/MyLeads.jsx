@@ -19,10 +19,10 @@ export default function MyLeads() {
   const [filterStatus, setFilterStatus] = useState('All')
   const [filterType, setFilterType] = useState('All')
 
-  useEffect(() => { if (profile?.id) fetchMyLeads() }, [profile])
+  useEffect(() => { if (profile?.id) fetchMyLeads() }, [profile?.id])
 
   async function fetchMyLeads() {
-    setLoading(true)
+    // background refresh: keep current content on screen
     const { data } = await supabase
       .from('leads')
       .select('id, lead_type, inbound_name, inbound_email, inbound_phone, cold_company_name, cold_email, landline_number, status, email_verified, created_at, assigned_to, last_contacted_at')

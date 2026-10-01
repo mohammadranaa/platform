@@ -117,10 +117,10 @@ export default function LeadDetail() {
   const [editAssign, setEditAssign] = useState(false)
   const [activeTab, setActiveTab]   = useState('details')
 
-  useEffect(() => { fetchAll() }, [id])
+  useEffect(() => { setLoading(true); fetchAll() }, [id])  // full spinner only when opening a different record
 
   async function fetchAll() {
-    setLoading(true)
+    // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const [{ data: l }, { data: p }] = await Promise.all([
       supabase.from('leads').select('*').eq('id', id).single(),
       supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
