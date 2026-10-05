@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useDraft } from '../hooks/useDraft'
+import { fillTemplate, varsFromLead, varsFromClient } from '../lib/templateVars'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 // Never put the client *secret* in a VITE_ var -- it gets bundled into the
@@ -16,27 +17,21 @@ const C = {
 }
 
 // Auto-fill template variables from record context
-function fillTemplate(text, ctx) {
-  if (!text) return ''
-  const now = new Date()
-  const vars = {
-    name: ctx.name || ctx.clientName || '',
+// Everything a template can refer to, from the lead/client record plus the page context.
+function templateVars(ctx, record) {
+  return {
+    ...record,                                  // first_name, last_name, full_name, company_name
     rep_name: ctx.repName || '',
     property_address: ctx.address || '',
     inspection_name: ctx.services || '',
     last_inspection_date: ctx.lastJobDate || '',
-    date: ctx.scheduledDate || now.toLocaleDateString('en-GB'),
+    date: ctx.scheduledDate || new Date().toLocaleDateString('en-GB'),
     time_window: ctx.timeSlot || '',
     time_slot: ctx.timeSlot || '',
     renewal_date: ctx.renewalDate || '',
     invoice_link: ctx.invoiceLink || '',
-    certificate_holder: ctx.name || '',
+    certificate_holder: record.full_name || ctx.name || '',
   }
-  let result = text
-  Object.entries(vars).forEach(([k, v]) => {
-    result = result.replaceAll(`{{${k}}}`, v || `[${k.toUpperCase().replace(/_/g, ' ')}]`)
-  })
-  return result
 }
 
 export default function EmailCompose({ onClose, context = {} }) {
@@ -81,12 +76,33 @@ export default function EmailCompose({ onClose, context = {} }) {
     if (!list.length) setError(`Your inbox (${profile?.email || 'personal email'}) isn't connected yet. Go to Email Inbox and click "Connect" first.`)
   }
 
+  // Load the lead/client this email is about, so templates get the real first name
+  // and company (not just one combined display name).
+  const [recordVars, setRecordVars] = useState({})
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (context.leadId) {
+        const { data } = await supabase.from('leads')
+          .select('contact_first, contact_last, cold_contact_name, inbound_name, cold_company_name, company_name')
+          .eq('id', context.leadId).maybeSingle()
+        if (!cancelled && data) setRecordVars(varsFromLead(data))
+      } else if (context.clientId) {
+        const { data } = await supabase.from('clients')
+          .select('first_name, last_name, billing_name, company_name').eq('id', context.clientId).maybeSingle()
+        if (!cancelled && data) setRecordVars(varsFromClient(data))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [context.leadId, context.clientId])
+
   function applyTemplate(templateId) {
     const tmpl = templates.find(t => t.id === templateId)
     if (!tmpl) return
     setSelectedTemplate(templateId)
-    setSubject(fillTemplate(tmpl.subject, context))
-    setBody(fillTemplate(tmpl.body, context))
+    const vars = templateVars(context, recordVars)
+    setSubject(fillTemplate(tmpl.subject, vars))
+    setBody(fillTemplate(tmpl.body, vars))
   }
 
   async function sendEmail() {

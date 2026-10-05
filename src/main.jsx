@@ -5,11 +5,7 @@ import { AuthProvider, useAuth } from './lib/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Leads from './pages/Leads'
-import MyLeads from './pages/MyLeads'
-import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
-import Jobs from './pages/Jobs'
 import JobDetail from './pages/JobDetail'
 import Campaigns from './pages/Campaigns'
 import EmailInbox from './pages/EmailInbox'
@@ -50,12 +46,12 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="leads" element={<Leads />} />
-            <Route path="my-leads" element={<MyLeads />} />
+            <Route path="leads" element={null} />  {/* kept alive in Layout */}
+            <Route path="my-leads" element={null} />
             <Route path="leads/:id" element={<LeadDetail />} />
-            <Route path="clients" element={<Clients />} />
+            <Route path="clients" element={null} />
             <Route path="clients/:id" element={<ClientDetail />} />
-            <Route path="jobs" element={<Jobs />} />
+            <Route path="jobs" element={null} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="inbox" element={<EmailInbox />} />
             <Route path="inbox/oauth-callback" element={<OAuthCallback />} />

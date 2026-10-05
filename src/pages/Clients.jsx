@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useOnReturn } from '../hooks/useOnReturn'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
@@ -42,7 +43,7 @@ const Btn = ({ children, onClick, variant = 'primary', small, disabled, style: s
 const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
 const lbl = { color: C.muted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }
 
-export default function Clients() {
+export default function Clients({ active = true }) {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
   const { toast, showToast } = useToast()
@@ -71,9 +72,10 @@ export default function Clients() {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
   useEffect(() => { fetchAll() }, [])
+  useOnReturn(active, () => fetchAll(true))
 
-  async function fetchAll() {
-    setLoading(true)
+  async function fetchAll(silent = false) {
+    if (!silent) setLoading(true)
     const { data, error } = await supabase
       .from('clients')
       .select('*, profiles!clients_assigned_to_fkey(full_name)')

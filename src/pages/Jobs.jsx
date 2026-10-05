@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useOnReturn } from '../hooks/useOnReturn'
 import { supabase } from '../lib/supabase'
 import ServicePicker from '../components/ServicePicker.jsx'
 import { SERVICE_LABELS } from '../lib/services.js'
@@ -15,7 +16,7 @@ const fmt = v => '£'+Number(v||0).toLocaleString('en-GB',{minimumFractionDigits
 const fmtD = d => d ? parseLocalDate(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : '—'
 const cName = c => c?.company_name||[c?.first_name,c?.last_name].filter(Boolean).join(' ')||'—'
 
-export default function Jobs() {
+export default function Jobs({ active = true }) {
   const { profile, isAdmin, canViewFinance } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -70,6 +71,7 @@ export default function Jobs() {
   }
 
   useEffect(() => { load() }, [])
+  useOnReturn(active, () => load(true))  // back from another page: refresh quietly, keep filters/scroll
 
   useEffect(() => {
     const defaultMonth = (() => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') })()
@@ -86,8 +88,8 @@ export default function Jobs() {
     setSearchParams(params, { replace: true })
   }, [filterStatus, filterMonth, search, filterPayment, filterSource, filterService, filterCertStatus, sortField, sortDir])
 
-  async function load() {
-    setLoading(true)
+  async function load(silent = false) {
+    if (!silent) setLoading(true)
     const { data: j, error: je } = await supabase
       .from('jobs')
       .select('id, job_number, title, status, scheduled_date, payment_status, amount_received, service_types, client_id, assigned_to, auto_generated, engineer_name, engineer_paid_amount, gross_profit, certificate_status, certificate_sent, remedial_quotation_sent, google_review_requested, work_done, detail_of_service, job_source_type, site_address, created_at, clients(first_name, last_name, company_name), profiles!jobs_assigned_to_fkey(full_name)')

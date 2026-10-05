@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useOnReturn } from '../hooks/useOnReturn'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
@@ -85,7 +86,7 @@ const TABS = [
   { key: 'in_sequence', label: '📧 In Campaign' },
 ]
 
-export default function Leads() {
+export default function Leads({ active = true }) {
   const { profile, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -128,59 +129,21 @@ export default function Leads() {
   const didMountRef = useRef(false)
   useEffect(() => {
     if (!didMountRef.current) {
+      // First open (or a real browser reload): page/filters come from the URL.
       didMountRef.current = true
-      // On first mount, check if we're restoring from a lead/job navigation.
-      // If so, restore the page from sessionStorage (URL may not have updated yet).
-      const saved = sessionStorage.getItem('leads_nav')
-      if (saved) {
-        try {
-          const nav = JSON.parse(saved)
-          // Page is already set from URL, but ensure it matches saved state
-          const restoredPage = nav.page || 0
-          if (restoredPage !== page) setPage(restoredPage)
-          fetchLeads(restoredPage)
-        } catch {
-          fetchLeads(page)
-        }
-      } else {
-        fetchLeads(page)
-      }
+      fetchLeads(page)
       return
     }
     setPage(0)
     fetchLeads(0)
   }, [tab, profile?.id, filterStatus, search, renewalFilter, sortField, sortDir, filterVerified])
 
-  // Restore scroll position after returning from a lead's detail page.
-  // Tab/filters/page already survive via the URL params above — the only
-  // thing not covered is scroll offset, which we save in openLead() below.
-  useEffect(() => {
-    if (loading) return
-    const saved = sessionStorage.getItem('leads_nav')
-    if (!saved) return
-    try {
-      const nav = JSON.parse(saved)
-      // Wait two paint cycles so the list rows are fully in the DOM
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, nav.scroll || 0)
-          sessionStorage.removeItem('leads_nav')
-        })
-      })
-    } catch {}
-  }, [loading])
+  // The page stays mounted in the background when the rep goes to Jobs, a lead, etc.
+  // (see Layout). Coming back: quietly refresh the same page of results, no spinner.
+  useOnReturn(active, () => fetchLeads(page, true))
 
   function openLead(leadId) {
-    // Save complete navigation state so we can restore exactly where the rep was
-    sessionStorage.setItem('leads_nav', JSON.stringify({
-      scroll: window.scrollY,
-      page,
-      tab,
-      search,
-      filterStatus,
-      sortField,
-      sortDir,
-    }))
+    // Scroll position and page are kept by Layout's keep-alive; just navigate.
     navigate('/leads/' + leadId)
   }
 
@@ -197,8 +160,8 @@ export default function Leads() {
     setSearchParams(params, { replace: true })
   }, [tab, search, filterStatus, renewalFilter, filterVerified, sortField, sortDir, page])
 
-  async function fetchLeads(p = page) {
-    setLoading(true)
+  async function fetchLeads(p = page, silent = false) {
+    if (!silent) setLoading(true)
     const from = p * PAGE_SIZE
     const to   = from + PAGE_SIZE - 1
 

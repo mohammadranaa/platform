@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import Leads from '../pages/Leads'
+import MyLeads from '../pages/MyLeads'
+import Jobs from '../pages/Jobs'
+import Clients from '../pages/Clients'
 import { useAuth } from '../lib/AuthContext'
 import { supabase } from '../lib/supabase'
 import AISidebar from './AISidebar'
@@ -14,6 +18,13 @@ const S = {
   sidebarActiveBg:'#0093DB22',
   sidebarAIBg:    '#80D10022',
 }
+
+// List pages that stay open in the background. Leaving Leads for Jobs (or a lead, a
+// client, anything) and coming back shows Leads exactly as it was: same page of
+// results, filters, search, scroll position, selections and open panels. Each one
+// refreshes its data quietly when you return.
+const KEEP_ALIVE = { '/leads': Leads, '/my-leads': MyLeads, '/jobs': Jobs, '/clients': Clients }
+const SCROLL_KEY = path => `scroll:${path}`
 
 const NAV_ITEMS = [
   { to: '/',           icon: '◉',  label: 'Dashboard',    exact: true },
@@ -38,6 +49,59 @@ export default function Layout() {
   const [notifications, setNotifications] = useState([])
   const [notifOpen, setNotifOpen] = useState(false)
   const unread = notifications.filter(n => !n.is_read).length
+
+  // ── Keep-alive list pages ─────────────────────────────────────
+  const location = useLocation()
+  const activeKeep = KEEP_ALIVE[location.pathname] ? location.pathname : null
+  const [opened, setOpened] = useState(() => (activeKeep ? [activeKeep] : []))
+  const lastUrl = useRef({})        // '/leads' -> '/leads?type=cold_agent&page=3'
+  const scrollPos = useRef({})      // '/leads' -> 1840
+  const prevPath = useRef(null)     // null until the first render: lets a browser reload restore too
+
+  useEffect(() => {
+    const prev = prevPath.current
+    prevPath.current = location.pathname
+
+    if (activeKeep) {
+      lastUrl.current[activeKeep] = location.pathname + location.search
+      if (!opened.includes(activeKeep)) setOpened(o => [...o, activeKeep])
+      if (prev !== location.pathname) {
+        // Returning to a kept page: put the scroll back once it's visible.
+        // After a real browser reload the rows arrive a moment later, so keep
+        // trying briefly until the page is tall enough.
+        const target = scrollPos.current[activeKeep] ?? Number(sessionStorage.getItem(SCROLL_KEY(activeKeep)) || 0)
+        let tries = 0, userMoved = false
+        const stop = () => { userMoved = true }
+        const evts = ['wheel', 'touchstart', 'keydown', 'mousedown']
+        evts.forEach(e => window.addEventListener(e, stop, { once: true, passive: true }))
+        const done = () => evts.forEach(e => window.removeEventListener(e, stop))
+        const restore = () => {
+          if (userMoved) return done()          // the rep is scrolling: never fight them
+          window.scrollTo(0, target)
+          if (Math.abs(window.scrollY - target) > 2 && tries++ < 240) requestAnimationFrame(restore)  // up to ~4s for data to arrive
+          else done()
+        }
+        requestAnimationFrame(restore)
+      }
+    } else if (prev !== location.pathname) {
+      window.scrollTo(0, 0)   // ordinary pages open at the top
+    }
+  }, [location.pathname, location.search])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Also keep the scroll position across a real browser reload (per tab)
+  useEffect(() => {
+    if (!activeKeep) return
+    let t = null
+    const onScroll = () => {
+      // Ignore the scroll jump the browser makes when this page is being hidden
+      if (window.location.pathname !== activeKeep) return
+      scrollPos.current[activeKeep] = window.scrollY   // recorded live, so leaving never loses it
+      clearTimeout(t)
+      t = setTimeout(() => { try { sessionStorage.setItem(SCROLL_KEY(activeKeep), String(window.scrollY)) } catch { /* ignore */ } }, 150)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => { clearTimeout(t); window.removeEventListener('scroll', onScroll) }
+  }, [activeKeep])
 
   useEffect(() => {
     fetchNotifications()
@@ -88,7 +152,7 @@ export default function Layout() {
         {/* Nav */}
         <nav style={{ flex: 1, padding: '4px 0', overflowY: 'auto' }}>
           {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(item => (
-            <NavLink key={item.to} to={item.to} end={item.exact}
+            <NavLink key={item.to} to={lastUrl.current[item.to] || item.to} end={item.exact}
               style={({ isActive }) => ({
                 display: 'flex', alignItems: 'center', gap: 9,
                 padding: '8px 18px', fontSize: 13,
@@ -154,6 +218,15 @@ export default function Layout() {
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: aiOpen ? 380 : 0, transition: 'margin-right 0.25s ease' }}>
         <main style={{ flex: 1, padding: 28, overflowY: 'auto', background: '#FFFFFF' }}>
+          {opened.map(path => {
+            const Page = KEEP_ALIVE[path]
+            const isActive = path === activeKeep
+            return (
+              <div key={path} style={{ display: isActive ? 'block' : 'none' }}>
+                <Page active={isActive} />
+              </div>
+            )
+          })}
           <Outlet />
         </main>
       </div>

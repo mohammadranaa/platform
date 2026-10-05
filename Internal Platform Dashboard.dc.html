@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&display=swap">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;font-family:"Barlow",system-ui,sans-serif}
+  a{color:#0093DB}
+  a:hover{color:#0077b3}
+  :focus-visible{outline:2px solid #0093DB;outline-offset:2px}
+  ::selection{background:rgba(0,147,219,.22)}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:#F5F7FA;color:#1F2937">
+
+  <aside style="width:220px;flex:0 0 220px;background:#1F2937;background-image:linear-gradient(to right,rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.04) 1px,transparent 1px),radial-gradient(70% 120% at 100% 0%,rgba(0,147,219,.28),transparent 68%);background-size:36px 36px,36px 36px,auto;color:#F9FAFB;display:flex;flex-direction:column;position:sticky;top:0;height:100vh">
+    <div style="padding:18px 20px 16px;border-bottom:1px solid #374151">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:#0093DB;display:flex;align-items:center;gap:8px"><span style="font-size:18px">◈</span>MLC Platform</div>
+      <div style="font-size:11px;color:#80D100;margin-top:2px;letter-spacing:.06em;text-transform:uppercase">CRM · Jobs · Compliance</div>
+    </div>
+
+    <div style="padding:10px 12px">
+      <input type="text" placeholder="Search…" style="width:100%;min-height:34px;padding:6px 10px;font-size:13px;background:rgba(255,255,255,.06);border:1px solid #374151;border-radius:8px;color:#F9FAFB">
+    </div>
+
+    <nav style="flex:1;overflow-y:auto;padding:4px 0">
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="12">
+        <button type="button" onClick="{{ item.go }}" style="display:flex;align-items:center;gap:9px;width:100%;padding:8px 18px;border:0;border-left:3px solid {{ item.bar }};background:{{ item.bg }};color:{{ item.fg }};font-size:13px;font-weight:{{ item.weight }};text-align:left;cursor:pointer" style-hover="background:rgba(255,255,255,.06)">
+          <span style="flex:0 0 22px;height:22px;display:grid;place-items:center;background:{{ item.monoBg }};border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-size:9px;font-weight:700;color:{{ item.monoFg }}">{{ item.mono }}</span>
+          <span>{{ item.label }}</span>
+        </button>
+      </sc-for>
+    </nav>
+
+    <div style="padding:12px 18px;border-top:1px solid #374151">
+      <div style="font-size:13px;font-weight:600;color:#F9FAFB">{{ userName }}</div>
+      <div style="font-size:10px;color:#0093DB;font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin:2px 0 10px">{{ userRole }}</div>
+      <button type="button" style="width:100%;padding:7px;background:transparent;border:1px solid #374151;border-radius:8px;color:#9CA3AF;font-size:12px;font-weight:500;cursor:pointer" style-hover="border-color:#0093DB;color:#F9FAFB">Sign out</button>
+    </div>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="display:flex;align-items:center;gap:16px;background:#fff;border-bottom:1px solid #E5E7EB;padding:12px 28px">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px">{{ headerTitle }}</span>
+      <div style="display:inline-flex;background:#F5F7FA;border:1px solid #E5E7EB;border-radius:8px;padding:3px;gap:2px">
+        <sc-for list="{{ periods }}" as="p" hint-placeholder-count="3">
+          <button type="button" onClick="{{ p.set }}" style="padding:5px 14px;border-radius:6px;border:0;cursor:pointer;font-size:13px;font-weight:{{ p.weight }};background:{{ p.bg }};color:{{ p.fg }}">{{ p.label }}</button>
+        </sc-for>
+      </div>
+      <span style="margin-left:auto;font-size:13px;color:#6B7280">{{ today }}</span>
+      <button type="button" style="width:34px;height:34px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;display:grid;place-items:center;cursor:pointer;position:relative" style-hover="border-color:#0093DB">
+        🔔
+        <span style="position:absolute;top:4px;right:4px;width:7px;height:7px;background:#DC2626;border-radius:50%"></span>
+      </button>
+    </header>
+
+    <main style="flex:1;padding:28px 28px 56px;max-width:1320px">
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div>
+      <h1 style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;margin:0 0 4px">{{ greeting }}</h1>
+      <div style="font-size:14px;color:#6B7280;margin-bottom:26px">{{ todayLong }}</div>
+
+      <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Company overview — {{ periodLabel }}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:28px">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+          <div onClick="{{ k.go }}" style="position:relative;background:#fff;border:1px solid #E5E7EB;border-top:3px solid {{ k.color }};border-radius:12px;padding:18px 18px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:{{ k.cursor }}">
+            <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">{{ k.label }}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:28px;line-height:1;color:{{ k.color }};margin-bottom:6px">{{ k.value }}</div>
+            <div style="font-size:12px;color:#9CA3AF">{{ k.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Lead pipeline</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px">
+        <sc-for list="{{ pipeline }}" as="k" hint-placeholder-count="4">
+          <div onClick="{{ k.go }}" style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer">
+            <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">{{ k.label }}</div>
+            <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;line-height:1;color:{{ k.color }}">{{ k.value }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Jobs by status</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px">
+        <sc-for list="{{ jobStatuses }}" as="s" hint-placeholder-count="7">
+          <button type="button" onClick="{{ s.go }}" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid {{ s.border }};border-left:4px solid {{ s.color }};border-radius:8px;padding:8px 16px;cursor:pointer">
+            <span style="font-size:13px;color:#6B7280">{{ s.label }}</span>
+            <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;color:{{ s.color }}">{{ s.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Rep performance — {{ periodLabel }}</div>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:28px;overflow-x:auto">
+        <div style="min-width:640px">
+          <div style="display:grid;grid-template-columns:1.4fr .8fr 1fr .8fr .8fr .9fr;padding:10px 16px;background:#F5F7FA;border-bottom:1px solid #E5E7EB">
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Rep</span>
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Jobs</span>
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Revenue</span>
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Calls</span>
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Emails</span>
+            <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">Outreach</span>
+          </div>
+          <sc-for list="{{ reps }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.4fr .8fr 1fr .8fr .8fr .9fr;align-items:center;padding:12px 16px;border-bottom:1px solid #F5F7FA;font-size:14px">
+              <span style="font-weight:600">{{ r.name }}</span>
+              <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;color:{{ r.jobsColor }}">{{ r.jobs }}</span>
+              <span style="color:#3d7a00;font-weight:600">{{ r.revenue }}</span>
+              <span><span style="background:#FEF3C7;color:#D97706;border-radius:5px;padding:2px 8px;font-size:13px;font-weight:600">{{ r.calls }}</span></span>
+              <span style="color:#0093DB">{{ r.emails }}</span>
+              <span><span style="background:#EDE9FE;color:#7C3AED;border-radius:5px;padding:2px 8px;font-size:13px;font-weight:600">{{ r.outreach }}</span></span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em">Renewals due soon</div>
+        <button type="button" style="background:none;border:0;color:#0093DB;font-size:13px;font-weight:600;cursor:pointer">View all →</button>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:28px">
+        <sc-for list="{{ renewals }}" as="l" hint-placeholder-count="4">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid #F5F7FA">
+            <div>
+              <div style="font-weight:600;font-size:14px">{{ l.name }}</div>
+              <div style="font-size:12px;color:#6B7280">{{ l.work }} · Due {{ l.due }}</div>
+            </div>
+            <span style="background:{{ l.bg }};color:{{ l.color }};border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700">{{ l.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <section>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em">Recent jobs</div>
+            <button type="button" style="background:none;border:0;color:#0093DB;font-size:13px;font-weight:600;cursor:pointer">View all →</button>
+          </div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+            <sc-for list="{{ recentJobs }}" as="j" hint-placeholder-count="5">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-bottom:1px solid #F5F7FA;cursor:pointer" style-hover="background:#F5F7FA">
+                <div>
+                  <div style="font-size:13px;font-weight:600">{{ j.title }}</div>
+                  <div style="font-size:12px;color:#6B7280">{{ j.number }} · {{ j.client }}</div>
+                </div>
+                <span style="background:{{ j.bg }};color:{{ j.color }};border-radius:6px;padding:2px 9px;font-size:11px;font-weight:700">{{ j.status }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+
+        <section>
+          <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Recent activity</div>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+            <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
+              <div style="display:flex;gap:10px;padding:10px 18px;border-bottom:1px solid #F5F7FA">
+                <span style="font-size:15px">{{ a.icon }}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.text }}</div>
+                  <div style="font-size:11px;color:#9CA3AF">{{ a.meta }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isListPage }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#0093DB;text-transform:uppercase;letter-spacing:.1em">{{ page.kicker }}</div>
+            <h1 style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;margin:4px 0 0">{{ page.title }}</h1>
+          </div>
+          <button type="button" style="background:#0093DB;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;cursor:pointer" style-hover="background:#0077b3">{{ page.action }}</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;max-width:360px;margin-bottom:18px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:8px 12px">
+          <span style="font-size:14px;color:#9CA3AF">⌕</span>
+          <input type="text" placeholder="{{ page.searchPlaceholder }}" style="flex:1;min-width:0;border:0;outline:none;font-size:13px;background:transparent;color:#1F2937">
+        </div>
+
+        <sc-if value="{{ page.hasStats }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px">
+            <sc-for list="{{ page.stats }}" as="st" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+                <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">{{ st.label }}</div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;color:{{ st.color }}">{{ st.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+          <sc-for list="{{ page.filters }}" as="f" hint-placeholder-count="5">
+            <button type="button" style="border:1px solid {{ f.border }};background:{{ f.bg }};color:{{ f.fg }};padding:7px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer">{{ f.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow-x:auto">
+          <div style="min-width:720px">
+            <div style="display:grid;grid-template-columns:{{ page.cols }};padding:10px 18px;background:#F5F7FA;border-bottom:1px solid #E5E7EB">
+              <sc-for list="{{ page.heads }}" as="h" hint-placeholder-count="5">
+                <span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.07em">{{ h }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ page.rows }}" as="r" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:{{ page.cols }};align-items:center;padding:13px 18px;border-bottom:1px solid #F5F7FA;font-size:13.5px;cursor:pointer" style-hover="background:#F5F7FA">
+                <span style="font-weight:600;color:#1F2937">{{ r.c1 }}</span>
+                <span style="color:#4B5563">{{ r.c2 }}</span>
+                <span style="color:#4B5563">{{ r.c3 }}</span>
+                <span><span style="background:{{ r.c4bg }};color:{{ r.c4fg }};border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700;white-space:nowrap">{{ r.c4 }}</span></span>
+                <span style="color:#6B7280;text-align:right">{{ r.c5 }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+    </main>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  state = { screen: "dashboard", period: "today" };
+
+  navDefs = [
+    { id: "dashboard", label: "Dashboard", mono: "DA" },
+    { id: "my-leads", label: "My Leads", mono: "ML" },
+    { id: "leads", label: "Leads", mono: "LD" },
+    { id: "clients", label: "Clients", mono: "CL" },
+    { id: "jobs", label: "Jobs", mono: "JB" },
+    { id: "calendar", label: "Calendar", mono: "CA" },
+    { id: "calls", label: "Calls (NUACOM)", mono: "PH" },
+    { id: "properties", label: "Properties", mono: "PR" },
+    { id: "inbox", label: "Email Inbox", mono: "IN" },
+    { id: "templates", label: "Templates", mono: "TP" },
+    { id: "invoices", label: "Invoices", mono: "IV" },
+    { id: "campaigns", label: "Cold Email", mono: "CM" }
+  ];
+
+  statusColors = {
+    Quote:        { color: "#7C3AED", bg: "#EDE9FE" },
+    Scheduled:    { color: "#0284C7", bg: "#E0F2FE" },
+    "In Progress":{ color: "#D97706", bg: "#FEF3C7" },
+    Completed:    { color: "#0D9488", bg: "#CCFBF1" },
+    Invoiced:     { color: "#0093DB", bg: "#E6F4FC" },
+    Paid:         { color: "#5a9400", bg: "#F0FAE0" },
+    Cancelled:    { color: "#DC2626", bg: "#FEE2E2" }
+  };
+
+  jobStatusData = [
+    { key: "Quote", count: 14 },
+    { key: "Scheduled", count: 38 },
+    { key: "In Progress", count: 22 },
+    { key: "Completed", count: 61 },
+    { key: "Invoiced", count: 17 },
+    { key: "Paid", count: 214 },
+    { key: "Cancelled", count: 6 }
+  ];
+
+  reps = [
+    { name: "Dan Whelan", jobs: 18, revenue: "£4,120.00", calls: 32, emails: 21, outreach: 9 },
+    { name: "Sarah Okafor", jobs: 14, revenue: "£3,340.00", calls: 27, emails: 19, outreach: 12 },
+    { name: "Marcus Boyd", jobs: 9, revenue: "£2,010.00", calls: 15, emails: 11, outreach: 4 },
+    { name: "Priya Patel", jobs: 6, revenue: "£1,480.00", calls: 10, emails: 8, outreach: 2 }
+  ];
+
+  renewalsData = [
+    { name: "Kestrel Holdings Ltd", work: "Fire Risk Assessment", due: "28 Sep 2026", days: -3 },
+    { name: "M. Devlin", work: "Gas Safety (CP12)", due: "02 Oct 2026", days: 9 },
+    { name: "Hamilton & Reeve", work: "EICR / Electrical", due: "14 Oct 2026", days: 21 },
+    { name: "Riverside Estates", work: "Legionella Assessment", due: "30 Oct 2026", days: 37 }
+  ];
+
+  recentJobsData = [
+    { title: "EICR — 8 Maple Court", number: "J-2461", client: "Riverside Estates", status: "Completed" },
+    { title: "Gas safety visit — Cresswell Gdns", number: "J-2460", client: "M. Devlin", status: "Scheduled" },
+    { title: "FRA — 146 Bramfield Road", number: "J-2458", client: "Kestrel Holdings Ltd", status: "In Progress" },
+    { title: "EPC — Denman House Flat 12", number: "J-2455", client: "New instruction", status: "Paid" },
+    { title: "Alarm check — Grantley Road", number: "J-2452", client: "M. Devlin", status: "Invoiced" }
+  ];
+
+  activityData = [
+    { icon: "📞", text: "Called Kestrel Holdings re: overdue FRA renewal", meta: "Dan Whelan · Today, 09:40" },
+    { icon: "✉️", text: "Sent quote for EICR renewal to Riverside Estates", meta: "Sarah Okafor · Today, 08:55" },
+    { icon: "📡", text: "Cold outreach batch sent — 40 landlords, Zone 3", meta: "Marcus Boyd · Yesterday, 17:10" },
+    { icon: "📝", text: "Logged access notes for 22 Ashworth Terrace visit", meta: "Priya Patel · Yesterday, 14:20" },
+    { icon: "🤝", text: "Client call — renewal terms agreed", meta: "Dan Whelan · Yesterday, 11:05" },
+    { icon: "✉️", text: "Certificate delivered to landlord — Apt 9, Weaver's Yard", meta: "Sarah Okafor · 2 days ago" }
+  ];
+
+  leadColors = {
+    New: { color: "#6B7280", bg: "#F3F4F6" }, Contacted: { color: "#D97706", bg: "#FEF3C7" },
+    "In Discussion": { color: "#7C3AED", bg: "#EDE9FE" }, Declined: { color: "#DC2626", bg: "#FEE2E2" },
+    Accepted: { color: "#5a9400", bg: "#F0FAE0" }
+  };
+  clientColors = {
+    New: { color: "#6B7280", bg: "#F3F4F6" }, Contacted: { color: "#D97706", bg: "#FEF3C7" },
+    Qualified: { color: "#7C3AED", bg: "#EDE9FE" }, "Proposal Sent": { color: "#0284C7", bg: "#E0F2FE" },
+    "Active Client": { color: "#5a9400", bg: "#F0FAE0" }, "Closed Won": { color: "#5a9400", bg: "#F0FAE0" },
+    "Closed Lost": { color: "#DC2626", bg: "#FEE2E2" }, Unsubscribed: { color: "#9CA3AF", bg: "#F3F4F6" }
+  };
+  paymentColors = { Paid: { color: "#5a9400", bg: "#F0FAE0" }, Unpaid: { color: "#DC2626", bg: "#FEE2E2" }, Partial: { color: "#D97706", bg: "#FEF3C7" } };
+  campaignColors = { Active: { color: "#0093DB", bg: "#E6F4FC" }, Replied: { color: "#0D9488", bg: "#CCFBF1" }, Bounced: { color: "#DC2626", bg: "#FEE2E2" }, Completed: { color: "#5a9400", bg: "#F0FAE0" } };
+  callColors = { Answered: { color: "#5a9400", bg: "#F0FAE0" }, Missed: { color: "#DC2626", bg: "#FEE2E2" }, Voicemail: { color: "#D97706", bg: "#FEF3C7" } };
+
+  pages = {
+    "my-leads": {
+      kicker: "My Leads", title: "Your assigned leads", action: "+ New Lead",
+      filters: ["All", "Inbound", "Estate Agents", "Opened Email", "In Campaign"],
+      heads: ["Contact", "Type", "Last Contact", "Status", "Value"], cols: "1.4fr .9fr .9fr .9fr .7fr",
+      rows: [
+        { c1: "Riverside Estates", c2: "Estate Agent", c3: "Today, 09:12", status: "Contacted" },
+        { c1: "M. Devlin", c2: "Inbound", c3: "Yesterday", status: "In Discussion" },
+        { c1: "Kestrel Holdings Ltd", c2: "Estate Agent", c3: "3 days ago", status: "Accepted" },
+        { c1: "T. Osei", c2: "Inbound", c3: "5 days ago", status: "New" },
+        { c1: "Fern & Co Lettings", c2: "Estate Agent", c3: "1 week ago", status: "Declined" }
+      ].map((r) => ({ ...r, c5: "£" + (Math.floor(Math.random() * 8) + 2) + "50.00" })),
+      colorMap: "leadColors"
+    },
+    leads: {
+      kicker: "Leads", title: "All leads", action: "+ New Lead", hasStats: true,
+      stats: [{ label: "Total Leads", value: "486", color: "#1F2937" }, { label: "Inbound", value: "212", color: "#0093DB" }, { label: "Estate Agents", value: "106", color: "#D97706" }, { label: "In Campaign", value: "58", color: "#7C3AED" }],
+      filters: ["All Leads", "Inbound", "Estate Agents", "Opened Email", "In Campaign"],
+      heads: ["Contact", "Type", "Last Contact", "Status", "Value"], cols: "1.4fr .9fr .9fr .9fr .7fr",
+      rows: [
+        { c1: "Riverside Estates", c2: "Estate Agent", c3: "Today, 09:12", status: "Contacted", c5: "£450.00" },
+        { c1: "M. Devlin", c2: "Inbound", c3: "Yesterday", status: "In Discussion", c5: "£320.00" },
+        { c1: "Kestrel Holdings Ltd", c2: "Estate Agent", c3: "3 days ago", status: "Accepted", c5: "£980.00" },
+        { c1: "T. Osei", c2: "Inbound", c3: "5 days ago", status: "New", c5: "£220.00" },
+        { c1: "Fern & Co Lettings", c2: "Estate Agent", c3: "1 week ago", status: "Declined", c5: "£0.00" },
+        { c1: "S. Whitfield", c2: "Inbound", c3: "2 weeks ago", status: "Accepted", c5: "£610.00" }
+      ], colorMap: "leadColors"
+    },
+    clients: {
+      kicker: "Clients", title: "Client accounts", action: "+ New Client", hasStats: false,
+      filters: ["All", "Active Client", "Qualified", "Proposal Sent", "Closed Won"],
+      heads: ["Company / Contact", "Type", "Last Activity", "Status", "Properties"], cols: "1.4fr .9fr .9fr 1fr .7fr",
+      rows: [
+        { c1: "Hamilton & Reeve", c2: "Verified", c3: "Today", status: "Active Client", c5: "312" },
+        { c1: "Riverside Estates", c2: "Verified", c3: "Yesterday", status: "Proposal Sent", c5: "84" },
+        { c1: "Kestrel Holdings Ltd", c2: "Cold Agent", c3: "3 days ago", status: "Qualified", c5: "12" },
+        { c1: "M. Devlin", c2: "Inbound", c3: "1 week ago", status: "Active Client", c5: "1" },
+        { c1: "Fern & Co Lettings", c2: "Cold Agent", c3: "2 weeks ago", status: "Closed Lost", c5: "0" }
+      ], colorMap: "clientColors"
+    },
+    jobs: {
+      kicker: "Jobs", title: "Job board", action: "+ New Job", hasStats: false,
+      filters: ["All", "Quote", "Scheduled", "In Progress", "Completed", "Invoiced", "Paid"],
+      heads: ["Job", "Client", "Service", "Status", "Amount"], cols: "1.3fr 1fr 1fr .9fr .7fr",
+      rows: [
+        { c1: "J-2461 · EICR", c2: "Riverside Estates", c3: "Electrical", status: "Completed", c5: "£240.00" },
+        { c1: "J-2460 · GSC (CP12)", c2: "M. Devlin", c3: "Gas", status: "Scheduled", c5: "£95.00" },
+        { c1: "J-2458 · FRA", c2: "Kestrel Holdings Ltd", c3: "Fire", status: "In Progress", c5: "£180.00" },
+        { c1: "J-2455 · EPC", c2: "New instruction", c3: "Energy", status: "Paid", c5: "£120.00" },
+        { c1: "J-2452 · PAT Testing", c2: "M. Devlin", c3: "Other", status: "Invoiced", c5: "£75.00" },
+        { c1: "J-2449 · Legionella", c2: "Hamilton & Reeve", c3: "Other", status: "Quote", c5: "£210.00" }
+      ], colorMap: "statusColors"
+    },
+    calendar: {
+      kicker: "Calendar", title: "Engineer schedule", action: "+ Book visit", hasStats: false,
+      filters: ["This Week", "Next Week", "Unassigned only"],
+      heads: ["Time", "Job", "Engineer", "Status", "Postcode"], cols: ".8fr 1.4fr 1fr .9fr .7fr",
+      rows: [
+        { c1: "Mon 09:00", c2: "EICR — 8 Maple Court", c3: "D. Ahmed", status: "Scheduled", c5: "E11 1BL" },
+        { c1: "Mon 13:30", c2: "GSC — Cresswell Gdns", c3: "T. Whelan", status: "Scheduled", c5: "SW5 0BJ" },
+        { c1: "Tue 10:00", c2: "FRA — 146 Bramfield Rd", c3: "J. Corrigan", status: "In Progress", c5: "SW11 6RA" },
+        { c1: "Wed 08:30", c2: "EPC — Denman House", c3: "R. Okafor", status: "Scheduled", c5: "W10 4AA" },
+        { c1: "Thu 11:00", c2: "PAT — Northchurch Rd", c3: "M. Boyd", status: "Scheduled", c5: "N1 4EJ" }
+      ], colorMap: "statusColors"
+    },
+    calls: {
+      kicker: "Calls", title: "NUACOM call log", action: "Dial number", hasStats: false,
+      filters: ["All", "Inbound", "Outbound", "Missed"],
+      heads: ["Time", "Contact", "Direction", "Result", "Rep"], cols: ".9fr 1.2fr .9fr .9fr .9fr",
+      rows: [
+        { c1: "09:40", c2: "Kestrel Holdings Ltd", c3: "Outbound", status: "Answered", c5: "Dan Whelan" },
+        { c1: "10:12", c2: "M. Devlin", c3: "Inbound", status: "Answered", c5: "Sarah Okafor" },
+        { c1: "11:05", c2: "0207 946 0839", c3: "Inbound", status: "Missed", c5: "—" },
+        { c1: "13:47", c2: "Riverside Estates", c3: "Outbound", status: "Voicemail", c5: "Marcus Boyd" },
+        { c1: "15:20", c2: "T. Osei", c3: "Outbound", status: "Answered", c5: "Priya Patel" }
+      ], colorMap: "callColors"
+    },
+    properties: {
+      kicker: "Properties", title: "Managed properties", action: "+ Add property", hasStats: false,
+      filters: ["All", "Action needed", "Fully compliant"],
+      heads: ["Address", "Landlord", "Next renewal", "Status", "Postcode"], cols: "1.5fr 1fr 1fr .9fr .6fr",
+      rows: [
+        { c1: "Flat 4, 18 Grantley Road", c2: "M. Devlin", c3: "Gas — overdue", status: "In Progress", c5: "SW19 2NH" },
+        { c1: "22 Ashworth Terrace", c2: "Hamilton & Reeve", c3: "EICR — 24d", status: "Scheduled", c5: "E3 5QL" },
+        { c1: "146 Bramfield Road", c2: "Kestrel Holdings Ltd", c3: "FRA — overdue", status: "In Progress", c5: "SW11 6RA" },
+        { c1: "31 Northchurch Road", c2: "Riverside Estates", c3: "PAT — 30d", status: "Scheduled", c5: "N1 4EJ" }
+      ], colorMap: "statusColors"
+    },
+    inbox: {
+      kicker: "Email Inbox", title: "Shared inbox", action: "Compose", hasStats: false,
+      filters: ["All", "Unread", "Sales", "Support"],
+      heads: ["From", "Subject", "Inbox", "Status", "Received"], cols: "1.1fr 1.6fr .8fr .8fr .7fr",
+      rows: [
+        { c1: "M. Devlin", c2: "Re: Gas safety renewal booking", c3: "Sales", status: "Unread", c5: "09:12" },
+        { c1: "Riverside Estates", c2: "Quote request — 4 properties", c3: "Sales", status: "Unread", c5: "Yesterday" },
+        { c1: "Kestrel Holdings Ltd", c2: "FRA certificate query", c3: "Support", status: "Read", c5: "2 days ago" },
+        { c1: "T. Osei", c2: "Access notes for Thursday visit", c3: "Support", status: "Read", c5: "3 days ago" }
+      ], colorMap: "leadColors"
+    },
+    templates: {
+      kicker: "Templates", title: "Email templates", action: "+ New Template", hasStats: false,
+      filters: ["All Templates", "Verified Customer", "Cold Email", "Process"],
+      heads: ["Template", "Category", "Last edited", "Status", "Used"], cols: "1.4fr 1fr .9fr .8fr .6fr",
+      rows: [
+        { c1: "Renewal reminder — 30 days", c2: "Verified Customer", c3: "1 week ago", status: "Active", c5: "412" },
+        { c1: "Cold intro — estate agents", c2: "Cold Email", c3: "2 weeks ago", status: "Active", c5: "1.2k" },
+        { c1: "Certificate delivered", c2: "Process", c3: "3 weeks ago", status: "Active", c5: "890" },
+        { c1: "Quote follow-up", c2: "Cold Email", c3: "1 month ago", status: "Active", c5: "340" }
+      ], colorMap: "campaignColors"
+    },
+    invoices: {
+      kicker: "Invoices", title: "Invoices", action: "+ New Invoice", hasStats: false,
+      filters: ["All", "Paid", "Unpaid", "Partial"],
+      heads: ["Invoice", "Client", "Company", "Status", "Amount"], cols: "1fr 1.2fr 1fr .8fr .7fr",
+      rows: [
+        { c1: "INV-1042", c2: "Riverside Estates", c3: "MLC Ltd", status: "Paid", c5: "£240.00" },
+        { c1: "INV-1041", c2: "M. Devlin", c3: "MLC Ltd", status: "Unpaid", c5: "£95.00" },
+        { c1: "INV-1039", c2: "Kestrel Holdings Ltd", c3: "MLC Remedials", status: "Partial", c5: "£850.00" },
+        { c1: "INV-1036", c2: "Hamilton & Reeve", c3: "MLC Ltd", status: "Paid", c5: "£210.00" }
+      ], colorMap: "paymentColors"
+    },
+    campaigns: {
+      kicker: "Cold Email", title: "Campaigns", action: "+ New Campaign", hasStats: false,
+      filters: ["All", "Active", "Replied", "Bounced", "Completed"],
+      heads: ["Campaign", "Sent", "Reply rate", "Status", "Started"], cols: "1.4fr .8fr .9fr .8fr .8fr",
+      rows: [
+        { c1: "Zone 3 landlords — Q4", c2: "1,240", c3: "6.2%", status: "Active", c5: "2 weeks ago" },
+        { c1: "Estate agent partners", c2: "480", c3: "11.4%", status: "Replied", c5: "1 month ago" },
+        { c1: "Expired EICR outreach", c2: "620", c3: "3.1%", status: "Bounced", c5: "1 month ago" },
+        { c1: "HMO compliance push", c2: "310", c3: "8.7%", status: "Completed", c5: "2 months ago" }
+      ], colorMap: "campaignColors"
+    }
+  };
+
+  buildPage(id) {
+    const p = this.pages[id];
+    if (!p) return null;
+    const map = this[p.colorMap] || {};
+    const chipOn = (label, i) => i === 0;
+    return {
+      kicker: p.kicker, title: p.title, action: p.action, hasStats: !!p.hasStats, stats: p.stats || [],
+      filters: p.filters.map((label, i) => ({ label, border: chipOn(label, i) ? "#0093DB" : "#E5E7EB", bg: chipOn(label, i) ? "rgba(0,147,219,.08)" : "#fff", fg: chipOn(label, i) ? "#0078b8" : "#4B5563" })),
+      heads: p.heads, cols: p.cols,
+      searchPlaceholder: "Search " + p.kicker.toLowerCase() + "…",
+      rows: p.rows.map((r) => {
+        const c = map[r.status] || { color: "#6B7280", bg: "#F3F4F6" };
+        return { c1: r.c1, c2: r.c2, c3: r.c3, c4: r.status, c4bg: c.bg, c4fg: c.color, c5: r.c5 };
+      })
+    };
+  }
+
+  go = (id) => () => this.setState({ screen: id });
+  setPeriod = (id) => () => this.setState({ period: id });
+
+  renderVals() {
+    const s = this.state;
+    const periods = [
+      { key: "today", label: "Today" },
+      { key: "week", label: "This Week" },
+      { key: "month", label: "This Month" }
+    ];
+    const periodLabel = periods.find((p) => p.key === s.period)?.label || "Today";
+
+    const navItems = this.navDefs.map((n) => {
+      const on = n.id === s.screen;
+      return {
+        label: n.label, mono: n.mono, go: this.go(n.id),
+        bg: on ? "rgba(0,147,219,.16)" : "transparent",
+        fg: on ? "#F9FAFB" : "#9CA3AF",
+        bar: on ? "#0093DB" : "transparent",
+        weight: on ? 600 : 400,
+        monoBg: on ? "#0093DB" : "rgba(255,255,255,.08)",
+        monoFg: on ? "#F9FAFB" : "#9CA3AF"
+      };
+    });
+
+    const hour = new Date().getHours();
+    const greeting = "Good " + (hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening") + ", Nadia 👋";
+
+    const kpis = [
+      { label: "Jobs Created", value: "41", note: periodLabel, color: "#0093DB", go: this.go("jobs"), cursor: "pointer" },
+      { label: "Revenue " + periodLabel, value: "£9,950.00", note: "Paid this period", color: "#3d7a00", go: undefined, cursor: "default" },
+      { label: "In Progress", value: "22", note: "Active jobs", color: "#D97706", go: undefined, cursor: "default" },
+      { label: "Scheduled", value: "38", note: "Booked visits", color: "#0284C7", go: undefined, cursor: "default" },
+      { label: "Cert. Delivered", value: "61", note: "This period", color: "#0D9488", go: undefined, cursor: "default" }
+    ];
+
+    const pipeline = [
+      { label: "Total Leads", value: "486", color: "#1F2937", go: this.go("leads") },
+      { label: "Inbound", value: "212", color: "#0093DB", go: this.go("leads") },
+      { label: "Verified", value: "168", color: "#7C3AED", go: this.go("leads") },
+      { label: "Cold Agents", value: "106", color: "#D97706", go: this.go("leads") }
+    ];
+
+    const jobStatuses = this.jobStatusData.map((j) => {
+      const c = this.statusColors[j.key];
+      return { label: j.key, count: j.count, go: this.go("jobs"), color: c.color, border: c.color + "44" };
+    });
+
+    const reps = this.reps.map((r) => ({ ...r, jobsColor: r.jobs > 0 ? "#0093DB" : "#9CA3AF" }));
+
+    const renewals = this.renewalsData.map((l) => {
+      const overdue = l.days < 0, soon = l.days <= 14;
+      const color = overdue ? "#DC2626" : soon ? "#D97706" : "#3d7a00";
+      const bg = overdue ? "#FEE2E2" : soon ? "#FEF3C7" : "#F0FAE0";
+      return {
+        name: l.name, work: l.work, due: l.due, color, bg,
+        status: overdue ? Math.abs(l.days) + "d overdue" : l.days === 0 ? "Due today" : l.days + "d left"
+      };
+    });
+
+    const recentJobs = this.recentJobsData.map((j) => {
+      const c = this.statusColors[j.status];
+      return { ...j, color: c.color, bg: c.bg };
+    });
+
+    return {
+      userName: "Nadia Reeve", userRole: "Admin",
+      navItems, today: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+      todayLong: new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+      periods: periods.map((p) => ({ label: p.label, set: this.setPeriod(p.key), weight: p.key === s.period ? 700 : 400, bg: p.key === s.period ? "#fff" : "transparent", fg: p.key === s.period ? "#0093DB" : "#6B7280" })),
+      periodLabel, greeting,
+      kpis, pipeline, jobStatuses,
+      reps, renewals, recentJobs, activity: this.activityData,
+      isDashboard: s.screen === "dashboard",
+      isListPage: s.screen !== "dashboard",
+      page: this.buildPage(s.screen) || this.buildPage("jobs"),
+      headerTitle: (this.navDefs.find((n) => n.id === s.screen) || {}).label || "Dashboard"
+    };
+  }
+}
+</script>
+</body>
+</html>

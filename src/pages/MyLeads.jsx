@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useOnReturn } from '../hooks/useOnReturn'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
@@ -10,7 +11,7 @@ const C = {
   border: '#E5E7EB', surface: '#F5F7FA',
 }
 
-export default function MyLeads() {
+export default function MyLeads({ active = true }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [leads, setLeads] = useState([])
@@ -20,6 +21,7 @@ export default function MyLeads() {
   const [filterType, setFilterType] = useState('All')
 
   useEffect(() => { if (profile?.id) fetchMyLeads() }, [profile?.id])
+  useOnReturn(active, () => { if (profile?.id) fetchMyLeads() })
 
   async function fetchMyLeads() {
     // background refresh: keep current content on screen
