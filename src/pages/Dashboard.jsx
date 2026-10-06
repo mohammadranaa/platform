@@ -45,14 +45,15 @@ function StatCard({ label, value, sub, color = C.accent, icon, onClick }) {
     <div onClick={onClick} style={{
       background: '#fff', border: `1px solid ${C.border}`,
       borderTop: `3px solid ${color}`, borderRadius: 12,
-      padding: '18px 20px', flex: 1, minWidth: 130,
+      padding: '18px 20px', flex: 1, minWidth: 150,
       cursor: onClick ? 'pointer' : 'default',
       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      transition: 'box-shadow 0.15s',
     }}>
-      <div style={{ color: C.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+      <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
         {icon && <span style={{ marginRight: 4 }}>{icon}</span>}{label}
       </div>
-      <div style={{ color, fontSize: 26, fontWeight: 800, marginBottom: 4 }}>{value}</div>
+      <div style={{ color, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, fontSize: 28, lineHeight: 1, marginBottom: 6 }}>{value}</div>
       {sub && <div style={{ color: C.dim, fontSize: 12 }}>{sub}</div>}
     </div>
   )
@@ -61,10 +62,13 @@ function StatCard({ label, value, sub, color = C.accent, icon, onClick }) {
 function SectionTitle({ children, action }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 28 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{children}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.08em' }}>{children}</div>
       {action}
     </div>
   )
+}
+function Badge({ label, color, bg }) {
+  return <span style={{ background: bg, color, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>
 }
 
 function LogActivityWidget({ profile, onLogged }) {

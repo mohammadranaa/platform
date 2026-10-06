@@ -135,13 +135,13 @@ export default function Layout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F5F7FA' }}>
 
       {/* Sidebar */}
-      <aside style={{ width: 220, background: S.sidebarBg, display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}>
+      <aside style={{ width: 220, background: S.sidebarBg, backgroundImage: "linear-gradient(to right,rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.04) 1px,transparent 1px),radial-gradient(70% 120% at 100% 0%,rgba(0,147,219,.28),transparent 68%)", backgroundSize: '36px 36px,36px 36px,auto', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}>
         {/* Logo */}
         <div style={{ padding: '18px 20px 16px', borderBottom: `1px solid ${S.sidebarBorder}`, marginBottom: 6 }}>
-          <div style={{ color: '#0093DB', fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ color: '#0093DB', fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 18 }}>◈</span> MLC Platform
           </div>
-          <div style={{ color: S.sidebarMuted, fontSize: 10, marginTop: 2 }}>CRM · Jobs · Cold Email</div>
+          <div style={{ color: '#80D100', fontSize: 11, marginTop: 2, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700 }}>CRM · Jobs · Compliance</div>
         </div>
 
         {/* Global search */}
@@ -157,13 +157,15 @@ export default function Layout() {
                 display: 'flex', alignItems: 'center', gap: 9,
                 padding: '8px 18px', fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                color: isActive ? '#0093DB' : S.sidebarMuted,
-                background: isActive ? S.sidebarActiveBg : 'transparent',
+                color: isActive ? '#F9FAFB' : S.sidebarMuted,
+                background: isActive ? 'rgba(0,147,219,.16)' : 'transparent',
                 borderLeft: `3px solid ${isActive ? '#0093DB' : 'transparent'}`,
                 textDecoration: 'none', transition: 'all 0.12s',
               })}>
-              <span style={{ fontSize: 14, width: 18, textAlign: 'center' }}>{item.icon}</span>
-              {item.label}
+              <span style={{ flexShrink: 0, width: 22, height: 22, display: 'grid', placeItems: 'center', borderRadius: 5, fontFamily: "'Barlow Condensed',sans-serif", fontSize: 9, fontWeight: 700, background: 'rgba(255,255,255,.08)', color: '#9CA3AF' }}>
+                {({'Dashboard':'DA','My Leads':'ML','Leads':'LD','Clients':'CL','Jobs':'JB','Calendar':'CA','Calls (NUACOM)':'PH','Properties':'PR','Email Inbox':'IN','Templates':'TP','Invoices':'IV','Cold Email':'CM','Cold Inbox':'CI'})[item.label] || item.label.slice(0,2).toUpperCase()}
+              </span>
+              <span>{item.label}</span>
             </NavLink>
           ))}
 
@@ -174,36 +176,6 @@ export default function Layout() {
             AI Assistant
           </button>
         </nav>
-
-        {/* Notifications bell */}
-        <div style={{ padding: '8px 18px', borderTop: `1px solid ${S.sidebarBorder}`, position: 'relative' }}>
-          <button onClick={() => { setNotifOpen(p => !p); if (!notifOpen) markAllRead() }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'transparent', border: 'none', color: S.sidebarMuted, cursor: 'pointer', fontSize: 13, padding: '4px 0' }}>
-            <span style={{ fontSize: 15 }}>🔔</span> Notifications
-            {unread > 0 && (
-              <span style={{ background: '#DC2626', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 700, marginLeft: 'auto' }}>{unread}</span>
-            )}
-          </button>
-          {notifOpen && (
-            <div style={{ position: 'absolute', left: 210, bottom: 0, width: 320, maxHeight: 420, overflowY: 'auto', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', zIndex: 700 }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontWeight: 700, fontSize: 13, color: '#1F2937', display: 'flex', justifyContent: 'space-between' }}>
-                Notifications
-                <span onClick={() => setNotifOpen(false)} style={{ cursor: 'pointer', color: '#9CA3AF' }}>✕</span>
-              </div>
-              {notifications.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No notifications yet</div>
-              ) : notifications.map(n => (
-                <div key={n.id}
-                  onClick={() => { if (n.link) navigate(n.link); setNotifOpen(false) }}
-                  style={{ padding: '10px 16px', borderBottom: '1px solid #F5F7FA', cursor: n.link ? 'pointer' : 'default', background: n.is_read ? '#fff' : '#E6F4FC' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2937' }}>{n.title}</div>
-                  {n.body && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{n.body}</div>}
-                  <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>{new Date(n.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
         {/* User */}
         <div style={{ padding: '12px 18px', borderTop: `1px solid ${S.sidebarBorder}` }}>
@@ -217,7 +189,40 @@ export default function Layout() {
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: aiOpen ? 380 : 0, transition: 'margin-right 0.25s ease' }}>
-        <main style={{ flex: 1, padding: 28, overflowY: 'auto', background: '#FFFFFF' }}>
+        {/* Top bar */}
+        <header style={{ display: 'flex', alignItems: 'center', gap: 16, background: '#fff', borderBottom: '1px solid #E5E7EB', padding: '12px 28px', flexShrink: 0 }}>
+          <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, fontSize: 16, color: '#1F2937' }}>
+            {NAV_ITEMS.find(n => location.pathname === n.to || (n.to !== '/' && location.pathname.startsWith(n.to)))?.label || 'Dashboard'}
+          </span>
+          <span style={{ marginLeft: 'auto', fontSize: 13, color: '#6B7280' }}>
+            {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </span>
+          <button onClick={() => { setNotifOpen(p => !p); if (!notifOpen) markAllRead() }}
+            style={{ width: 34, height: 34, borderRadius: 8, border: '1px solid #E5E7EB', background: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', fontSize: 16 }}>
+            🔔
+            {unread > 0 && <span style={{ position: 'absolute', top: 4, right: 4, width: 8, height: 8, background: '#DC2626', borderRadius: '50%' }} />}
+          </button>
+        </header>
+        {notifOpen && (
+          <div style={{ position: 'fixed', top: 57, right: aiOpen ? 396 : 16, width: 320, maxHeight: 420, overflowY: 'auto', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', zIndex: 700 }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontWeight: 700, fontSize: 13, color: '#1F2937', display: 'flex', justifyContent: 'space-between' }}>
+              Notifications
+              <span onClick={() => setNotifOpen(false)} style={{ cursor: 'pointer', color: '#9CA3AF' }}>✕</span>
+            </div>
+            {notifications.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No notifications yet</div>
+            ) : notifications.map(n => (
+              <div key={n.id}
+                onClick={() => { if (n.link) navigate(n.link); setNotifOpen(false) }}
+                style={{ padding: '10px 16px', borderBottom: '1px solid #F5F7FA', cursor: n.link ? 'pointer' : 'default', background: n.is_read ? '#fff' : '#E6F4FC' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1F2937' }}>{n.title}</div>
+                {n.body && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{n.body}</div>}
+                <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>{new Date(n.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <main style={{ flex: 1, padding: '28px 28px 56px', background: '#F5F7FA' }}>
           {opened.map(path => {
             const Page = KEEP_ALIVE[path]
             const isActive = path === activeKeep

@@ -310,7 +310,7 @@ export default function Templates() {
               <div>
                 {/* Subject */}
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Subject Line</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 6 }}>Subject Line</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F5F7FA', borderRadius: 8, padding: '10px 14px' }}>
                     <span style={{ fontSize: 14, color: C.text }}>{selected.subject}</span>
                     <button onClick={() => copyToClipboard(selected.subject)}
@@ -323,7 +323,7 @@ export default function Templates() {
                 {/* Variables */}
                 {selected.variables?.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 6 }}>
                       Variables — fill these in when using
                     </div>
                     <VariableChips variables={selected.variables} />
@@ -333,7 +333,7 @@ export default function Templates() {
                 {/* Body */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Body</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Email Body</div>
                     <button onClick={() => copyToClipboard(selected.body)}
                       style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 12 }}>
                       Copy Body
@@ -377,7 +377,7 @@ export default function Templates() {
 
             {/* Preview */}
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Preview</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 8 }}>Preview</div>
               <div style={{ background: '#F5F7FA', borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
                 <span style={{ color: C.dim, fontSize: 12 }}>Subject: </span>
                 <span style={{ color: C.text, fontSize: 13 }}>{renderTemplate(selected, fillVars).subject}</span>

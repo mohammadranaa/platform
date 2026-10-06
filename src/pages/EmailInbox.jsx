@@ -59,7 +59,7 @@ export default function EmailInbox() {
     if (!GOOGLE_CLIENT_ID) { showToast('VITE_GOOGLE_CLIENT_ID not set in Vercel', 'error'); return }
     localStorage.setItem('oauth_account_type', 'personal')
     const scopes = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/spreadsheets'
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent${profile?.email ? `&login_hint=${encodeURIComponent(profile.email)}` : ''}`
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&include_granted_scopes=false${profile?.email ? `&login_hint=${encodeURIComponent(profile.email)}` : ''}`
   }
 
   async function fetchNewEmails() {

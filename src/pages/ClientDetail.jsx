@@ -247,7 +247,7 @@ export default function ClientDetail() {
       {/* Overview tab */}
       {activeTab === 'overview' && (
         <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
             <Field label="First Name" field="first_name" value={client.first_name} save={saveField} />
             <Field label="Last Name" field="last_name" value={client.last_name} save={saveField} />
@@ -400,7 +400,7 @@ export default function ClientDetail() {
       {/* Activity tab */}
       {activeTab === 'activity' && (
         <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 16 }}>Activity Timeline</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 16 }}>Activity Timeline</div>
           <ActivityFeed clientId={id} />
         </div>
       )}

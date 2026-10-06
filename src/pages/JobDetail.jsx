@@ -28,7 +28,7 @@ const STATUS_STYLE = {
   'Completed':   { color: C.greenDark, bg: C.greenSoft },
   'Declined':    { color: C.red,       bg: C.redSoft },
 }
-const CERT_STATUSES = ['Not Issued', 'Issued', 'Delivered', 'Passed', 'Failed']
+const CERT_STATUSES = ['Not Issued', 'Issued', 'Delivered', 'Satisfactory', 'Unsatisfactory', 'N/A']
 const PAYMENT_STATUSES = ['Paid', 'Unpaid', 'Partial']
 const DIARY_ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬', status_change: '🔄', system: '⚙️' }
 const inp = { background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 12px', fontSize: 14, width: '100%' }
@@ -724,7 +724,7 @@ export default function JobDetail() {
 
       {/* Status */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Job Status</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 10 }}>Job Status</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={job.status} disabled={saving} onChange={e => updateStatus(e.target.value)}
             style={{ background: sm.bg, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 8, padding: '8px 14px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
@@ -899,7 +899,7 @@ export default function JobDetail() {
 
           {/* ── PART 1: Financials & Certificate — visible to everyone ── */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Financials & Certificate</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Financials & Certificate</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
 
               {/* Amount Closed */}
@@ -926,8 +926,6 @@ export default function JobDetail() {
                   <option value="">—</option>
                   <option>Satisfactory</option>
                   <option>Unsatisfactory</option>
-                  <option>Pass</option>
-                  <option>Fail</option>
                   <option>N/A</option>
                 </select>
               </div>
@@ -964,7 +962,7 @@ export default function JobDetail() {
           {canViewFinance && (
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Finance & Engineer</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Finance & Engineer</div>
               {!isAdmin && <span style={{ background: '#EDE9FE', color: '#7C3AED', borderRadius: 5, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>Finance</span>}
             </div>
 
@@ -999,7 +997,7 @@ export default function JobDetail() {
 
           {/* Site & Access */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Site & Access</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Site & Access</div>
             <SiteField label="Site Address" field="site_address"  value={job.site_address}  save={saveField} />
             <SiteField label="Postcode"     field="site_postcode" value={job.site_postcode} save={saveField} />
             <SiteField label="Tenant Name"  field="tenant_name"   value={job.tenant_name}   save={saveField} />
@@ -1016,7 +1014,7 @@ export default function JobDetail() {
           {/* Job Card -- auto-generated from the fields above, ready to float to the engineer */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Job Card</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Job Card</div>
               <button onClick={copyJobCard}
                 style={{ background: C.accentSoft, color: C.accent, border: 'none', borderRadius: 8, padding: '6px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 📋 Copy Job Card
@@ -1030,7 +1028,7 @@ export default function JobDetail() {
           {canViewFinance && (
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Engineer Remarks</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Engineer Remarks</div>
               {!editRemarks && (
                 <button onClick={() => setEditRemarks(true)}
                   style={{ background: C.accentSoft, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
@@ -1470,7 +1468,7 @@ export default function JobDetail() {
 
           {/* Job Diary */}
           <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Job Diary</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Job Diary</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <select value={diaryInput.type} onChange={e => setDiaryInput(p => ({ ...p, type: e.target.value }))}
                 style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '8px 10px', fontSize: 13 }}>
@@ -1709,7 +1707,7 @@ export default function JobDetail() {
               <select value={certMeta.result}
                 onChange={e => setCertMeta(p => ({ ...p, result: e.target.value }))}
                 style={{ width:'100%', background:'#F9FAFB', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13 }}>
-                {['Satisfactory','Unsatisfactory','Pass','Fail','N/A'].map(r => (
+                {['Satisfactory','Unsatisfactory','N/A'].map(r => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>

@@ -330,7 +330,7 @@ export default function LeadDetail() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Core info */}
             <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Contact Details</div>
               {lead.lead_type === 'inbound' && <>
                 <Field label="Name"           field="inbound_name"    value={lead.inbound_name}    save={save} />
                 <Field label="Email"          field="inbound_email"   value={lead.inbound_email}   type="email" save={save} />
@@ -370,7 +370,7 @@ export default function LeadDetail() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {lead.lead_type === 'inbound' && (
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Booking Details</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Booking Details</div>
                 <Field label="Appointment Date" field="appointment_date" value={lead.appointment_date} type="date" save={save} />
                 <Field label="Time Slot"        field="time_slot"        value={lead.time_slot}
                   options={['Morning (8am-12pm)', 'Afternoon (12pm-6pm)']} save={save} />
@@ -385,7 +385,7 @@ export default function LeadDetail() {
 
             {lead.lead_type === 'verified' && (
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Previous Job & Renewal</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Previous Job & Renewal</div>
                 <StaticField label="Job Date"       value={lead.previous_job_date} />
                 <StaticField label="Work Done"      value={lead.work_done} />
                 <StaticField label="Last Payment"   value={lead.last_payment_amount ? `£${lead.last_payment_amount}` : null} />
@@ -408,7 +408,7 @@ export default function LeadDetail() {
 
             {/* Meta */}
             <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Record Info</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Record Info</div>
               <StaticField label="Created"       value={new Date(lead.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} />
               <StaticField label="Lead Type"     value={TYPE_META[lead.lead_type]?.label} />
               <StaticField label="Assigned To"   value={assignedRep?.full_name || 'Unassigned'} />
@@ -418,7 +418,7 @@ export default function LeadDetail() {
         </div>
       ) : (
         <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 16 }}>Activity Timeline</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 16 }}>Activity Timeline</div>
           <ActivityFeed leadId={id} />
         </div>
       )}

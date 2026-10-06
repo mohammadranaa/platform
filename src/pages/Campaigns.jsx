@@ -615,7 +615,7 @@ export default function Campaigns() {
           {/* Sequence steps */}
           <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Email Sequence</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Email Sequence</div>
               <Btn small onClick={() => setShowNewStep(true)}>+ Add Step</Btn>
             </div>
             {steps.length === 0 ? (
@@ -666,7 +666,7 @@ export default function Campaigns() {
           {/* Contacts */}
           <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Contacts ({contacts.length})</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em' }}>Contacts ({contacts.length})</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn small variant="teal" onClick={openImportLeads}>📋 Import from Leads</Btn>
                 <Btn small onClick={() => setShowAddContacts(true)}>+ Add</Btn>
@@ -763,7 +763,7 @@ export default function Campaigns() {
         {/* Send log */}
         {sends.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginTop: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Send Log</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Send Log</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr>{['Contact','Subject','Step','Status','Opens','Clicks','Sent'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
