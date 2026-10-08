@@ -169,6 +169,8 @@ export default function Leads({ active = true }) {
     let q = supabase.from('leads').select('*', { count: 'exact' })
       .order(sortField || 'created_at', { ascending: sortDir === 'asc' })
       .range(from, to)
+    // Reps only see their own leads; admins see all
+    if (!isAdmin) q = q.eq('assigned_to', profile.id)
 
     if (tab === 'email_opened') {
       q = q.gt('email_open_count', 0)
@@ -206,12 +208,7 @@ export default function Leads({ active = true }) {
       // Head-only counts (no rows downloaded). Previously this first pulled up to 1,000 lead rows and discarded them.
       (async () => {
           const [a, b, c, d, e, f] = await Promise.all([
-            supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'inbound').is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'verified').is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('lead_type', 'cold_agent').is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).gt('email_open_count', 0).is('deleted_at', null),
-            supabase.from('leads').select('id', { count: 'exact', head: true }).eq('in_campaign', true).is('deleted_at', null),
+            ...(q => [q.is('deleted_at', null), q.eq('lead_type', 'inbound').is('deleted_at', null), q.eq('lead_type', 'verified').is('deleted_at', null), q.eq('lead_type', 'cold_agent').is('deleted_at', null), q.gt('email_open_count', 0).is('deleted_at', null), q.eq('in_campaign', true).is('deleted_at', null)])(isAdmin ? supabase.from('leads').select('id', { count: 'exact', head: true }) : supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_to', profile.id)),
           ])
           return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0, in_sequence: f.count || 0 }
       })()
