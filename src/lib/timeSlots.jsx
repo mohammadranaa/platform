@@ -35,10 +35,15 @@ export function parseSlot(slot) {
   return null
 }
 
-// true when the window starts before 1pm (used for calendar Morning/Afternoon rows)
+// Is this slot a morning appointment? (used for the calendar's Morning/Afternoon rows)
+// The words win: "Afternoon (12pm–6pm)" is an afternoon job even though it starts at 12pm.
+// Only custom times are judged by their start time (before 12 noon = morning).
 export const isMorningSlot = slot => {
+  const s = String(slot || '').toLowerCase()
+  if (s.includes('afternoon') || s.includes('evening')) return false
+  if (s.includes('morning')) return true
   const p = parseSlot(slot)
-  return p ? p.start < '13:00' : false
+  return p ? p.start < '12:00' : false
 }
 
 export const customSlotLabel = (start, end) => `Custom (${fmt12(start)}–${fmt12(end)})`
