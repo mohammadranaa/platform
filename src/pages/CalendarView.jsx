@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { toDateString, parseLocalDate } from '../lib/dateUtils'
+import { isMorningSlot } from '../lib/timeSlots'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -113,7 +114,7 @@ export default function CalendarView() {
   // Job helpers
   const jobsOnDate = date => filteredJobs.filter(j => j.scheduled_date === formatDate(date))
   const clientName = c => c?.company_name || `${c?.first_name || ''} ${c?.last_name || ''}`.trim() || '—'
-  const slotHour = slot => slot?.toLowerCase().includes('morning') ? 8 : 12
+  const slotHour = slot => isMorningSlot(slot) ? 8 : 12
 
   // Title
   const title = () => {
@@ -168,8 +169,8 @@ export default function CalendarView() {
   // ── DAY VIEW ─────────────────────────────────────────────────
   const DayView = () => {
     const dayJobs = jobsOnDate(current)
-    const morning = dayJobs.filter(j => j.scheduled_slot?.toLowerCase().includes('morning'))
-    const afternoon = dayJobs.filter(j => j.scheduled_slot?.toLowerCase().includes('afternoon'))
+    const morning = dayJobs.filter(j => j.scheduled_slot && isMorningSlot(j.scheduled_slot))
+    const afternoon = dayJobs.filter(j => j.scheduled_slot && !isMorningSlot(j.scheduled_slot))
     const unslotted = dayJobs.filter(j => !j.scheduled_slot)
 
     return (
@@ -199,7 +200,7 @@ export default function CalendarView() {
               </div>
               {[8, 12].includes(hour) && (
                 <div style={{ width: 80, background: hour === 8 ? C.accentSoft : C.amberSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: hour === 8 ? C.accent : C.amber, padding: '0 8px', textAlign: 'center', borderLeft: `1px solid ${C.border}` }}>
-                  {hour === 8 ? 'MORNING\n8am–12pm' : 'AFTERNOON\n12pm–6pm'}
+                  {hour === 8 ? 'MORNING\n8am–1pm' : 'AFTERNOON\n1pm–6pm'}
                 </div>
               )}
             </div>
@@ -259,13 +260,13 @@ export default function CalendarView() {
         </div>
 
         {/* Slot rows */}
-        {['Morning (8am–12pm)', 'Afternoon (12pm–6pm)'].map(slot => (
+        {['Morning (8am–1pm)', 'Afternoon (1pm–6pm)'].map(slot => (
           <div key={slot} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: `1px solid ${C.border}` }}>
             {weekDays.map((day, i) => {
               const slotJobs = jobsOnDate(day).filter(j =>
                 slot.toLowerCase().includes('morning')
-                  ? j.scheduled_slot?.toLowerCase().includes('morning') || !j.scheduled_slot
-                  : j.scheduled_slot?.toLowerCase().includes('afternoon')
+                  ? !j.scheduled_slot || isMorningSlot(j.scheduled_slot)
+                  : !!j.scheduled_slot && !isMorningSlot(j.scheduled_slot)
               )
               const isToday = sameDay(day, today)
               return (

@@ -1,7 +1,9 @@
+// daily-kpi-report v3 — subject/body UTF-8 encoded properly (no more garbled dashes/emoji)
 // daily-kpi-report v2
 // - Sends from Ali's real inbox (looked up by address); v1 sent from Asad's inbox by mistake
 // - Reports on TODAY (it runs at ~9pm UK); v1 reported yesterday, so Mondays graded Sunday and Fridays were never reported
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { buildMessage, formatAddress, toBase64Url } from './mime.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
@@ -34,13 +36,10 @@ async function getToken(a: any): Promise<string> {
   return d.access_token
 }
 async function sendEmail(token: string, from: string, fromName: string, to: string, subject: string, html: string) {
-  const b = 'kpi_' + Date.now()
-  const mime = [`From: ${fromName} <${from}>`, `To: ${to}`, `Subject: ${subject}`, 'MIME-Version: 1.0', `Content-Type: multipart/alternative; boundary="${b}"`,
-    '', `--${b}`, 'Content-Type: text/html; charset=UTF-8', '', html, '', `--${b}--`].join('\r\n')
-  const bytes = new TextEncoder().encode(mime); let bin = ''; for (const x of bytes) bin += String.fromCharCode(x)
+  const mime = buildMessage({ from: formatAddress(fromName, from), to, subject, text: `${subject}\n\nOpen this email in an HTML-capable mail client to view your KPI report.`, html })
   const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', { method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ raw: btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }) })
+    body: JSON.stringify({ raw: toBase64Url(mime) }) })
   const d = await res.json()
   if (d.error) throw new Error(`Send failed: ${d.error.message}`)
   return d.id
@@ -56,7 +55,7 @@ function html(rep: any, s: any, k: any, day: string) {
     : ['⚠️ MINIMUM MISSED', '#DC2626', '#FEE2E2', `Still needed: ${[!leadsMin && `${k.daily_minimum_leads - s.connected} more connected leads`, !timeMin && `${Math.ceil((k.daily_minimum_minutes * 60 - s.talkSec) / 60)} more minutes of talk time`].filter(Boolean).join(' and ')}.`]
   const row = (label: string, actual: string, min: string, tgt: string, okMin: boolean, okTgt: boolean) => `<tr style="border-bottom:1px solid #E5E7EB"><td style="padding:10px 14px;font-size:13px;font-weight:600;color:#1F2937">${label}</td><td style="padding:10px 14px;text-align:center;font-size:14px;font-weight:800;color:${okMin ? '#1F2937' : '#DC2626'}">${actual}</td><td style="padding:10px 14px;text-align:center;font-size:13px;color:#6B7280">${min}</td><td style="padding:10px 14px;text-align:center;font-size:13px;color:#6B7280">${tgt}</td><td style="padding:10px 14px;text-align:center;font-size:13px;font-weight:700;color:${okTgt ? '#15803D' : okMin ? '#D97706' : '#DC2626'}">${okTgt ? '🏆 Target' : okMin ? '✅ Minimum' : '❌ Below'}</td></tr>`
   const th = (t: string, a = 'center') => `<th style="padding:9px 14px;text-align:${a};font-size:11px;color:#6B7280;font-weight:700;text-transform:uppercase">${t}</th>`
-  return `<!DOCTYPE html><html><body style="margin:0;background:#F9FAFB;font-family:Arial,Helvetica,sans-serif"><div style="max-width:560px;margin:0 auto;padding:24px 16px">
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;background:#F9FAFB;font-family:Arial,Helvetica,sans-serif"><div style="max-width:560px;margin:0 auto;padding:24px 16px">
 <div style="background:#1F2937;border-radius:12px 12px 0 0;padding:20px 24px"><div style="font-size:18px;font-weight:800;color:#fff">My Landlord Certificate</div><div style="font-size:12px;color:#9CA3AF;margin-top:2px">Daily KPI Report — ${day}</div></div>
 <div style="background:#fff;padding:20px 24px;border:1px solid #E5E7EB;border-top:none">
 <div style="font-size:16px;font-weight:700;color:#1F2937;margin-bottom:4px">Hi ${rep.full_name},</div><div style="font-size:13px;color:#6B7280;margin-bottom:18px">Here's how today looked against your KPI targets.</div>

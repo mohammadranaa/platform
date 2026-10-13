@@ -1,4 +1,6 @@
+// gmail-reply v21: proper UTF-8 encoding (no more garbled dashes/£), optional branded HTML + calendar invite
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { buildMessage, buildIcs, renderBrandedHtml, formatAddress, toBase64Url, type Attachment } from './mime.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -18,9 +20,6 @@ function fail(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), { status, headers: { 'Content-Type': 'application/json', ...CORS } })
 }
 
-function cleanSubject(s: string): string {
-  return (s || '').replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/[^\x00-\x7F]/g, '').trim()
-}
 
 async function refreshToken(account: any, clientId: string, clientSecret: string): Promise<string> {
   if (new Date() < new Date(account.token_expiry)) return account.access_token
@@ -33,14 +32,18 @@ async function refreshToken(account: any, clientId: string, clientSecret: string
     body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: account.refresh_token, grant_type: 'refresh_token' }),
   })
   const data = await res.json()
-  if (!data.access_token) throw new Error(`Token refresh failed: ${data.error_description || data.error || 'unknown'}`)
+  if (!data.access_token) {
+    await supabase.from('user_email_accounts').update({
+      needs_reconnect: true,
+      reconnect_reason: `${data.error || 'error'}: ${data.error_description || 'unknown'}`,
+    }).eq('id', account.id)
+    throw new Error(`Token refresh failed: ${data.error_description || data.error || 'unknown'}`)
+  }
   const expiry = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString()
-  await supabase.from('user_email_accounts').update({ access_token: data.access_token, token_expiry: expiry }).eq('id', account.id)
-  console.log(`Token refreshed for ${account.gmail_address}`)
+  await supabase.from('user_email_accounts').update({ access_token: data.access_token, token_expiry: expiry, needs_reconnect: false, reconnect_reason: null }).eq('id', account.id)
   return data.access_token
 }
 
-// Convert Uint8Array to base64 in chunks to avoid stack overflow on large files
 function uint8ToBase64(bytes: Uint8Array): string {
   const CHUNK = 8192
   let binary = ''
@@ -50,13 +53,6 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary)
 }
 
-function b64Lines(b64: string): string {
-  return b64.replace(/[\r\n\s]/g, '').match(/.{1,76}/g)?.join('\r\n') || b64
-}
-
-function toBase64Url(str: string): string {
-  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
 
 // Fetch a file from Supabase Storage using service role (no CORS, no size issues)
 async function fetchStorageFile(storagePath: string): Promise<{ data: Uint8Array; contentType: string }> {
@@ -90,10 +86,11 @@ Deno.serve(async (req: Request) => {
       attachments,
       // Legacy single attachment
       attachment_base64, attachment_name, attachment_mime,
+      calendar_event, branded, html_title,
     } = body
 
     const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
-    const client_secret = body.client_secret || Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+    const client_secret = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
     if (!account_id || !to || !message) return fail('account_id, to, and message are required')
 
@@ -103,27 +100,19 @@ Deno.serve(async (req: Request) => {
     const token = await refreshToken(account, client_id, client_secret)
     const fromName = account.send_as_name || account.display_name || 'My Landlord Certificate'
     const fromAddr = account.send_as_email || account.gmail_address
-    const safeSubject = cleanSubject(subject || 'My Landlord Certificate')
-    const boundary = 'MLC' + Date.now()
+    const safeSubject = (subject || 'My Landlord Certificate').replace(/[\r\n]+/g, ' ').trim()
 
-    // Build attachment list
-    // Strategy A: storage_paths — edge function fetches from storage (for large files like certs)
-    // Strategy B: attachments array — base64 already prepared by frontend (for small files)
-    // Strategy C: legacy single attachment_base64
-    type Attachment = { base64: string; name: string; mime: string }
     const allAttachments: Attachment[] = []
 
     if (storage_paths && Array.isArray(storage_paths)) {
       for (const sp of storage_paths) {
         if (!sp.path) continue
-        console.log(`Fetching from storage: ${sp.path}`)
         const { data: fileBytes, contentType } = await fetchStorageFile(sp.path)
         allAttachments.push({
           base64: uint8ToBase64(fileBytes),
           name: sp.name || sp.path.split('/').pop() || 'Certificate.pdf',
           mime: sp.mime || contentType || 'application/pdf',
         })
-        console.log(`Fetched ${sp.name}: ${fileBytes.length} bytes`)
       }
     }
 
@@ -135,50 +124,21 @@ Deno.serve(async (req: Request) => {
       allAttachments.push({ base64: attachment_base64, name: attachment_name, mime: attachment_mime || 'application/pdf' })
     }
 
-    // Build MIME message
-    let mime: string
-    if (allAttachments.length > 0) {
-      const parts = [
-        `From: ${fromName} <${fromAddr}>`,
-        `To: ${to}`,
-        `Subject: ${safeSubject}`,
-        ...(thread_id ? [`In-Reply-To: <${thread_id}>`, `References: <${thread_id}>`] : []),
-        'MIME-Version: 1.0',
-        `Content-Type: multipart/mixed; boundary="${boundary}"`,
-        '',
-        `--${boundary}`,
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: quoted-printable',
-        '',
-        message.replace(/\n/g, '\r\n'),
-        '',
-      ]
-      for (const att of allAttachments) {
-        parts.push(
-          `--${boundary}`,
-          `Content-Type: ${att.mime}; name="${att.name}"`,
-          'Content-Transfer-Encoding: base64',
-          `Content-Disposition: attachment; filename="${att.name}"`,
-          '',
-          b64Lines(att.base64),
-          '',
-        )
-      }
-      parts.push(`--${boundary}--`)
-      mime = parts.join('\r\n')
-    } else {
-      mime = [
-        `From: ${fromName} <${fromAddr}>`,
-        `To: ${to}`,
-        `Subject: ${safeSubject}`,
-        ...(thread_id ? [`In-Reply-To: <${thread_id}>`, `References: <${thread_id}>`] : []),
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: quoted-printable',
-        '',
-        message.replace(/\n/g, '\r\n'),
-      ].join('\r\n')
-    }
+    // Optional calendar invite (booking confirmations)
+    const ics = calendar_event ? buildIcs({ ...calendar_event, attendee_email: calendar_event.attendee_email || to }, fromAddr, fromName) : null
+    // Branded HTML version for process emails (booking, invoice, certificate...)
+    const html = branded ? renderBrandedHtml(message, { title: html_title, calendarNote: !!ics }) : undefined
+
+    const mime = buildMessage({
+      from: formatAddress(fromName, fromAddr),
+      to: formatAddress(to),
+      subject: safeSubject,
+      text: message,
+      html,
+      ics,
+      attachments: allAttachments,
+      extraHeaders: thread_id ? [`In-Reply-To: <${thread_id}>`, `References: <${thread_id}>`] : [],
+    })
 
     console.log(`Sending to ${to} with ${allAttachments.length} attachment(s)`)
 
@@ -208,7 +168,7 @@ Deno.serve(async (req: Request) => {
       })
     } catch (e) { /* non-critical */ }
 
-    return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length })
+    return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length, calendar_invite: !!ics })
 
   } catch (e: any) {
     console.error('gmail-reply error:', e?.message || e)

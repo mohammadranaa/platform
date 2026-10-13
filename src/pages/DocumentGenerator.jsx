@@ -346,7 +346,7 @@ export default function DocumentGenerator() {
     const total = (subtotal - Number(d.discount || 0)).toFixed(2)
     const date = new Date().toLocaleDateString('en-GB')
     const co = COMPANIES[company] || COMPANIES.standard
-    return `Dear ${name},\n\nPlease find attached your invoice ${invoiceNum} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoiceNum}\nDate: ${date}\nAmount Due: GBP${total}\n\nPayment can be made by bank transfer to:\nBank: ${co.name}\nSort Code: ${co.sort}\nAccount: ${co.account}\nReference: ${invoiceNum}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`
+    return `Dear ${name},\n\nPlease find attached your invoice ${invoiceNum} for the services provided.\n\nInvoice Details:\nInvoice Number: ${invoiceNum}\nDate: ${date}\nAmount Due: £${total}\n\nPayment can be made by bank transfer to:\nBank: ${co.name}\nSort Code: ${co.sort}\nAccount: ${co.account}\nReference: ${invoiceNum}\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk`
   }
 
   if (loading) return <div style={{ color: C.muted, textAlign: 'center', padding: 48 }}>Loading…</div>

@@ -13,9 +13,9 @@ const C = { accent: '#0093DB', text: '#1F2937', muted: '#6B7280', border: '#E5E7
 // {Name}, {{name}}, {Company Name}, {{company_name}} etc. Unknown ones are removed here.
 const fillTemplate = (text, vars) => fillShared(text, vars, { removeUnknown: true })
 
-function cleanSubject(s) {
-  return (s || '').replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/\u00a3/g, 'GBP').trim()
-}
+// Subjects are sent as-is: gmail-reply now encodes UTF-8 headers properly, so
+// dashes and £ signs arrive intact instead of being mangled or replaced.
+const cleanSubject = s => (s || '').replace(/[\r\n]+/g, ' ').trim()
 
 export default function SendEmailModal({
   onClose, onSent,
@@ -25,6 +25,10 @@ export default function SendEmailModal({
   buildAttachments = null,     // optional: () => [{ base64, filename, mime }] | Promise<...>
   title = 'Send Email',
   preferPersonal = true,       // default to the main business inbox, not cold accounts
+  calendarEvent = null,        // optional: { uid, date, slot, summary, location, description, attendee_name }
+  inviteByDefault = false,     // tick "attach calendar invite" on open
+  htmlTitle = '',              // heading shown in the branded HTML email
+  branded = true,              // send a professional HTML version alongside the plain text
 }) {
   const { profile } = useAuth()
   const [accounts, setAccounts] = useState([])
@@ -37,6 +41,9 @@ export default function SendEmailModal({
   const [error, setError] = useState('')
   const [attachmentInfo, setAttachmentInfo] = useState([]) // [{ filename }] once built
   const [buildingAttachment, setBuildingAttachment] = useState(!!(buildAttachment || buildAttachments))
+  const canInvite = !!(calendarEvent?.date && calendarEvent?.slot)
+  const [includeInvite, setIncludeInvite] = useState(inviteByDefault && canInvite)
+  const [heading, setHeading] = useState(htmlTitle)
 
   useEffect(() => {
     supabase.from('user_email_accounts')
@@ -93,6 +100,10 @@ export default function SendEmailModal({
     if (!t) return
     setSubjectVal(fillTemplate(t.subject, variables))
     setBodyVal(fillTemplate(t.body, variables))
+    const name = t.name || ''
+    if (/booking confirm/i.test(name)) { setHeading('Booking Confirmed'); if (canInvite) setIncludeInvite(true) }
+    else if (/payment confirm/i.test(name)) { setHeading('Payment Received'); if (canInvite) setIncludeInvite(true) }
+    else setHeading(/certificate/i.test(name) ? 'Your Certificate' : /invoice/i.test(name) ? 'Your Invoice' : htmlTitle)
   }
 
   async function send() {
@@ -113,6 +124,9 @@ export default function SendEmailModal({
       subject: cleanSubject(subjectVal),
       message: bodyVal,
       client_id: CLIENT_ID,
+      branded,
+      ...(heading ? { html_title: heading } : {}),
+      ...(includeInvite && canInvite ? { calendar_event: { ...calendarEvent, attendee_email: toAddr.trim() } } : {}),
       // If storage paths: edge function fetches the files (large certs)
       // If base64: send directly (invoices, quotes generated client-side)
       ...(hasStoragePaths
@@ -272,6 +286,16 @@ export default function SendEmailModal({
                 </div>
               </div>
             </div>
+          )}
+
+          {canInvite && (
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: includeInvite ? C.greenSoft : '#F5F7FA', border: `1px solid ${includeInvite ? '#80D10066' : C.border}`, borderRadius: 8, padding: '10px 14px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={includeInvite} onChange={e => setIncludeInvite(e.target.checked)} style={{ marginTop: 3 }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: includeInvite ? C.green : C.text }}>📅 Attach calendar invite</div>
+                <div style={{ fontSize: 11, color: C.muted }}>{calendarEvent.dateLabel || calendarEvent.date} · {calendarEvent.slot}{calendarEvent.location ? ` · ${calendarEvent.location}` : ''}</div>
+              </div>
+            </label>
           )}
 
           <div>

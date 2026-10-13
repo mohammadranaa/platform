@@ -297,7 +297,7 @@ export default function InvoiceDetail() {
           subject={sendSubject || ('Invoice ' + (inv.invoice_number||'') + ' -- My Landlord Certificate')}
           body={sendBody || (() => {
             const co = getCompany(inv.company)
-            return 'Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: GBP' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: ' + co.bankAccountName + '\nSort Code: ' + co.sortCode + '\nAccount: ' + co.accountNumber + '\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'
+            return 'Dear ' + (inv.client_name||'Customer') + ',\n\nPlease find attached invoice ' + (inv.invoice_number||'') + '.\n\nAmount Due: £' + Number(inv.total||0).toFixed(2) + '\n\nPayment by bank transfer to:\nBank: ' + co.bankAccountName + '\nSort Code: ' + co.sortCode + '\nAccount: ' + co.accountNumber + '\nReference: ' + (inv.invoice_number||'') + '\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'
           })()}
           variables={{ name: inv.client_name || 'Customer' }}
           buildAttachment={() => {

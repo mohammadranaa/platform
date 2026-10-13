@@ -7,6 +7,7 @@ import { SERVICE_LABELS } from '../lib/services.js'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { parseLocalDate } from '../lib/dateUtils'
+import { TimeSlotPicker } from '../lib/timeSlots'
 
 const C = { surface:'#F5F7FA',border:'#E5E7EB',accent:'#0093DB',accentSoft:'#E6F4FC',green:'#80D100',greenSoft:'#F0FAE0',greenDark:'#3d7a00',amber:'#D97706',amberSoft:'#FEF3C7',red:'#DC2626',redSoft:'#FEE2E2',teal:'#0D9488',tealSoft:'#CCFBF1',text:'#1F2937',muted:'#6B7280',dim:'#9CA3AF' }
 const STATUSES = ['New','In Progress','Confirmed','Completed','Declined']
@@ -549,7 +550,7 @@ export default function Jobs({ active = true }) {
                 <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>The person who physically does the inspection (not the assigned BDL) — leave blank until known</div>
               </div>
               <div><label style={lbl}>Scheduled Date</label><input type="date" value={form.scheduled_date} onChange={e=>sf('scheduled_date',e.target.value)} style={inp}/></div>
-              <div><label style={lbl}>Time Slot</label><select value={form.scheduled_slot} onChange={e=>sf('scheduled_slot',e.target.value)} style={inp}><option value="">—</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–6pm)</option></select></div>
+              <div><label style={lbl}>Time Slot</label><TimeSlotPicker value={form.scheduled_slot} onChange={v=>sf('scheduled_slot',v)} style={inp}/></div>
 
               {/* Property selector — appears only when client has existing properties */}
               {clientProperties.length > 0 && (

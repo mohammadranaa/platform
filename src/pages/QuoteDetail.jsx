@@ -355,7 +355,7 @@ export default function QuoteDetail() {
           title="Send Quote"
           to={quote.clients?.email || ''}
           subject={'Quote ' + quote.quote_number + ' -- My Landlord Certificate'}
-          body={'Dear ' + clientName + ',\n\nPlease find attached your quote ' + quote.quote_number + ' for the services requested.\n\nQuote Details:\nQuote Number: ' + quote.quote_number + '\nDate: ' + new Date().toLocaleDateString('en-GB') + '\nValid Until: ' + (quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB') : 'N/A') + '\nSite: ' + (quote.site_address || '') + '\n\nTotal: GBP' + subtotal.toFixed(2) + '\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'}
+          body={'Dear ' + clientName + ',\n\nPlease find attached your quote ' + quote.quote_number + ' for the services requested.\n\nQuote Details:\nQuote Number: ' + quote.quote_number + '\nDate: ' + new Date().toLocaleDateString('en-GB') + '\nValid Until: ' + (quote.valid_until ? new Date(quote.valid_until).toLocaleDateString('en-GB') : 'N/A') + '\nSite: ' + (quote.site_address || '') + '\n\nTotal: £' + subtotal.toFixed(2) + '\n\nTo accept this quote, please reply to this email or call us on 020 3996 1070.\n\nKind Regards,\nMy Landlord Certificate\n020 3996 1070\ninfo@mylandlordcertificate.co.uk'}
           variables={{ name: clientName }}
           buildAttachment={() => {
             const { base64, filename } = buildQuotePdf({

@@ -16,6 +16,24 @@ const C = {
   red: '#DC2626', text: '#1F2937', muted: '#6B7280', dim: '#9CA3AF',
 }
 
+// "2026-10-14" -> "Wednesday 14 October 2026" (leaves anything else untouched)
+function fmtLongDate(d) {
+  if (!d) return ''
+  if (!/^\d{4}-\d{2}-\d{2}/.test(String(d))) return d
+  return new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+// Heading used in the branded HTML version of process emails
+const PROCESS_TITLES = [
+  [/booking confirm/i, 'Booking Confirmed'],
+  [/payment confirm/i, 'Payment Received'],
+  [/invoice/i, 'Your Invoice'],
+  [/certificate/i, 'Your Certificate'],
+  [/quote/i, 'Your Quote'],
+]
+// Templates that confirm an appointment get a calendar invite
+const isBookingTemplate = t => /booking confirm|payment confirm/i.test(t?.name || '')
+
 // Auto-fill template variables from record context
 // Everything a template can refer to, from the lead/client record plus the page context.
 function templateVars(ctx, record) {
@@ -25,12 +43,15 @@ function templateVars(ctx, record) {
     property_address: ctx.address || '',
     inspection_name: ctx.services || '',
     last_inspection_date: ctx.lastJobDate || '',
-    date: ctx.scheduledDate || new Date().toLocaleDateString('en-GB'),
+    date: fmtLongDate(ctx.scheduledDate) || new Date().toLocaleDateString('en-GB'),
     time_window: ctx.timeSlot || '',
     time_slot: ctx.timeSlot || '',
     renewal_date: ctx.renewalDate || '',
     invoice_link: ctx.invoiceLink || '',
     certificate_holder: record.full_name || ctx.name || '',
+    amount: ctx.amount ? `£${Number(ctx.amount).toFixed(2)}` : '',
+    phone: ctx.phone || '',
+    email: ctx.toEmail || '',
   }
 }
 
@@ -50,6 +71,9 @@ export default function EmailCompose({ onClose, context = {} }) {
   const [sent, setSent]     = useState(false)
   const [error, setError]   = useState('')
   const [minimised, setMinimised] = useState(false)
+  const [includeInvite, setIncludeInvite] = useState(false)
+  // Calendar invite is possible when we know the appointment date and slot
+  const canInvite = !!(context.scheduledDate && /^\d{4}-\d{2}-\d{2}/.test(String(context.scheduledDate)) && context.timeSlot)
 
   useEffect(() => {
     fetchTemplates()
@@ -103,6 +127,7 @@ export default function EmailCompose({ onClose, context = {} }) {
     const vars = templateVars(context, recordVars)
     setSubject(fillTemplate(tmpl.subject, vars))
     setBody(fillTemplate(tmpl.body, vars))
+    setIncludeInvite(canInvite && isBookingTemplate(tmpl))
   }
 
   async function sendEmail() {
@@ -123,10 +148,26 @@ export default function EmailCompose({ onClose, context = {} }) {
       body: {
         account_id: selectedInbox,
         to,
-        subject: subject.replace(/\u2014/g, '--').replace(/\u2013/g, '-').replace(/\u00a3/g, 'GBP'),
+        subject: subject.replace(/[\r\n]+/g, ' ').trim(),
         message: body,
         client_id: CLIENT_ID,
         ...(context.threadId ? { thread_id: context.threadId } : {}),
+        // Process emails (booking, payment, invoice, certificate) go out as branded HTML;
+        // cold/sales emails stay plain so they read like a personal email.
+        ...(tmpl?.category === 'process' ? {
+          branded: true,
+          html_title: (PROCESS_TITLES.find(([re]) => re.test(tmpl.name || '')) || [])[1] || '',
+        } : {}),
+        ...(includeInvite && canInvite ? { calendar_event: {
+          uid: context.calendarUid || `${context.jobId ? 'job-' + context.jobId : context.leadId ? 'lead-' + context.leadId : 'mlc-' + Date.now()}@mylandlordcertificate.co.uk`,
+          date: String(context.scheduledDate).slice(0, 10),
+          slot: context.timeSlot,
+          summary: `${context.services || 'Property inspection'} — My Landlord Certificate`,
+          location: context.address || '',
+          description: `${context.services || 'Property inspection'}\nArrival window: ${context.timeSlot}\nOur engineer will call approximately one hour before arrival.\nQuestions or changes: 020 3996 1070`,
+          attendee_name: context.toName || context.name || '',
+          attendee_email: to.trim(),
+        } } : {}),
       },
     })
 
@@ -257,6 +298,16 @@ export default function EmailCompose({ onClose, context = {} }) {
                   placeholder="Email body…"
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }} />
               </div>
+
+              {canInvite && isBookingTemplate(templates.find(t => t.id === selectedTemplate)) && (
+                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: includeInvite ? C.greenSoft : C.surface, border: `1px solid ${includeInvite ? '#80D10066' : C.border}`, borderRadius: 8, padding: '9px 12px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={includeInvite} onChange={e => setIncludeInvite(e.target.checked)} style={{ marginTop: 3 }} />
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: includeInvite ? C.greenDark : C.text }}>📅 Attach calendar invite</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{fmtLongDate(context.scheduledDate)} · {context.timeSlot}{context.address ? ` · ${context.address}` : ''}</div>
+                  </div>
+                </label>
+              )}
 
               {error && <div style={{ color: C.red, fontSize: 12, background: C.redSoft, borderRadius: 6, padding: '8px 12px' }}>{error}</div>}
 

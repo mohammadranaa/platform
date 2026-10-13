@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import DOMPurify from 'dompurify'
 import { supabase } from '../lib/supabase'
+import { INBOX_COLUMNS } from '../lib/emailAccounts'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 
@@ -43,7 +44,7 @@ export default function EmailInbox() {
   async function fetchAll() {
     setLoading(true)
     const [{ data: accs }, { data: msgs }] = await Promise.all([
-      supabase.from('user_email_accounts').select('*').eq('account_type', 'personal').eq('is_active', true).order('connected_at'),
+      supabase.from('user_email_accounts').select(INBOX_COLUMNS).eq('account_type', 'personal').eq('is_active', true).order('connected_at'),
       supabase.from('gmail_messages').select('*, user_email_accounts(gmail_address)')
         .order('date', { ascending: false }).limit(500),
     ])

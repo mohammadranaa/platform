@@ -6,6 +6,7 @@ import { useToast, Toast } from '../hooks/useToast.jsx'
 import ActivityFeed, { logActivity } from '../components/ActivityFeed.jsx'
 import EmailCompose from '../components/EmailCompose.jsx'
 import { fixUrl } from '../lib/url'
+import { TimeSlotPicker } from '../lib/timeSlots'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -372,8 +373,11 @@ export default function LeadDetail() {
               <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', letterSpacing: '0.07em', marginBottom: 14 }}>Booking Details</div>
                 <Field label="Appointment Date" field="appointment_date" value={lead.appointment_date} type="date" save={save} />
-                <Field label="Time Slot"        field="time_slot"        value={lead.time_slot}
-                  options={['Morning (8am-12pm)', 'Afternoon (12pm-6pm)']} save={save} />
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ color:'#6B7280', fontSize:11, fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>Time Slot</div>
+                  <TimeSlotPicker value={lead.time_slot || ''} onChange={v => save('time_slot', v)}
+                    style={{ width:'100%', background:'#fff', border:'1px solid #E5E7EB', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#1F2937' }} />
+                </div>
                 <Field label="Services"         field="services_requested" value={lead.services_requested} type="textarea" save={save} />
                 <Field label="Total Price"      field="total_price"      value={lead.total_price}      type="number" save={save} />
                 <Field label="Payment Status"   field="payment_status"   value={lead.payment_status}
@@ -433,8 +437,12 @@ export default function LeadDetail() {
             toName:    displayName(),
             name:      displayName(),
             repName:   profile.full_name,
-            address:   lead.street_address || lead.address || lead.cold_address,
+            address:   [lead.street_address, lead.city, lead.postcode].filter(Boolean).join(', ') || lead.address || lead.cold_address,
             services:  lead.services_requested || lead.work_done,
+            scheduledDate: lead.appointment_date,
+            timeSlot:  lead.time_slot,
+            amount:    lead.total_price,
+            phone:     lead.inbound_phone || lead.job_telephone || lead.job_mobile,
             renewalDate: lead.renewal_due_date,
             lastJobDate: lead.previous_job_date,
           }}

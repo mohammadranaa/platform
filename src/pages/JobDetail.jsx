@@ -8,6 +8,7 @@ import { useToast, Toast } from '../hooks/useToast.jsx'
 import SendEmailModal from '../components/SendEmailModal'
 import { buildInvoicePdf, buildQuotePdf } from '../lib/generatePdf'
 import { getCompany, detectCompanyKey } from '../lib/companies'
+import { TimeSlotPicker, parseSlot } from '../lib/timeSlots'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -221,6 +222,7 @@ export default function JobDetail() {
   const [fileTab, setFileTab]                     = useState('certificates')
   const [showSendInvoice, setShowSendInvoice]     = useState(false)
   const [showSendCert, setShowSendCert]           = useState(false)
+  const [showBookingConf, setShowBookingConf]     = useState(false)
   const [quotes, setQuotes]             = useState([])
   const [showNewQuote, setShowNewQuote] = useState(false)
   const [quoteItems, setQuoteItems]     = useState([{ description:'', quantity:1, unit_price:0 }])
@@ -670,14 +672,57 @@ export default function JobDetail() {
   // (Invoice Email, Payment Confirmation, Booking Confirmation, Certificate
   // Delivery, etc.) — every {{key}} those stored templates reference must
   // be present here, or fillTemplate silently blanks it out.
+  const apptDateLabel = job.scheduled_date
+    ? new Date(job.scheduled_date.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : ''
+  const servicesLabel = (job.service_types || []).join(', ') || job.title || 'Property Inspection'
+  // Calendar invite for booking confirmations (needs a date and a time slot)
+  const calendarEvent = job.scheduled_date && job.scheduled_slot ? {
+    uid: `job-${job.id}@mylandlordcertificate.co.uk`,
+    date: job.scheduled_date.slice(0, 10),
+    dateLabel: apptDateLabel,
+    slot: job.scheduled_slot,
+    summary: `${servicesLabel} inspection — My Landlord Certificate`,
+    location: [job.site_address, job.site_postcode].filter(Boolean).join(', '),
+    description: `${servicesLabel} at ${job.site_address || 'your property'}.\nArrival window: ${job.scheduled_slot}.\nOur engineer will call approximately one hour before arrival.\nReference: ${job.job_number || ''}\nQuestions or changes: 020 3996 1070`,
+    attendee_name: jobClientName,
+  } : null
+  const bookingBody = `Dear ${jobClientName},
+
+Thank you for booking with My Landlord Certificate. We're pleased to confirm your appointment.
+
+Service: ${servicesLabel}
+Property: ${[job.site_address, job.site_postcode].filter(Boolean).join(', ') || 'TBC'}
+Date: ${apptDateLabel || 'TBC'}
+Arrival window: ${job.scheduled_slot || 'TBC'}
+Reference: ${job.job_number || ''}
+
+BEFORE YOUR APPOINTMENT
+- You don't need to attend — a tenant or keyholder can provide access.
+- Our engineer will call approximately one hour before arrival.
+- Please make parking available near the property where possible.
+
+Your certificate will be emailed to you within 24 hours of the inspection, once full payment has been received.
+
+To reschedule or ask a question, simply reply to this email or call us on ${co.phone}.
+
+Kind regards,
+${profile?.full_name || 'My Landlord Certificate'}
+My Landlord Certificate
+${co.phone}`
+
   const jobVars = {
     name: jobClientName,
     first_name: job.clients?.first_name || jobClientName,
     inspection_name: (job.service_types || []).join(', ') || 'Property Inspection',
     property_address: job.site_address || '',
-    date: job.scheduled_date || 'TBC',
+    date: apptDateLabel || 'TBC',
     time_slot: job.scheduled_slot || 'TBC',
     time_window: job.scheduled_slot || 'TBC',
+    full_name: [job.clients?.first_name, job.clients?.last_name].filter(Boolean).join(' ') || jobClientName,
+    amount: job.quoted_amount ? `£${Number(job.quoted_amount).toFixed(2)}` : '',
+    phone: job.clients?.phone || '',
+    email: job.clients?.email || '',
     certificate_holder: jobClientName,
     rep_name: profile?.full_name || 'My Landlord Certificate',
     renewal_date: '',
@@ -755,6 +800,14 @@ export default function JobDetail() {
           }}
             style={{ background:'#F0FAE0', color:'#3d7a00', border:'1px solid #80D10066', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
             📜 Send Certificate
+          </button>
+          <button onClick={() => {
+            if (!job.clients?.email) { showToast('This job has no client email. Add one to the client first.', 'error'); return }
+            if (!job.scheduled_date || !job.scheduled_slot) showToast('No date/time slot set — the email will go without a calendar invite.', 'error')
+            setShowBookingConf(true)
+          }}
+            style={{ background:'#fff', color:'#0F1B2D', border:'1px solid #CBD5E1', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+            📅 Booking Confirmation
           </button>
           <button onClick={() => setShowEmailCompose(true)}
             style={{ background: '#E6F4FC', color: '#0093DB', border: '1px solid #0093DB44', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -864,13 +917,8 @@ export default function JobDetail() {
               {/* Time Slot */}
               <div>
                 <label style={lbl}>Time Slot</label>
-                <select value={job.scheduled_slot || ''}
-                  onChange={e => { setJob(p=>({...p, scheduled_slot: e.target.value})); saveField('scheduled_slot', e.target.value) }}
-                  style={inp}>
-                  <option value="">—</option>
-                  <option>Morning (8am–12pm)</option>
-                  <option>Afternoon (12pm–6pm)</option>
-                </select>
+                <TimeSlotPicker value={job.scheduled_slot || ''} style={inp}
+                  onChange={v => { setJob(p=>({...p, scheduled_slot: v})); saveField('scheduled_slot', v) }} />
               </div>
 
               {/* Assigned BDL - SEPARATE from Engineer */}
@@ -1535,8 +1583,24 @@ export default function JobDetail() {
           subject={''}
           body={`${greeting} ${jobClientName},\n\n\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={jobVars}
+          calendarEvent={calendarEvent}
           onClose={() => setShowEmailCompose(false)}
           onSent={() => { logSendToDiary('Email', job.clients?.email); showToast('Email sent'); setShowEmailCompose(false) }}
+        />
+      )}
+
+      {showBookingConf && (
+        <SendEmailModal
+          title="Send Booking Confirmation"
+          to={job.clients?.email || ''}
+          subject={`Booking Confirmed — ${servicesLabel}${apptDateLabel ? ` on ${apptDateLabel}` : ''} | ${job.job_number || 'My Landlord Certificate'}`}
+          body={bookingBody}
+          variables={jobVars}
+          calendarEvent={calendarEvent}
+          inviteByDefault
+          htmlTitle="Booking Confirmed"
+          onClose={() => setShowBookingConf(false)}
+          onSent={() => { logSendToDiary('Booking confirmation', job.clients?.email); showToast('Booking confirmation sent'); setShowBookingConf(false) }}
         />
       )}
 
@@ -1544,8 +1608,9 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Invoice"
           to={job.clients?.email || ''}
-          subject={`Invoice ${invoices[0].invoice_number} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
-          body={`${greeting} ${jobClientName},\n\nPlease find your invoice attached for the ${(job.service_types||[]).join(', ') || 'services'} at ${job.site_address || 'your property'}.\n\nInvoice Number: ${invoices[0].invoice_number}\nAmount Due: GBP${Number(invoices[0].total || 0).toFixed(2)}\n\nBank Transfer Details:\nAccount Name: ${co.bankAccountName}\nAccount Number: ${co.accountNumber}\nSort Code: ${co.sortCode}\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding the invoice, please don't hesitate to get in touch.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
+          htmlTitle="Your Invoice"
+          subject={`Invoice ${invoices[0].invoice_number} — ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          body={`${greeting} ${jobClientName},\n\nPlease find your invoice attached for the ${(job.service_types||[]).join(', ') || 'services'} at ${job.site_address || 'your property'}.\n\nInvoice Number: ${invoices[0].invoice_number}\nAmount Due: £${Number(invoices[0].total || 0).toFixed(2)}\n\nBank Transfer Details:\nAccount Name: ${co.bankAccountName}\nAccount Number: ${co.accountNumber}\nSort Code: ${co.sortCode}\nReference: ${invoices[0].invoice_number}\n\nIf you have any questions regarding the invoice, please don't hesitate to get in touch.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={jobVars}
           buildAttachment={() => {
             const inv = invoices[0]
@@ -1592,8 +1657,9 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Certificate"
           to={job.clients?.email || ''}
-          subject={`Your Certificate${(job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
-          body={`${greeting} ${jobClientName},\n\nPlease find your ${(job.service_types||[]).join(', ') || 'certificate'} attached for ${job.site_address || 'your property'}.\n\nThe certificate is fully compliant and accepted by all local authorities, letting agents and mortgage lenders. Please ensure a copy is forwarded to your tenant within 28 days as required by law.\n\nWe'd really appreciate it if you could take a moment to leave us a Google review:\nhttps://g.page/r/CQQFQ83KgCpPEAI/review\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
+          htmlTitle="Your Certificate"
+          subject={`Your Certificate${(job.job_files||[]).filter(f=>f.file_type==='certificate').length > 1 ? 's' : ''} — ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          body={`${greeting} ${jobClientName},\n\nPlease find your ${(job.service_types||[]).join(', ') || 'certificate'} attached for ${job.site_address || 'your property'}${apptDateLabel ? `, carried out on ${apptDateLabel}` : ''}.\n\nIf you have any questions or queries, please don't hesitate to get in touch — we're here to help.\n\nThank you for choosing My Landlord Certificate.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={jobVars}
           buildAttachments={async () => {
             const certFiles = (job.job_files || []).filter(f => f.file_type === 'certificate')
@@ -1617,7 +1683,8 @@ export default function JobDetail() {
         <SendEmailModal
           title="Send Quote"
           to={job.clients?.email || ''}
-          subject={`Quote ${selectedQuote?.quote_number || ''} -- ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
+          htmlTitle="Your Quote"
+          subject={`Quote ${selectedQuote?.quote_number || ''} — ${(job.service_types||[]).join(', ')} at ${job.site_address || ''}`}
           body={`${greeting} ${jobClientName},\n\nPlease find attached your quote for services at ${job.site_address || 'your property'}.\n\nTo accept this quote, please reply to this email or call us on ${co.phone}.\n\nKind regards,\n${profile?.full_name || 'My Landlord Certificate'}\nMy Landlord Certificate\n${co.phone}`}
           variables={jobVars}
           buildAttachment={() => {

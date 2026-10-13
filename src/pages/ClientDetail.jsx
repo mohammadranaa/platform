@@ -113,7 +113,7 @@ export default function ClientDetail() {
     // no setLoading(true) here: refreshes after an action keep the page (and anything being typed) on screen
     const [{ data: c }, { data: j }, { data: inv }, { data: p }] = await Promise.all([
       supabase.from('clients').select('*, profiles(full_name)').eq('id', id).single(),
-      supabase.from('jobs').select('id, job_number, title, status, amount_received, gross_profit, scheduled_date, payment_status, service_types').eq('client_id', id).order('scheduled_date', { ascending: false }),
+      supabase.from('jobs').select('id, job_number, title, status, amount_received, gross_profit, scheduled_date, scheduled_slot, site_address, site_postcode, payment_status, service_types').eq('client_id', id).order('scheduled_date', { ascending: false }),
       supabase.from('invoices').select('id, invoice_number, doc_type, total, balance_due, status, created_at').eq('client_id', id).order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, role').eq('is_active', true),
     ])
@@ -156,6 +156,12 @@ export default function ClientDetail() {
 
   if (loading) return <div style={{ color: C.muted, padding: 40, textAlign: 'center' }}>Loading…</div>
   if (!client) return <div style={{ color: C.red, padding: 40, textAlign: 'center' }}>Client not found.</div>
+
+  // Next upcoming scheduled job (today or later) — used for booking confirmations + calendar invites
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const nextJob = [...(clientJobs || [])]
+    .filter(j => j.scheduled_date && String(j.scheduled_date).slice(0, 10) >= todayIso && !['Cancelled', 'Completed'].includes(j.status))
+    .sort((a, b) => String(a.scheduled_date).localeCompare(String(b.scheduled_date)))[0] || null
 
   return (
     <div>
@@ -414,7 +420,14 @@ export default function ClientDetail() {
             toName:   clientName(),
             name:     clientName(),
             repName:  profile.full_name,
-            address:  [client.street_address, client.city, client.postcode].filter(Boolean).join(', '),
+            address:  nextJob ? [nextJob.site_address, nextJob.site_postcode].filter(Boolean).join(', ') : [client.street_address, client.city, client.postcode].filter(Boolean).join(', '),
+            // Booking confirmations from the client page use their next scheduled job
+            ...(nextJob ? {
+              jobId: nextJob.id,
+              services: (nextJob.service_types || []).join(', ') || nextJob.title,
+              scheduledDate: nextJob.scheduled_date,
+              timeSlot: nextJob.scheduled_slot,
+            } : {}),
           }}
         />
       )}

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
 import { fixUrl } from '../lib/url'
+import { TimeSlotPicker } from '../lib/timeSlots'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -207,8 +208,19 @@ export default function Leads({ active = true }) {
       // Get counts per type (one lightweight query)
       // Head-only counts (no rows downloaded). Previously this first pulled up to 1,000 lead rows and discarded them.
       (async () => {
+          // Fresh builder per count: supabase-js builders mutate in place, so reusing one
+          // made every count share all six filters (and show 0).
+          const base = () => {
+            const b = supabase.from('leads').select('id', { count: 'exact', head: true }).is('deleted_at', null)
+            return isAdmin ? b : b.eq('assigned_to', profile.id)
+          }
           const [a, b, c, d, e, f] = await Promise.all([
-            ...(q => [q.is('deleted_at', null), q.eq('lead_type', 'inbound').is('deleted_at', null), q.eq('lead_type', 'verified').is('deleted_at', null), q.eq('lead_type', 'cold_agent').is('deleted_at', null), q.gt('email_open_count', 0).is('deleted_at', null), q.eq('in_campaign', true).is('deleted_at', null)])(isAdmin ? supabase.from('leads').select('id', { count: 'exact', head: true }) : supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_to', profile.id)),
+            base(),
+            base().eq('lead_type', 'inbound'),
+            base().eq('lead_type', 'verified'),
+            base().eq('lead_type', 'cold_agent'),
+            base().gt('email_open_count', 0),
+            base().eq('in_campaign', true),
           ])
           return { all: a.count || 0, inbound: b.count || 0, verified: c.count || 0, cold_agent: d.count || 0, email_opened: e.count || 0, in_sequence: f.count || 0 }
       })()
@@ -1204,9 +1216,7 @@ export default function Leads({ active = true }) {
                 <div style={{ gridColumn: 'span 2' }}><label style={lbl}>Services Requested</label><input value={form.services_requested || ''} onChange={e => set('services_requested', e.target.value)} placeholder="EICR Certificate — 1–3 Bedrooms (£94.99), Gas Safety (£84.99)" style={inp} /></div>
                 <div><label style={lbl}>Appointment Date</label><input type="date" value={form.appointment_date || ''} onChange={e => set('appointment_date', e.target.value)} style={inp} /></div>
                 <div><label style={lbl}>Time Slot</label>
-                  <select value={form.time_slot || ''} onChange={e => set('time_slot', e.target.value)} style={inp}>
-                    <option value="">—</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–6pm)</option>
-                  </select>
+                  <TimeSlotPicker value={form.time_slot || ''} onChange={v => set('time_slot', v)} style={inp} />
                 </div>
                 <div><label style={lbl}>Total Price (£)</label><input type="number" value={form.total_price || ''} onChange={e => set('total_price', e.target.value)} style={inp} /></div>
                 <div><label style={lbl}>Payment Status</label>
