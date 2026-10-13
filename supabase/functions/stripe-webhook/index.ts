@@ -1,15 +1,31 @@
-// job-assigned-email v2 — sends from ali@mylandlordcertificate.co.uk when a job is assigned to a rep.
-// v2: subject/body properly UTF-8 encoded (fixes "New Job Assigned Ã¢Â€Â” ..." garbling).
+// stripe-webhook v15
+// - Payment/booking confirmation restored to the full original wording, sent as a branded HTML email
+//   with a calendar invite for the booked slot.
+// - Subject/body UTF-8 encoded properly (no more garbled dashes / £).
+// - Unchanged: signature verification, lead matching, idempotency, From info@ via Ali's inbox.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildMessage, formatAddress, toBase64Url } from './mime.ts'
+import Stripe from 'https://esm.sh/stripe@17?target=deno'
+import { buildMessage, buildIcs, renderBrandedHtml, formatAddress, toBase64Url } from './mime.ts'
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-const CLIENT_ID     = Deno.env.get('GOOGLE_CLIENT_ID') || ''
+const WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') || ''
+const CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
 const CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
-const SENDER_INBOX_ID = 'a81b71a9-afe1-4537-a27a-3408e7766f3a'
-const PLATFORM_URL  = 'https://platform-pearl-eta.vercel.app'
+const SEND_FROM_ADDR = 'info@mylandlordcertificate.co.uk'
+const SEND_FROM_NAME = 'My Landlord Certificate'
+const SENDER_INBOX_ID = 'a81b71a9-afe1-4537-a27a-3408e7766f3a' // Ali's inbox
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || 'sk_placeholder', { apiVersion: '2024-06-20' })
 
-async function getToken(a: any): Promise<string | null> {
+function parseName(raw: string) {
+  const prefixes = ['mr', 'mrs', 'ms', 'miss', 'dr', 'prof']
+  let parts = (raw || '').trim().split(/\s+/)
+  if (parts.length > 1 && prefixes.includes(parts[0].toLowerCase().replace('.', ''))) parts = parts.slice(1)
+  const meaningful = parts.filter(p => p.length > 1 || parts.length <= 2)
+  return { first: meaningful[0] || parts[0] || '', last: meaningful.slice(1).join(' ') || '' }
+}
+
+async function getToken(accountId: string): Promise<string | null> {
+  const { data: a } = await supabase.from('user_email_accounts').select('*').eq('id', accountId).single()
   if (!a || a.needs_reconnect || a.access_token === 'NOT_CONNECTED') return null
   if (a.token_expiry && new Date() < new Date(a.token_expiry)) return a.access_token
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -18,92 +34,139 @@ async function getToken(a: any): Promise<string | null> {
   })
   const d = await res.json()
   if (!d.access_token) return null
-  await supabase.from('user_email_accounts').update({ access_token: d.access_token, token_expiry: new Date(Date.now() + (d.expires_in || 3600) * 1000).toISOString() }).eq('id', a.id)
+  await supabase.from('user_email_accounts').update({ access_token: d.access_token, token_expiry: new Date(Date.now() + (d.expires_in || 3600) * 1000).toISOString() }).eq('id', accountId)
   return d.access_token
 }
 
-const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+async function sendConf(token: string, to: string, toName: string, lead: any) {
+  const full = (toName || '').trim() || 'Customer'
+  const dateIso = lead.appointment_date ? String(lead.appointment_date).slice(0, 10) : ''
+  const appt = dateIso
+    ? new Date(dateIso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' })
+    : 'to be confirmed'
+  const ts = lead.time_slot || 'to be confirmed'
+  const addr = [lead.street_address, lead.city, lead.postcode].filter(Boolean).join(', ') || 'your property'
+  const svc = lead.services_requested || 'compliance certificate'
+  const svcShort = svc.split('—')[0].split('(')[0].trim() || 'Booking'
+  const price = lead.total_price ? `£${parseFloat(lead.total_price).toFixed(2)}` : ''
+  const phone = lead.inbound_phone || ''
+  const subject = `Booking Confirmed — ${svcShort}${dateIso ? ` on ${appt}` : ''} | My Landlord Certificate`
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' } })
-  let body: any = {}
-  try { body = await req.json() } catch { return new Response('bad request', { status: 400 }) }
-  const { job_id } = body
-  if (!job_id) return new Response(JSON.stringify({ ok: false, error: 'job_id required' }), { status: 400 })
+  const text = `Dear ${full},
 
-  const { data: job } = await supabase.from('jobs')
-    .select('id, job_number, title, service_types, site_address, site_postcode, scheduled_date, scheduled_slot, status, quoted_amount, assigned_to, client_id')
-    .eq('id', job_id).single()
-  if (!job) return new Response(JSON.stringify({ ok: false, error: 'job not found' }), { status: 404 })
-  if (!job.assigned_to) return new Response(JSON.stringify({ ok: false, skipped: 'no rep assigned' }), { status: 200 })
+Thank you — we have received your payment${price ? ` of ${price}` : ''} for ${svc} at ${addr}.
 
-  const { data: rep } = await supabase.from('profiles').select('id, full_name, email').eq('id', job.assigned_to).single()
-  if (!rep?.email) return new Response(JSON.stringify({ ok: false, error: 'rep has no email' }), { status: 200 })
+Service: ${svc}
+Property: ${addr}
+Date: ${appt}
+Arrival window: ${ts}${price ? `\nAmount paid: ${price}` : ''}
 
-  const { data: client } = job.client_id
-    ? await supabase.from('clients').select('first_name, last_name, company_name, billing_name').eq('id', job.client_id).single()
-    : { data: null }
+To help us prepare for your visit, could you please confirm the following details by replying to this email?
 
-  const clientName = client
-    ? [client.first_name, client.last_name].filter(Boolean).join(' ') || client.company_name || client.billing_name || ''
-    : ''
-  const services  = (job.service_types?.length ? job.service_types : [job.title]).join(', ')
-  const address   = [job.site_address, job.site_postcode].filter(Boolean).join(', ') || 'Address not set'
-  const apptDate  = job.scheduled_date
-    ? new Date(String(job.scheduled_date).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' })
-    : 'To be scheduled'
-  const slot      = job.scheduled_slot || ''
-  const amount    = job.quoted_amount ? `£${parseFloat(job.quoted_amount).toFixed(2)}` : ''
-  const jobRef    = job.job_number || job.id.slice(0, 8).toUpperCase()
-  const jobUrl    = `${PLATFORM_URL}/jobs/${job.id}`
-  const repFirst  = (rep.full_name || '').split(' ')[0] || rep.full_name
-  const subject   = `New job assigned: ${jobRef} · ${services}`
+1. NAME ON CERTIFICATE
+Please confirm the full name you would like to appear on the compliance certificate.
+Current name we have: ${full}
 
-  const rows: [string, string][] = [
-    ['Job reference', jobRef], ['Service', services], ...(clientName ? [['Client', clientName] as [string, string]] : []),
-    ['Address', address], ['Appointment', `${apptDate}${slot ? ` · ${slot}` : ''}`],
-    ...(amount ? [['Amount', amount] as [string, string]] : []), ['Status', job.status || 'Confirmed'],
-  ]
+2. ACCESS TO THE PROPERTY
+Will you be present at the property on the day, or will someone else be providing access?
+a) I will be present — my contact number is: ${phone || '[please provide]'}
+b) A tenant / keyholder will provide access — their name and phone number: _______________
 
-  const text = `Hi ${repFirst},\n\nA job has been assigned to you on the MLC platform.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\nView the job: ${jobUrl}\n\nIf you have any questions, reply to this email or speak to Ali.\n\nMy Landlord Certificate\n020 3996 1070`
+3. YOUR CURRENT DETAILS
+Please confirm or correct the following:
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:0;background:#EEF1F5;font-family:'Segoe UI',Helvetica,Arial,sans-serif">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF1F5"><tr><td align="center" style="padding:28px 12px">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border-radius:10px;overflow:hidden">
-<tr><td style="background:#0F1B2D;padding:20px 28px"><div style="font-size:18px;font-weight:800;color:#fff">My Landlord Certificate</div><div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#80D100;margin-top:3px">Job Assignment</div></td></tr>
-<tr><td style="height:3px;background:#0093DB"></td></tr>
-<tr><td style="padding:26px 28px 8px">
-<div style="font-size:20px;font-weight:800;color:#0F1B2D;margin:0 0 14px">New job assigned to you</div>
-<p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#1F2937">Hi ${esc(repFirst)}, a job has been assigned to you on the MLC platform.</p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F9FC;border:1px solid #E5E9F0;border-left:4px solid #0093DB;border-radius:8px;padding:6px 18px;margin:8px 0 20px;border-collapse:separate">
-${rows.map(([k, v]) => `<tr><td style="padding:9px 0;width:38%;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #EEF1F5">${esc(k)}</td><td style="padding:9px 0;font-size:14px;font-weight:600;color:${k === 'Job reference' ? '#0093DB' : '#111827'};border-bottom:1px solid #EEF1F5">${esc(v)}</td></tr>`).join('')}
-</table>
-<div style="text-align:center;margin:4px 0 22px"><a href="${jobUrl}" style="display:inline-block;background:#0093DB;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px">View job</a></div>
-<p style="margin:0 0 18px;font-size:13px;color:#6B7280">Questions? Reply to this email or speak to Ali.</p>
-</td></tr>
-<tr><td style="padding:16px 28px 22px;border-top:1px solid #EEF1F5;font-size:12px;color:#6B7280"><strong style="color:#374151">My Landlord Certificate</strong> · 020 3996 1070</td></tr>
-</table></td></tr></table></body></html>`
+Name: ${full}
+Email: ${to}
+Phone: ${phone || '[not provided]'}
+Property address: ${addr}
 
-  const { data: inbox } = await supabase.from('user_email_accounts').select('*').eq('id', SENDER_INBOX_ID).single()
-  const token = await getToken(inbox)
-  if (!token) return new Response(JSON.stringify({ ok: false, error: "Ali's inbox not connected" }), { status: 200 })
+Our engineer will call approximately one hour before arrival. You or your keyholder do not need to be present for the full duration — just available to provide initial access.
+
+If you have any questions ahead of the appointment, please do not hesitate to contact us on 020 3996 1070 or reply to this email.
+
+Kind regards,
+My Landlord Certificate
+020 3996 1070
+info@mylandlordcertificate.co.uk
+www.mylandlordcertificate.co.uk`
+
+  const ics = dateIso ? buildIcs({
+    uid: `lead-${lead.id}@mylandlordcertificate.co.uk`, date: dateIso, slot: ts,
+    summary: `${svcShort} inspection — My Landlord Certificate`, location: addr,
+    description: `${svc}\nArrival window: ${ts}\nOur engineer will call approximately one hour before arrival.\nQuestions or changes: 020 3996 1070`,
+    attendee_email: to, attendee_name: full,
+  }, SEND_FROM_ADDR, SEND_FROM_NAME) : null
 
   const raw = buildMessage({
-    from: formatAddress('Ali · My Landlord Certificate', 'ali@mylandlordcertificate.co.uk'),
-    to: formatAddress(rep.full_name || '', rep.email),
-    subject, text, html,
+    from: formatAddress(SEND_FROM_NAME, SEND_FROM_ADDR),
+    to: formatAddress(full, to),
+    replyTo: SEND_FROM_ADDR,
+    subject, text,
+    html: renderBrandedHtml(text, { title: 'Booking Confirmed', calendarNote: !!ics }),
+    ics,
   })
-
   const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ raw: toBase64Url(raw) }),
   })
   const d = await res.json()
-  if (d.error) return new Response(JSON.stringify({ ok: false, error: d.error.message }), { status: 200 })
+  if (d.error) throw new Error(`Gmail: ${d.error.message}`)
+  return d.id
+}
 
-  console.log(`Job assignment email sent to ${rep.email} for job ${jobRef}`)
-  return new Response(JSON.stringify({ ok: true, to: rep.email, job: jobRef, message_id: d.id }), {
-    status: 200, headers: { 'Content-Type': 'application/json' },
-  })
+const json = (o: any, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json' } })
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*' } })
+  const rawBody = await req.text()
+  const sig = req.headers.get('stripe-signature') || ''
+  if (!WEBHOOK_SECRET) return new Response('not configured', { status: 500 })
+  let event: any
+  try { event = await stripe.webhooks.constructEventAsync(rawBody, sig, WEBHOOK_SECRET) }
+  catch (err: any) { return new Response(`sig fail: ${err.message}`, { status: 400 }) }
+  if (event.type !== 'checkout.session.completed' && event.type !== 'payment_intent.succeeded') return json({ received: true })
+
+  const obj = event.data.object
+  const email = (obj.customer_email || obj.customer_details?.email || '').toLowerCase().trim()
+  const { first, last } = parseName(obj.customer_details?.name || '')
+  const name = [first, last].filter(Boolean).join(' ') || email.split('@')[0]
+  const amount = obj.amount_total ? (obj.amount_total / 100).toFixed(2) : '0.00'
+  const sid = obj.client_reference_id || obj.metadata?.sessionId || ''
+  const stId = obj.id
+
+  let lead: any = null
+  if (sid) { const { data } = await supabase.from('leads').select('*').eq('source', sid).eq('lead_type', 'inbound').limit(1).maybeSingle(); if (data) lead = data }
+  if (!lead && email) { const { data } = await supabase.from('leads').select('*').eq('inbound_email', email).eq('lead_type', 'inbound').order('created_at', { ascending: false }).limit(1).maybeSingle(); if (data) lead = data }
+  if (lead) {
+    await supabase.from('leads').update({ payment_status: 'Paid', status: 'Accepted', total_price: parseFloat(amount) }).eq('id', lead.id)
+    const { data: u } = await supabase.from('leads').select('*').eq('id', lead.id).single(); if (u) lead = u
+  } else if (email) {
+    const { data: nl } = await supabase.from('leads').insert({ lead_type: 'inbound', inbound_name: name, inbound_email: email, total_price: parseFloat(amount), payment_status: 'Paid', status: 'Accepted', source: sid || `stripe_${stId}` }).select().single()
+    if (nl) lead = nl
+  }
+
+  let sent = false, err = ''
+  if (lead && email) {
+    try {
+      const { data: dup } = await supabase.from('activities').select('id').eq('lead_id', lead.id).eq('activity_type', 'email').ilike('title', '%payment confirmation%').limit(1).maybeSingle()
+      if (!dup) {
+        const tok = await getToken(SENDER_INBOX_ID)
+        if (tok) {
+          const mid = await sendConf(tok, email, lead.inbound_name || name, lead)
+          await supabase.from('activities').insert({ lead_id: lead.id, rep_name: 'System', activity_type: 'email', title: 'Payment confirmation email sent', body: `Sent to ${email} · £${amount} · with calendar invite`, metadata: { gmail_message_id: mid, from: SEND_FROM_ADDR, to: email } })
+          sent = true
+        } else {
+          err = "Ali's inbox not connected"
+          await supabase.from('notifications').insert({ type: 'system', title: `⚠ Payment confirmation NOT sent — ${name}`, body: `Paid £${amount} but ${err}. Reply manually to ${email}`, link: lead ? `/leads/${lead.id}` : '/leads' })
+        }
+      } else sent = true
+    } catch (e: any) {
+      err = e.message
+      await supabase.from('notifications').insert({ type: 'system', title: `⚠ Confirmation failed — ${name}`, body: `£${amount} · ${err}`, link: lead ? `/leads/${lead.id}` : '/leads' })
+    }
+  }
+  if (lead) {
+    try { await supabase.from('activities').insert({ lead_id: lead.id, rep_name: 'System', activity_type: 'system', title: `Stripe payment received: £${amount}`, body: `Payment ${stId}`, metadata: { stripe_id: stId, amount } }) } catch { /* non-critical */ }
+  }
+  return json({ received: true, email_sent: sent, error: err || null })
 })
