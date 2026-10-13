@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { INBOX_COLUMNS } from '../lib/emailAccounts'
 import { useAuth } from '../lib/AuthContext'
 import { useToast, Toast } from '../hooks/useToast.jsx'
+import { CcField, AttachFiles, parseCc, checkFiles, uploadEmailFiles } from '../components/EmailExtras'
 
 const C = {
   bg: '#FFFFFF', surface: '#F5F7FA', border: '#E5E7EB',
@@ -37,6 +38,8 @@ export default function ColdInbox() {
   const [selected, setSelected] = useState(null)
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [replyCc, setReplyCc] = useState('')
+  const [replyFiles, setReplyFiles] = useState([])
   const [sending, setSending]     = useState(false)
 
   useEffect(() => { fetchAll() }, [])
@@ -78,8 +81,13 @@ export default function ColdInbox() {
 
   async function sendReply() {
     if (!replyText.trim() || !selected) return
+    const ccParsed = parseCc(replyCc)
+    if (ccParsed.invalid.length) { showToast(`Check CC — not a valid email: ${ccParsed.invalid.join(', ')}`, 'error'); return }
+    const fileProblem = checkFiles(replyFiles)
+    if (fileProblem) { showToast(fileProblem, 'error'); return }
     setSending(true)
     try {
+      const uploaded = replyFiles.length ? await uploadEmailFiles(replyFiles) : []
       const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,12 +98,15 @@ export default function ColdInbox() {
           subject: selected.subject,
           message: replyText,
           client_id: GOOGLE_CLIENT_ID,
+          branded: false,   // replies stay plain, personal emails
+          ...(ccParsed.list.length ? { cc: ccParsed.list.join(', ') } : {}),
+          ...(uploaded.length ? { storage_paths: uploaded } : {}),
         }),
       })
       const data = await res.json()
       if (data.ok) {
         showToast('✓ Reply sent')
-        setReplyOpen(false); setReplyText('')
+        setReplyOpen(false); setReplyText(''); setReplyCc(''); setReplyFiles([])
         await fetchAll()
       } else {
         showToast('Failed: ' + (data.error || 'Unknown'), 'error')
@@ -290,6 +301,13 @@ export default function ColdInbox() {
                     <textarea value={replyText} onChange={e=>setReplyText(e.target.value)} rows={5}
                       placeholder="Type your reply…"
                       style={{ width:'100%', background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:'10px 12px', fontSize:14, resize:'vertical', fontFamily:'inherit', lineHeight:1.6, marginBottom:8 }} />
+                    <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:8 }}>
+                      <CcField value={replyCc} onChange={setReplyCc}
+                        inputStyle={{ width:'100%', background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:'8px 12px', fontSize:13 }}
+                        labelStyle={{ display:'block', fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', marginBottom:4 }} />
+                      <AttachFiles files={replyFiles} onChange={setReplyFiles}
+                        labelStyle={{ display:'block', fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', marginBottom:4 }} />
+                    </div>
                     <div style={{ display:'flex', gap:8 }}>
                       <button onClick={sendReply} disabled={sending||!replyText.trim()}
                         style={{ background:C.accent, color:'#fff', border:'none', borderRadius:8, padding:'8px 20px', fontWeight:600, fontSize:13, cursor:'pointer', opacity:sending?0.7:1 }}>

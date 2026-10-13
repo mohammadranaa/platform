@@ -1,3 +1,4 @@
+// gmail-reply v24: branded:false is always respected (rep/cold emails stay plain text); tighter process-email detection
 // gmail-reply v23: CC support; large attachments sent through Gmail's upload endpoint
 // gmail-reply v22: process emails auto-branded + calendar invite built from the email when the site doesn't send one
 // gmail-reply v21: proper UTF-8 encoding (no more garbled dashes/£), optional branded HTML + calendar invite
@@ -79,8 +80,8 @@ function detectKind(subject: string): string | null {
   if (/booking confirm/.test(s)) return 'booking'
   if (/payment (received|confirm)/.test(s)) return 'payment'
   if (/^(your )?certificate|your certificate/.test(s)) return 'certificate'
-  if (/^invoice\b|your invoice/.test(s)) return 'invoice'
-  if (/^quote\b|your quote/.test(s)) return 'quote'
+  if (/^invoice\s+(inv|#|\d)|your invoice/.test(s)) return 'invoice'
+  if (/^quote\s+(q|#|\d)|your quote/.test(s)) return 'quote'
   return null
 }
 
@@ -182,12 +183,13 @@ Deno.serve(async (req: Request) => {
     // Works for every sending point (job page, lead page, client page, older cached
     // versions of the website): process emails are recognised from the subject.
     const kind = detectKind(safeSubject)
-    const text = kind ? tidyBody(message) : message
+    const text = kind && branded !== false ? tidyBody(message) : message
     const isBranded = branded ?? (!!kind && !thread_id)
 
     // Calendar invite: use the one the website sent, or build it from the email itself
     let event = calendar_event || null
-    if (!event && (kind === 'booking' || kind === 'payment')) event = eventFromBody(text, to)
+    // Plain emails (branded: false — rep emails on leads, inbox replies, cold emails) never get auto-added invites
+    if (!event && branded !== false && (kind === 'booking' || kind === 'payment')) event = eventFromBody(text, to)
     const ics = event ? buildIcs({ ...event, attendee_email: event.attendee_email || to }, fromAddr, fromName) : null
     const html = isBranded ? renderBrandedHtml(text, { title: html_title || TITLES[kind || ''] || undefined, calendarNote: !!ics }) : undefined
 

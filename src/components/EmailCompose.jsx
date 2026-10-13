@@ -167,10 +167,12 @@ export default function EmailCompose({ onClose, context = {} }) {
         ...(uploaded.length ? { storage_paths: uploaded } : {}),
         // Process emails (booking, payment, invoice, certificate) go out as branded HTML;
         // cold/sales emails stay plain so they read like a personal email.
+        // Rep emails from leads/clients are simple text emails. Only a process template
+        // (booking/payment confirmation, invoice, certificate) gets the branded layout.
         ...(tmpl?.category === 'process' ? {
           branded: true,
           html_title: (PROCESS_TITLES.find(([re]) => re.test(tmpl.name || '')) || [])[1] || '',
-        } : {}),
+        } : { branded: false }),
         ...(includeInvite && canInvite ? { calendar_event: {
           uid: context.calendarUid || `${context.jobId ? 'job-' + context.jobId : context.leadId ? 'lead-' + context.leadId : 'mlc-' + Date.now()}@mylandlordcertificate.co.uk`,
           date: String(context.scheduledDate).slice(0, 10),
