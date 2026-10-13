@@ -1,3 +1,5 @@
+// gmail-reply v23: CC support; large attachments sent through Gmail's upload endpoint
+// gmail-reply v22: process emails auto-branded + calendar invite built from the email when the site doesn't send one
 // gmail-reply v21: proper UTF-8 encoding (no more garbled dashes/£), optional branded HTML + calendar invite
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { buildMessage, buildIcs, renderBrandedHtml, formatAddress, toBase64Url, type Attachment } from './mime.ts'
@@ -69,6 +71,58 @@ async function fetchStorageFile(storagePath: string): Promise<{ data: Uint8Array
   }
 }
 
+// ── Process-email helpers ────────────────────────────────────────────────
+const TITLES: Record<string, string> = { booking: 'Booking Confirmed', payment: 'Payment Received', invoice: 'Your Invoice', certificate: 'Your Certificate', quote: 'Your Quote' }
+
+function detectKind(subject: string): string | null {
+  const s = subject.toLowerCase()
+  if (/booking confirm/.test(s)) return 'booking'
+  if (/payment (received|confirm)/.test(s)) return 'payment'
+  if (/^(your )?certificate|your certificate/.test(s)) return 'certificate'
+  if (/^invoice\b|your invoice/.test(s)) return 'invoice'
+  if (/^quote\b|your quote/.test(s)) return 'quote'
+  return null
+}
+
+const longDate = (iso: string) => new Date(iso.slice(0, 10) + 'T12:00:00Z')
+  .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' }).replace(',', '')
+
+// Older website versions replaced "—" with "--" and "£" with "GBP"; ISO dates read badly
+function tidySubject(s: string): string {
+  return s.replace(/[\r\n]+/g, ' ').replace(/\s--\s/g, ' — ').replace(/\bGBP\s?(?=\d)/g, '£')
+    .replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (_, d) => longDate(d)).trim()
+}
+function tidyBody(s: string): string {
+  return s.replace(/\bGBP\s?(?=\d)/g, '£')
+    .replace(/^(\s*(?:Date|Appointment|Appointment date|Inspection date)\s*:\s*)(\d{4}-\d{2}-\d{2})\s*$/gim, (_, k, d) => k + longDate(d))
+    .replace(/^Time Slot:/gim, 'Arrival window:')
+}
+
+// Build a calendar event from "Date:", "Arrival window:" and "Property:" lines in the email
+function eventFromBody(text: string, to: string) {
+  const line = (re: RegExp) => (text.match(re)?.[1] || '').trim()
+  const rawDate = line(/^\s*(?:Date|Appointment(?: date)?)\s*:\s*(.+)$/im)
+  const slot = line(/^\s*(?:Arrival window|Time slot|Time window)\s*:\s*(.+)$/im)
+  if (!rawDate || !slot || /tbc|to be confirmed/i.test(rawDate + slot)) return null
+  let iso = (rawDate.match(/\d{4}-\d{2}-\d{2}/) || [])[0] || ''
+  if (!iso) {
+    const t = Date.parse(rawDate.replace(/^[A-Za-z]+day\s+/, '') + ' 12:00 UTC')
+    if (!isNaN(t)) iso = new Date(t).toISOString().slice(0, 10)
+  }
+  if (!iso) return null
+  const service = line(/^\s*Service\s*:\s*(.+)$/im) || 'Property inspection'
+  const property = line(/^\s*Property(?: address)?\s*:\s*(.+)$/im)
+  const ref = line(/^\s*Reference\s*:\s*(.+)$/im)
+  const name = line(/^\s*Dear\s+([^,\n]+),?\s*$/im)
+  const key = (ref || `${to}-${iso}-${property}`).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60).replace(/^-+|-+$/g, '')
+  return {
+    uid: `booking-${key}@mylandlordcertificate.co.uk`, date: iso, slot,
+    summary: `${service.split('(')[0].trim()} — My Landlord Certificate`, location: property,
+    description: `${service}\nArrival window: ${slot}\nOur engineer will call approximately one hour before arrival.${ref ? `\nReference: ${ref}` : ''}\nQuestions or changes: 020 3996 1070`,
+    attendee_email: to, attendee_name: name,
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
@@ -86,7 +140,7 @@ Deno.serve(async (req: Request) => {
       attachments,
       // Legacy single attachment
       attachment_base64, attachment_name, attachment_mime,
-      calendar_event, branded, html_title,
+      calendar_event, branded, html_title, cc,
     } = body
 
     const client_id = body.client_id || Deno.env.get('GOOGLE_CLIENT_ID') || ''
@@ -100,7 +154,7 @@ Deno.serve(async (req: Request) => {
     const token = await refreshToken(account, client_id, client_secret)
     const fromName = account.send_as_name || account.display_name || 'My Landlord Certificate'
     const fromAddr = account.send_as_email || account.gmail_address
-    const safeSubject = (subject || 'My Landlord Certificate').replace(/[\r\n]+/g, ' ').trim()
+    const safeSubject = tidySubject(subject || 'My Landlord Certificate')
 
     const allAttachments: Attachment[] = []
 
@@ -124,29 +178,49 @@ Deno.serve(async (req: Request) => {
       allAttachments.push({ base64: attachment_base64, name: attachment_name, mime: attachment_mime || 'application/pdf' })
     }
 
-    // Optional calendar invite (booking confirmations)
-    const ics = calendar_event ? buildIcs({ ...calendar_event, attendee_email: calendar_event.attendee_email || to }, fromAddr, fromName) : null
-    // Branded HTML version for process emails (booking, invoice, certificate...)
-    const html = branded ? renderBrandedHtml(message, { title: html_title, calendarNote: !!ics }) : undefined
+    // ── Professional formatting, enforced server-side ─────────────────────────
+    // Works for every sending point (job page, lead page, client page, older cached
+    // versions of the website): process emails are recognised from the subject.
+    const kind = detectKind(safeSubject)
+    const text = kind ? tidyBody(message) : message
+    const isBranded = branded ?? (!!kind && !thread_id)
+
+    // Calendar invite: use the one the website sent, or build it from the email itself
+    let event = calendar_event || null
+    if (!event && (kind === 'booking' || kind === 'payment')) event = eventFromBody(text, to)
+    const ics = event ? buildIcs({ ...event, attendee_email: event.attendee_email || to }, fromAddr, fromName) : null
+    const html = isBranded ? renderBrandedHtml(text, { title: html_title || TITLES[kind || ''] || undefined, calendarNote: !!ics }) : undefined
 
     const mime = buildMessage({
       from: formatAddress(fromName, fromAddr),
       to: formatAddress(to),
+      cc: cc ? String(cc).split(/[,;]+/).map((x: string) => x.trim()).filter(Boolean).map((x: string) => formatAddress(x)).join(', ') : undefined,
       subject: safeSubject,
-      text: message,
+      text,
       html,
       ics,
       attachments: allAttachments,
       extraHeaders: thread_id ? [`In-Reply-To: <${thread_id}>`, `References: <${thread_id}>`] : [],
     })
 
-    console.log(`Sending to ${to} with ${allAttachments.length} attachment(s)`)
+    console.log(`Sending to ${to} with ${allAttachments.length} attachment(s)${ics ? ' + calendar invite' : ''}${html ? ' (branded)' : ''}`)
 
-    const sendRes = await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw: toBase64Url(mime), ...(thread_id ? { threadId: thread_id } : {}) }),
-    })
+    // Small messages: simple JSON send. Large ones (big PDFs): Gmail's upload endpoint (up to 35 MB).
+    const sendRes = mime.length < 4_000_000
+      ? await fetch('https://www.googleapis.com/gmail/v1/users/me/messages/send', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ raw: toBase64Url(mime), ...(thread_id ? { threadId: thread_id } : {}) }),
+        })
+      : await (() => {
+          const b = 'up_' + crypto.randomUUID().replace(/-/g, '')
+          const payload = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(thread_id ? { threadId: thread_id } : {})}\r\n--${b}\r\nContent-Type: message/rfc822\r\n\r\n${mime}\r\n--${b}--`
+          return fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${b}` },
+            body: payload,
+          })
+        })()
 
     const sendData = await sendRes.json()
     if (sendData.error) {
@@ -168,7 +242,7 @@ Deno.serve(async (req: Request) => {
       })
     } catch (e) { /* non-critical */ }
 
-    return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length, calendar_invite: !!ics })
+    return ok({ ok: true, message_id: sendData.id, attachments_sent: allAttachments.length, calendar_invite: !!ics, branded: !!html })
 
   } catch (e: any) {
     console.error('gmail-reply error:', e?.message || e)

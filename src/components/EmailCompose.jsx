@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
 import { useDraft } from '../hooks/useDraft'
+import { CcField, AttachFiles, parseCc, checkFiles, uploadEmailFiles } from './EmailExtras'
 import { fillTemplate, varsFromLead, varsFromClient } from '../lib/templateVars'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
@@ -72,6 +73,8 @@ export default function EmailCompose({ onClose, context = {} }) {
   const [error, setError]   = useState('')
   const [minimised, setMinimised] = useState(false)
   const [includeInvite, setIncludeInvite] = useState(false)
+  const [cc, setCc] = useState('')
+  const [extraFiles, setExtraFiles] = useState([])
   // Calendar invite is possible when we know the appointment date and slot
   const canInvite = !!(context.scheduledDate && /^\d{4}-\d{2}-\d{2}/.test(String(context.scheduledDate)) && context.timeSlot)
 
@@ -133,8 +136,16 @@ export default function EmailCompose({ onClose, context = {} }) {
   async function sendEmail() {
     if (!to || !subject || !body) { setError('To, subject and body are all required'); return }
     if (!selectedInbox) { setError('No Gmail account connected. Connect one in Email Inbox first.'); return }
+    const ccParsed = parseCc(cc)
+    if (ccParsed.invalid.length) { setError(`Check the CC field — not a valid email: ${ccParsed.invalid.join(', ')}`); return }
+    const fileProblem = checkFiles(extraFiles)
+    if (fileProblem) { setError(fileProblem); return }
     setSending(true)
     setError('')
+
+    let uploaded = []
+    try { uploaded = extraFiles.length ? await uploadEmailFiles(extraFiles) : [] }
+    catch (e) { setSending(false); setError(e.message); return }
 
     const inbox = inboxes.find(i => i.id === selectedInbox)
     const tmpl  = templates.find(t => t.id === selectedTemplate)
@@ -152,6 +163,8 @@ export default function EmailCompose({ onClose, context = {} }) {
         message: body,
         client_id: CLIENT_ID,
         ...(context.threadId ? { thread_id: context.threadId } : {}),
+        ...(ccParsed.list.length ? { cc: ccParsed.list.join(', ') } : {}),
+        ...(uploaded.length ? { storage_paths: uploaded } : {}),
         // Process emails (booking, payment, invoice, certificate) go out as branded HTML;
         // cold/sales emails stay plain so they read like a personal email.
         ...(tmpl?.category === 'process' ? {
@@ -211,12 +224,12 @@ export default function EmailCompose({ onClose, context = {} }) {
       activity_type: 'email',
       title:         `Email sent: ${subject}`,
       body:          body.slice(0, 500),
-      metadata:      { to_email: to, template: tmpl?.name, inbox: inbox?.gmail_address },
+      metadata:      { to_email: to, cc: ccParsed.list, attachments: uploaded.map(u => u.name), template: tmpl?.name, inbox: inbox?.gmail_address },
     })
 
     setSending(false)
     if (logErr) { setError('Email sent, but failed to log to activity feed: ' + logErr.message); return }
-    clearTo(); clearSubject(); clearBody()
+    clearTo(); clearSubject(); clearBody(); setCc(''); setExtraFiles([])
     setSent(true)
     setTimeout(() => onClose?.(), 2000)
   }
@@ -285,6 +298,9 @@ export default function EmailCompose({ onClose, context = {} }) {
                 <input value={to} onChange={e => setTo(e.target.value)} placeholder="recipient@email.com" style={inputStyle} />
               </div>
 
+              <CcField value={cc} onChange={setCc} inputStyle={inputStyle}
+                labelStyle={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }} />
+
               {/* Subject */}
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Subject</div>
@@ -298,6 +314,9 @@ export default function EmailCompose({ onClose, context = {} }) {
                   placeholder="Email body…"
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }} />
               </div>
+
+              <AttachFiles files={extraFiles} onChange={setExtraFiles}
+                labelStyle={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }} />
 
               {canInvite && isBookingTemplate(templates.find(t => t.id === selectedTemplate)) && (
                 <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: includeInvite ? C.greenSoft : C.surface, border: `1px solid ${includeInvite ? '#80D10066' : C.border}`, borderRadius: 8, padding: '9px 12px', cursor: 'pointer' }}>

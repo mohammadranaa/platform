@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { fillTemplate as fillShared } from '../lib/templateVars'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/AuthContext'
+import { CcField, AttachFiles, parseCc, checkFiles, uploadEmailFiles } from './EmailExtras'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 // Never put the client *secret* in a VITE_ var -- it gets bundled into the
@@ -44,6 +45,8 @@ export default function SendEmailModal({
   const canInvite = !!(calendarEvent?.date && calendarEvent?.slot)
   const [includeInvite, setIncludeInvite] = useState(inviteByDefault && canInvite)
   const [heading, setHeading] = useState(htmlTitle)
+  const [cc, setCc] = useState('')
+  const [extraFiles, setExtraFiles] = useState([])
 
   useEffect(() => {
     supabase.from('user_email_accounts')
@@ -114,9 +117,20 @@ export default function SendEmailModal({
     if (hasAttachmentBuilder && buildingAttachment) { setError('Attachment is still being prepared, please wait a moment.'); return }
     if (hasAttachmentBuilder && attachmentInfo.length === 0) { setError('Attachment failed to generate. Fix the error above before sending, or remove the attachment requirement.'); return }
 
+    const ccParsed = parseCc(cc)
+    if (ccParsed.invalid.length) { setError(`Check the CC field — not a valid email: ${ccParsed.invalid.join(', ')}`); return }
+    const fileProblem = checkFiles(extraFiles)
+    if (fileProblem) { setError(fileProblem); return }
+
     setSending(true)
 
-    const hasStoragePaths = attachmentInfo.length > 0 && attachmentInfo[0].storagePath
+    let uploaded = []
+    try { uploaded = extraFiles.length ? await uploadEmailFiles(extraFiles) : [] }
+    catch (e) { setSending(false); setError(e.message); return }
+
+    const built = attachmentInfo.filter(a => a.storagePath).map(a => ({ path: a.storagePath, name: a.name, mime: a.mime }))
+    const storagePaths = [...built, ...uploaded]
+    const base64Atts = attachmentInfo.filter(a => !a.storagePath && a.base64).map(a => ({ base64: a.base64, name: a.filename || a.name, mime: a.mime }))
 
     const payload = {
       account_id: accountId,
@@ -127,14 +141,11 @@ export default function SendEmailModal({
       branded,
       ...(heading ? { html_title: heading } : {}),
       ...(includeInvite && canInvite ? { calendar_event: { ...calendarEvent, attendee_email: toAddr.trim() } } : {}),
-      // If storage paths: edge function fetches the files (large certs)
-      // If base64: send directly (invoices, quotes generated client-side)
-      ...(hasStoragePaths
-        ? { storage_paths: attachmentInfo.map(a => ({ path: a.storagePath, name: a.name, mime: a.mime })) }
-        : attachmentInfo.length > 0
-          ? { attachments: attachmentInfo.map(a => ({ base64: a.base64, name: a.filename || a.name, mime: a.mime })) }
-          : {}
-      ),
+      ...(ccParsed.list.length ? { cc: ccParsed.list.join(', ') } : {}),
+      // Storage paths: edge function fetches the files (certificates, files the user attached)
+      // Base64: generated in the browser (invoices, quotes)
+      ...(storagePaths.length ? { storage_paths: storagePaths } : {}),
+      ...(base64Atts.length ? { attachments: base64Atts } : {}),
     }
 
     try {
@@ -253,6 +264,8 @@ export default function SendEmailModal({
             <input value={toAddr} onChange={e => setToAddr(e.target.value)} style={inp} placeholder="recipient@email.com" />
           </div>
 
+          <CcField value={cc} onChange={setCc} inputStyle={inp} labelStyle={lbl} />
+
           <div>
             <label style={lbl}>Subject</label>
             <input value={subjectVal} onChange={e => setSubjectVal(e.target.value)} style={inp} />
@@ -303,6 +316,8 @@ export default function SendEmailModal({
             <textarea value={bodyVal} onChange={e => setBodyVal(e.target.value)} rows={12}
               style={{ ...inp, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.6 }} />
           </div>
+
+          <AttachFiles files={extraFiles} onChange={setExtraFiles} labelStyle={lbl} />
 
           {error && (
             <div style={{ background: C.redSoft, color: C.red, borderRadius: 8, padding: '10px 14px', fontSize: 13, lineHeight: 1.5 }}>
